@@ -5,7 +5,7 @@ import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { chaveDoItem, interpretar, type Interpretacao } from "../agentes/interpretador/index.ts";
 import { db } from "../nucleo/db/cliente.ts";
 import { contato as tContato, itemPedido, pedido } from "../nucleo/db/schema.ts";
-import { enviar, type Botao, type MensagemRecebida } from "../nucleo/mensagens/index.ts";
+import { enviar, vincularMensagem, type Botao, type MensagemRecebida } from "../nucleo/mensagens/index.ts";
 import {
   abrirPedido,
   avancarPedido,
@@ -249,8 +249,10 @@ async function pedidoPendente(compradorId: string) {
   return p;
 }
 
-export async function aoMensagemDoComprador({ contato, entrada }: MensagemRecebida) {
+export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: MensagemRecebida) {
   if (entrada.botao) {
+    const ref = /^(pedido|item):(\d+):/.exec(entrada.botao);
+    if (ref) await vincularMensagem(mensagemId, ref[1] === "pedido" ? { pedidoId: Number(ref[2]) } : { itemPedidoId: Number(ref[2]) });
     if (await aoBotaoDoComprador(contato, entrada.botao)) return;
     const b = lerBotao(entrada.botao);
     if (!b) return;
@@ -297,6 +299,7 @@ export async function aoMensagemDoComprador({ contato, entrada }: MensagemRecebi
     return;
   }
   if (pendente) {
+    await vincularMensagem(mensagemId, { pedidoId: pendente.id });
     const correcoes = [...pendente.correcoes, texto];
     if (pendente.estado === "aguardando_confirmacao") {
       await avancarPedido(
@@ -313,5 +316,6 @@ export async function aoMensagemDoComprador({ contato, entrada }: MensagemRecebi
   }
 
   const novo = await abrirPedido({ compradorId: contato.id, canalOrigem: contato.canal, textoOriginal: texto });
+  await vincularMensagem(mensagemId, { pedidoId: novo.id });
   await interpretarEResponder(novo.id);
 }

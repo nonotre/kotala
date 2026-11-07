@@ -6,6 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../db/cliente.ts";
 import { contato, fornecedor, mensagem, type Anexo, type Canal } from "../db/schema.ts";
 import { registrar } from "../registro.ts";
+import { arquivoGuardado, salvarArquivo } from "../arquivos.ts";
 import { ehPedidoDeParar } from "./parar.ts";
 
 export { ehPedidoDeParar } from "./parar.ts";
@@ -53,13 +54,25 @@ export function registrarCanal(a: AdaptadorCanal) {
   adaptadores.set(a.canal, a);
 }
 
-/** Até 20 MB, o limite do Telegram para bots. */
-export async function baixarAnexo(canal: Canal, anexo: Anexo) {
+/**
+ * Baixa o anexo (até 20 MB, o limite do Telegram para bots) e guarda o original
+ * em disco com hash. Se já foi guardado, lê do disco sem baixar de novo.
+ */
+export async function baixarAnexo(canal: Canal, anexo: Anexo, mensagemId?: string) {
+  const guardado = await arquivoGuardado(canal, anexo.ref);
+  if (guardado) return guardado;
   const a = adaptadores.get(canal);
   if (!a?.baixar) throw new Error(`O canal ${canal} não baixa anexos.`);
   if (anexo.tamanho && anexo.tamanho > 20 * 1024 * 1024) throw new Error("Anexo maior que 20 MB.");
   const r = await a.baixar(anexo.ref);
-  return { dados: r.dados, mediaType: anexo.mediaType || r.mediaType || "application/octet-stream" };
+  const mediaType = anexo.mediaType || r.mediaType || "application/octet-stream";
+  await salvarArquivo({ dados: r.dados, mediaType, canal, ref: anexo.ref, nome: anexo.nome, mensagemId }).catch((e) => console.error("[arquivos]", e));
+  return { dados: r.dados, mediaType };
+}
+
+/** Liga uma mensagem recebida ao pedido e ao item, depois que o fluxo descobriu a qual pertence. */
+export async function vincularMensagem(mensagemId: string, alvo: { pedidoId?: number; itemPedidoId?: number }) {
+  await db.update(mensagem).set(alvo).where(eq(mensagem.id, mensagemId));
 }
 
 export type Contato = typeof contato.$inferSelect;

@@ -42,6 +42,8 @@ O Serper tem 2.500 consultas, uma vez só. Cada item gasta no máximo 2 (`BUSCA_
 
 Para testar a verificação de um fornecedor: `npm run verificacao:testar -- https://www.telhanorte.com.br` ou `-- 15.351.310/0001-28`. O e-SAJ do TJSP ficou em manutenção em 07 e 08/11/2026; quando ele não responde, o fornecedor não perde pontos e o motivo aparece.
 
+Para ver tudo o que aconteceu num pedido (agentes, dados, IA e mensagens, em ordem): `npm run rastro -- <pedido>`; com `--em "<data e hora>"`, o estado exato naquele instante. Detalhes em [docs/arquitetura.md](docs/arquitetura.md#rastreio-nada-se-perde).
+
 Para os testes de integração, crie o banco de teste uma vez:
 `docker compose exec banco psql -U kotala -c "create database kotala_teste"`.
 

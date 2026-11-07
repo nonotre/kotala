@@ -23,6 +23,8 @@ aoRegistrarUso((r) => {
       tokensSaida: r.tokensSaida,
       duracaoMs: r.duracaoMs,
       erro: r.erro,
+      prompt: r.prompt,
+      resposta: r.resposta,
       pedidoId: r.pedidoId,
       itemPedidoId: r.itemPedidoId,
     })

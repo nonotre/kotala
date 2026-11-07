@@ -1,0 +1,2377 @@
+{
+  "id": "c91825bc-0b33-45f1-a5e7-fba96f492165",
+  "prevId": "91f6ea3b-6cc1-46f9-8164-f4d47aebf428",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.arquivo": {
+      "name": "arquivo",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "sha256": {
+          "name": "sha256",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "media_type": {
+          "name": "media_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tamanho": {
+          "name": "tamanho",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "caminho": {
+          "name": "caminho",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nome": {
+          "name": "nome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "canal": {
+          "name": "canal",
+          "type": "canal",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ref": {
+          "name": "ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mensagem_id": {
+          "name": "mensagem_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "arquivo_sha": {
+          "name": "arquivo_sha",
+          "columns": [
+            {
+              "expression": "sha256",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "arquivo_ref": {
+          "name": "arquivo_ref",
+          "columns": [
+            {
+              "expression": "canal",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "arquivo_mensagem_id_mensagem_id_fk": {
+          "name": "arquivo_mensagem_id_mensagem_id_fk",
+          "tableFrom": "arquivo",
+          "tableTo": "mensagem",
+          "columnsFrom": [
+            "mensagem_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.auditoria": {
+      "name": "auditoria",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "tabela": {
+          "name": "tabela",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operacao": {
+          "name": "operacao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "chave": {
+          "name": "chave",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "antes": {
+          "name": "antes",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "depois": {
+          "name": "depois",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "txid": {
+          "name": "txid",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "txid_current()"
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "clock_timestamp()"
+        }
+      },
+      "indexes": {
+        "auditoria_linha": {
+          "name": "auditoria_linha",
+          "columns": [
+            {
+              "expression": "tabela",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "chave",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "criado_em",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "auditoria_txid": {
+          "name": "auditoria_txid",
+          "columns": [
+            {
+              "expression": "txid",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.cache_busca": {
+      "name": "cache_busca",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "provedor": {
+          "name": "provedor",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "consulta": {
+          "name": "consulta",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "resposta": {
+          "name": "resposta",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pago": {
+          "name": "pago",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "cache_busca_consulta": {
+          "name": "cache_busca_consulta",
+          "columns": [
+            {
+              "expression": "provedor",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "consulta",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "criado_em",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.contato": {
+      "name": "contato",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "canal": {
+          "name": "canal",
+          "type": "canal",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "endereco": {
+          "name": "endereco",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "papel": {
+          "name": "papel",
+          "type": "papel_contato",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fornecedor_id": {
+          "name": "fornecedor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "nome": {
+          "name": "nome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aviso_privacidade_em": {
+          "name": "aviso_privacidade_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "parou_em": {
+          "name": "parou_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "contato_canal_endereco": {
+          "name": "contato_canal_endereco",
+          "columns": [
+            {
+              "expression": "canal",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "endereco",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "contato_fornecedor_id_fornecedor_id_fk": {
+          "name": "contato_fornecedor_id_fornecedor_id_fk",
+          "tableFrom": "contato",
+          "tableTo": "fornecedor",
+          "columnsFrom": [
+            "fornecedor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.cotacao": {
+      "name": "cotacao",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "item_pedido_id": {
+          "name": "item_pedido_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fornecedor_id": {
+          "name": "fornecedor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "contato_id": {
+          "name": "contato_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rodada": {
+          "name": "rodada",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "situacao": {
+          "name": "situacao",
+          "type": "situacao_cotacao",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'aguardando'"
+        },
+        "enviada_em": {
+          "name": "enviada_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lembrete_em": {
+          "name": "lembrete_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "respondeu_em": {
+          "name": "respondeu_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "cotacao_item_fornecedor_rodada": {
+          "name": "cotacao_item_fornecedor_rodada",
+          "columns": [
+            {
+              "expression": "item_pedido_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "fornecedor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "rodada",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "cotacao_item_pedido_id_item_pedido_id_fk": {
+          "name": "cotacao_item_pedido_id_item_pedido_id_fk",
+          "tableFrom": "cotacao",
+          "tableTo": "item_pedido",
+          "columnsFrom": [
+            "item_pedido_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "cotacao_fornecedor_id_fornecedor_id_fk": {
+          "name": "cotacao_fornecedor_id_fornecedor_id_fk",
+          "tableFrom": "cotacao",
+          "tableTo": "fornecedor",
+          "columnsFrom": [
+            "fornecedor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "cotacao_contato_id_contato_id_fk": {
+          "name": "cotacao_contato_id_contato_id_fk",
+          "tableFrom": "cotacao",
+          "tableTo": "contato",
+          "columnsFrom": [
+            "contato_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.evento": {
+      "name": "evento",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "pedido_id": {
+          "name": "pedido_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "item_pedido_id": {
+          "name": "item_pedido_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "agente": {
+          "name": "agente",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "acao": {
+          "name": "acao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "motivo": {
+          "name": "motivo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "de_estado": {
+          "name": "de_estado",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "para_estado": {
+          "name": "para_estado",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fornecedor_ids": {
+          "name": "fornecedor_ids",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dados": {
+          "name": "dados",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "txid": {
+          "name": "txid",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "txid_current()"
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "evento_pedido": {
+          "name": "evento_pedido",
+          "columns": [
+            {
+              "expression": "pedido_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "criado_em",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "evento_txid": {
+          "name": "evento_txid",
+          "columns": [
+            {
+              "expression": "txid",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "evento_pedido_id_pedido_id_fk": {
+          "name": "evento_pedido_id_pedido_id_fk",
+          "tableFrom": "evento",
+          "tableTo": "pedido",
+          "columnsFrom": [
+            "pedido_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "evento_item_pedido_id_item_pedido_id_fk": {
+          "name": "evento_item_pedido_id_item_pedido_id_fk",
+          "tableFrom": "evento",
+          "tableTo": "item_pedido",
+          "columnsFrom": [
+            "item_pedido_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.fornecedor": {
+      "name": "fornecedor",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "chave": {
+          "name": "chave",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "nome": {
+          "name": "nome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cnpj": {
+          "name": "cnpj",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "origem": {
+          "name": "origem",
+          "type": "origem_fornecedor",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "verificado": {
+          "name": "verificado",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "verificacao": {
+          "name": "verificacao",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "homologado": {
+          "name": "homologado",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "fonte": {
+          "name": "fonte",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "regiao": {
+          "name": "regiao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cep": {
+          "name": "cep",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "parou_em": {
+          "name": "parou_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "fornecedor_chave_unique": {
+          "name": "fornecedor_chave_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "chave"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.historico_compra": {
+      "name": "historico_compra",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "fornecedor_id": {
+          "name": "fornecedor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "item_chave": {
+          "name": "item_chave",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "descricao": {
+          "name": "descricao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "preco_unitario": {
+          "name": "preco_unitario",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quantidade": {
+          "name": "quantidade",
+          "type": "numeric(14, 3)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "frete": {
+          "name": "frete",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "data": {
+          "name": "data",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "prazo_prometido_dias": {
+          "name": "prazo_prometido_dias",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "prazo_cumprido": {
+          "name": "prazo_cumprido",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "experiencia": {
+          "name": "experiencia",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "simulado": {
+          "name": "simulado",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "item_pedido_id": {
+          "name": "item_pedido_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "historico_compra_fornecedor_id_fornecedor_id_fk": {
+          "name": "historico_compra_fornecedor_id_fornecedor_id_fk",
+          "tableFrom": "historico_compra",
+          "tableTo": "fornecedor",
+          "columnsFrom": [
+            "fornecedor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "historico_compra_item_pedido_id_item_pedido_id_fk": {
+          "name": "historico_compra_item_pedido_id_item_pedido_id_fk",
+          "tableFrom": "historico_compra",
+          "tableTo": "item_pedido",
+          "columnsFrom": [
+            "item_pedido_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.item_pedido": {
+      "name": "item_pedido",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "pedido_id": {
+          "name": "pedido_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ordem": {
+          "name": "ordem",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "estado": {
+          "name": "estado",
+          "type": "estado_item",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'na_fila'"
+        },
+        "descricao": {
+          "name": "descricao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "item_chave": {
+          "name": "item_chave",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "quantidade": {
+          "name": "quantidade",
+          "type": "numeric(14, 3)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unidade": {
+          "name": "unidade",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "especificacao": {
+          "name": "especificacao",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "aceita_similar": {
+          "name": "aceita_similar",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "prazo_respostas_em": {
+          "name": "prazo_respostas_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lembrete_em": {
+          "name": "lembrete_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rodada": {
+          "name": "rodada",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "fornecedor_escolhido_id": {
+          "name": "fornecedor_escolhido_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "oferta_escolhida_id": {
+          "name": "oferta_escolhida_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "justificativa_menos_de_tres": {
+          "name": "justificativa_menos_de_tres",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "atualizado_em": {
+          "name": "atualizado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "item_pedido_ordem": {
+          "name": "item_pedido_ordem",
+          "columns": [
+            {
+              "expression": "pedido_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ordem",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "item_pedido_estado": {
+          "name": "item_pedido_estado",
+          "columns": [
+            {
+              "expression": "estado",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "item_pedido_pedido_id_pedido_id_fk": {
+          "name": "item_pedido_pedido_id_pedido_id_fk",
+          "tableFrom": "item_pedido",
+          "tableTo": "pedido",
+          "columnsFrom": [
+            "pedido_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "item_pedido_fornecedor_escolhido_id_fornecedor_id_fk": {
+          "name": "item_pedido_fornecedor_escolhido_id_fornecedor_id_fk",
+          "tableFrom": "item_pedido",
+          "tableTo": "fornecedor",
+          "columnsFrom": [
+            "fornecedor_escolhido_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.mapa_cotacao": {
+      "name": "mapa_cotacao",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "item_pedido_id": {
+          "name": "item_pedido_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rodada": {
+          "name": "rodada",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dados": {
+          "name": "dados",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "recomendacao": {
+          "name": "recomendacao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "oferta_recomendada_id": {
+          "name": "oferta_recomendada_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "mapa_item": {
+          "name": "mapa_item",
+          "columns": [
+            {
+              "expression": "item_pedido_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "criado_em",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "mapa_cotacao_item_pedido_id_item_pedido_id_fk": {
+          "name": "mapa_cotacao_item_pedido_id_item_pedido_id_fk",
+          "tableFrom": "mapa_cotacao",
+          "tableTo": "item_pedido",
+          "columnsFrom": [
+            "item_pedido_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.mensagem": {
+      "name": "mensagem",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "canal": {
+          "name": "canal",
+          "type": "canal",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "direcao": {
+          "name": "direcao",
+          "type": "direcao_mensagem",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "contato_id": {
+          "name": "contato_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pedido_id": {
+          "name": "pedido_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "item_pedido_id": {
+          "name": "item_pedido_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "texto": {
+          "name": "texto",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "anexos": {
+          "name": "anexos",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "botoes": {
+          "name": "botoes",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "id_externo": {
+          "name": "id_externo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "situacao": {
+          "name": "situacao",
+          "type": "situacao_envio",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "erro": {
+          "name": "erro",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "mensagem_entrada_id_externo": {
+          "name": "mensagem_entrada_id_externo",
+          "columns": [
+            {
+              "expression": "canal",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "contato_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id_externo",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"mensagem\".\"direcao\" = 'entrada' and \"mensagem\".\"id_externo\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mensagem_contato": {
+          "name": "mensagem_contato",
+          "columns": [
+            {
+              "expression": "contato_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "criado_em",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "mensagem_contato_id_contato_id_fk": {
+          "name": "mensagem_contato_id_contato_id_fk",
+          "tableFrom": "mensagem",
+          "tableTo": "contato",
+          "columnsFrom": [
+            "contato_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "mensagem_pedido_id_pedido_id_fk": {
+          "name": "mensagem_pedido_id_pedido_id_fk",
+          "tableFrom": "mensagem",
+          "tableTo": "pedido",
+          "columnsFrom": [
+            "pedido_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "mensagem_item_pedido_id_item_pedido_id_fk": {
+          "name": "mensagem_item_pedido_id_item_pedido_id_fk",
+          "tableFrom": "mensagem",
+          "tableTo": "item_pedido",
+          "columnsFrom": [
+            "item_pedido_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.oferta": {
+      "name": "oferta",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "item_pedido_id": {
+          "name": "item_pedido_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fornecedor_id": {
+          "name": "fornecedor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cotacao_id": {
+          "name": "cotacao_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rodada": {
+          "name": "rodada",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "item_oferecido": {
+          "name": "item_oferecido",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "item_exato": {
+          "name": "item_exato",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "embalagem": {
+          "name": "embalagem",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "quantidade_ofertada": {
+          "name": "quantidade_ofertada",
+          "type": "numeric(14, 3)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "unidade_ofertada": {
+          "name": "unidade_ofertada",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "preco_unitario": {
+          "name": "preco_unitario",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_produto": {
+          "name": "total_produto",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "frete": {
+          "name": "frete",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "origem_frete": {
+          "name": "origem_frete",
+          "type": "origem_frete",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "prazo_dias": {
+          "name": "prazo_dias",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "validade_dias": {
+          "name": "validade_dias",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pagamento": {
+          "name": "pagamento",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "prazo_pagamento_dias": {
+          "name": "prazo_pagamento_dias",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "impostos_nao_inclusos": {
+          "name": "impostos_nao_inclusos",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "impostos_valor": {
+          "name": "impostos_valor",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "entrega_no_local": {
+          "name": "entrega_no_local",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "formato": {
+          "name": "formato",
+          "type": "formato_oferta",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fonte": {
+          "name": "fonte",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "mensagem_id": {
+          "name": "mensagem_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "preco_confirmado": {
+          "name": "preco_confirmado",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "extraido": {
+          "name": "extraido",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "oferta_item_pedido_id_item_pedido_id_fk": {
+          "name": "oferta_item_pedido_id_item_pedido_id_fk",
+          "tableFrom": "oferta",
+          "tableTo": "item_pedido",
+          "columnsFrom": [
+            "item_pedido_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "oferta_fornecedor_id_fornecedor_id_fk": {
+          "name": "oferta_fornecedor_id_fornecedor_id_fk",
+          "tableFrom": "oferta",
+          "tableTo": "fornecedor",
+          "columnsFrom": [
+            "fornecedor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "oferta_cotacao_id_cotacao_id_fk": {
+          "name": "oferta_cotacao_id_cotacao_id_fk",
+          "tableFrom": "oferta",
+          "tableTo": "cotacao",
+          "columnsFrom": [
+            "cotacao_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.pedido": {
+      "name": "pedido",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "estado": {
+          "name": "estado",
+          "type": "estado_pedido",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'interpretando'"
+        },
+        "canal_origem": {
+          "name": "canal_origem",
+          "type": "canal",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "comprador_id": {
+          "name": "comprador_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "texto_original": {
+          "name": "texto_original",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "destino": {
+          "name": "destino",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cep": {
+          "name": "cep",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "modo_entrega": {
+          "name": "modo_entrega",
+          "type": "modo_entrega",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "janela_recebimento": {
+          "name": "janela_recebimento",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "prazo_texto": {
+          "name": "prazo_texto",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "prazo_max_dias": {
+          "name": "prazo_max_dias",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "urgencia": {
+          "name": "urgencia",
+          "type": "urgencia",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'normal'"
+        },
+        "faltando": {
+          "name": "faltando",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "suposicoes": {
+          "name": "suposicoes",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "correcoes": {
+          "name": "correcoes",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "perguntas_feitas": {
+          "name": "perguntas_feitas",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "atualizado_em": {
+          "name": "atualizado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "pedido_comprador_id_contato_id_fk": {
+          "name": "pedido_comprador_id_contato_id_fk",
+          "tableFrom": "pedido",
+          "tableTo": "contato",
+          "columnsFrom": [
+            "comprador_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.referencia_preco": {
+      "name": "referencia_preco",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "item_pedido_id": {
+          "name": "item_pedido_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fornecedor_id": {
+          "name": "fornecedor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "loja": {
+          "name": "loja",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "titulo": {
+          "name": "titulo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "url": {
+          "name": "url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metodo": {
+          "name": "metodo",
+          "type": "metodo_coleta",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "preco_fonte": {
+          "name": "preco_fonte",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unidade_fonte": {
+          "name": "unidade_fonte",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "preco_unitario": {
+          "name": "preco_unitario",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "conversao": {
+          "name": "conversao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "disponivel": {
+          "name": "disponivel",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "frete": {
+          "name": "frete",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "frete_prazo_dias": {
+          "name": "frete_prazo_dias",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "entrega_no_cep": {
+          "name": "entrega_no_cep",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "regiao_do_preco": {
+          "name": "regiao_do_preco",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "trecho": {
+          "name": "trecho",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aceita": {
+          "name": "aceita",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "motivo_corte": {
+          "name": "motivo_corte",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "confianca": {
+          "name": "confianca",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "coletado_em": {
+          "name": "coletado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "referencia_item": {
+          "name": "referencia_item",
+          "columns": [
+            {
+              "expression": "item_pedido_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "referencia_preco_item_pedido_id_item_pedido_id_fk": {
+          "name": "referencia_preco_item_pedido_id_item_pedido_id_fk",
+          "tableFrom": "referencia_preco",
+          "tableTo": "item_pedido",
+          "columnsFrom": [
+            "item_pedido_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "referencia_preco_fornecedor_id_fornecedor_id_fk": {
+          "name": "referencia_preco_fornecedor_id_fornecedor_id_fk",
+          "tableFrom": "referencia_preco",
+          "tableTo": "fornecedor",
+          "columnsFrom": [
+            "fornecedor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.sancao": {
+      "name": "sancao",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "cadastro": {
+          "name": "cadastro",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cnpj": {
+          "name": "cnpj",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "raiz": {
+          "name": "raiz",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nome": {
+          "name": "nome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "categoria": {
+          "name": "categoria",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "orgao": {
+          "name": "orgao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "uf": {
+          "name": "uf",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "esfera": {
+          "name": "esfera",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "abrangencia": {
+          "name": "abrangencia",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "inicio": {
+          "name": "inicio",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fim": {
+          "name": "fim",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "base": {
+          "name": "base",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "carregado_em": {
+          "name": "carregado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "sancao_cnpj": {
+          "name": "sancao_cnpj",
+          "columns": [
+            {
+              "expression": "cnpj",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "sancao_raiz": {
+          "name": "sancao_raiz",
+          "columns": [
+            {
+              "expression": "raiz",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.uso_ia": {
+      "name": "uso_ia",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "papel": {
+          "name": "papel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rota": {
+          "name": "rota",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "modelo": {
+          "name": "modelo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ok": {
+          "name": "ok",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tentativa": {
+          "name": "tentativa",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tokens_entrada": {
+          "name": "tokens_entrada",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tokens_saida": {
+          "name": "tokens_saida",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "duracao_ms": {
+          "name": "duracao_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "erro": {
+          "name": "erro",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "prompt": {
+          "name": "prompt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resposta": {
+          "name": "resposta",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pedido_id": {
+          "name": "pedido_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "item_pedido_id": {
+          "name": "item_pedido_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.canal": {
+      "name": "canal",
+      "schema": "public",
+      "values": [
+        "telegram",
+        "whatsapp",
+        "email",
+        "web",
+        "voz",
+        "simulado"
+      ]
+    },
+    "public.classificacao_resposta": {
+      "name": "classificacao_resposta",
+      "schema": "public",
+      "values": [
+        "proposta",
+        "duvida",
+        "parar",
+        "outro"
+      ]
+    },
+    "public.direcao_mensagem": {
+      "name": "direcao_mensagem",
+      "schema": "public",
+      "values": [
+        "entrada",
+        "saida"
+      ]
+    },
+    "public.estado_item": {
+      "name": "estado_item",
+      "schema": "public",
+      "values": [
+        "na_fila",
+        "buscando",
+        "cotando",
+        "comparando",
+        "aguardando_decisao",
+        "aprovado",
+        "pedido_enviado",
+        "confirmado",
+        "sem_proposta",
+        "cancelado"
+      ]
+    },
+    "public.estado_pedido": {
+      "name": "estado_pedido",
+      "schema": "public",
+      "values": [
+        "interpretando",
+        "aguardando_confirmacao",
+        "em_andamento",
+        "concluido",
+        "cancelado"
+      ]
+    },
+    "public.formato_oferta": {
+      "name": "formato_oferta",
+      "schema": "public",
+      "values": [
+        "texto",
+        "pdf",
+        "foto",
+        "voz",
+        "busca"
+      ]
+    },
+    "public.metodo_coleta": {
+      "name": "metodo_coleta",
+      "schema": "public",
+      "values": [
+        "vtex_api",
+        "jsonld",
+        "ia_trecho",
+        "serper_shopping"
+      ]
+    },
+    "public.modo_entrega": {
+      "name": "modo_entrega",
+      "schema": "public",
+      "values": [
+        "entrega",
+        "retirada"
+      ]
+    },
+    "public.origem_fornecedor": {
+      "name": "origem_fornecedor",
+      "schema": "public",
+      "values": [
+        "real",
+        "simulado"
+      ]
+    },
+    "public.origem_frete": {
+      "name": "origem_frete",
+      "schema": "public",
+      "values": [
+        "informado",
+        "estimado",
+        "nao_se_aplica"
+      ]
+    },
+    "public.papel_contato": {
+      "name": "papel_contato",
+      "schema": "public",
+      "values": [
+        "comprador",
+        "fornecedor"
+      ]
+    },
+    "public.situacao_cotacao": {
+      "name": "situacao_cotacao",
+      "schema": "public",
+      "values": [
+        "aguardando",
+        "respondeu",
+        "sem_resposta",
+        "parou",
+        "desistiu",
+        "encerrada"
+      ]
+    },
+    "public.situacao_envio": {
+      "name": "situacao_envio",
+      "schema": "public",
+      "values": [
+        "recebida",
+        "enviada",
+        "bloqueada_parar",
+        "falhou"
+      ]
+    },
+    "public.urgencia": {
+      "name": "urgencia",
+      "schema": "public",
+      "values": [
+        "normal",
+        "urgente",
+        "obra_parada"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

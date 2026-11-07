@@ -1,6 +1,7 @@
 // N2: adaptador de IA. O resto do sistema chama gerarTexto/gerarObjeto com um
 // papel e nunca vê provedor, chave ou modelo. Trocar de provedor é mexer só aqui.
 
+import { createHash } from "node:crypto";
 import { createGoogle, type GoogleProvider } from "@ai-sdk/google";
 import {
   APICallError,
@@ -46,15 +47,61 @@ export type RegistroUso = {
   tokensSaida?: number;
   duracaoMs: number;
   erro?: string;
+  /** Instruções e mensagens enviadas, cortadas; anexos viram tipo, tamanho e hash. */
+  prompt?: string;
+  /** Texto ou objeto devolvido (ou o texto cru, quando o formato falhou), cortado. */
+  resposta?: string;
   pedidoId?: number;
   itemPedidoId?: number;
 };
 
-let registrarUso: (r: RegistroUso) => void = () => {};
-/** Liga o registro de uso (o núcleo grava em uso_ia). */
-export function aoRegistrarUso(fn: (r: RegistroUso) => void) {
-  registrarUso = fn;
+const MAX_TEXTO_RASTRO = 8_000;
+const cortar = (s: string) => (s.length > MAX_TEXTO_RASTRO ? `${s.slice(0, MAX_TEXTO_RASTRO)}… [+${s.length - MAX_TEXTO_RASTRO} caracteres]` : s);
+
+/** Texto do que foi enviado à IA, sem os bytes dos anexos. */
+export function textoDoPrompt(sistema: string | undefined, mensagens: ModelMessage[]): string {
+  const partes: string[] = [];
+  if (sistema) partes.push(`[sistema]\n${sistema}`);
+  for (const m of mensagens) {
+    if (typeof m.content === "string") {
+      partes.push(`[${m.role}]\n${m.content}`);
+      continue;
+    }
+    const pedacos = (m.content as { type: string; text?: string; data?: unknown; mediaType?: string }[]).map((c) => {
+      if (c.type === "text") return c.text ?? "";
+      if (c.type === "file" || c.type === "image") {
+        const d = c.data;
+        const bytes = d instanceof Uint8Array ? d : typeof d === "string" ? Buffer.from(d, "base64") : null;
+        const hash = bytes ? createHash("sha256").update(bytes).digest("hex").slice(0, 16) : "?";
+        return `[arquivo ${c.mediaType ?? ""}, ${bytes?.length ?? "?"} bytes, sha256 ${hash}]`;
+      }
+      return `[${c.type}]`;
+    });
+    partes.push(`[${m.role}]\n${pedacos.join("\n")}`);
+  }
+  return cortar(partes.join("\n\n"));
 }
+
+function textoDoErro(erro: unknown): string | undefined {
+  // Quando o modelo respondeu fora do formato, guarda o que ele escreveu.
+  if (NoObjectGeneratedError.isInstance(erro) && erro.text) return cortar(erro.text);
+  return undefined;
+}
+
+const ouvintesDeUso: ((r: RegistroUso) => void)[] = [];
+/** Acrescenta quem recebe cada chamada de IA (o núcleo grava em uso_ia; scripts podem só imprimir). */
+export function aoRegistrarUso(fn: (r: RegistroUso) => void) {
+  ouvintesDeUso.push(fn);
+}
+const registrarUso = (r: RegistroUso) => {
+  for (const f of ouvintesDeUso) {
+    try {
+      f(r);
+    } catch (e) {
+      console.error("[uso_ia]", e);
+    }
+  }
+};
 
 const disjuntor = new Disjuntor();
 let rotas: Rota[] | null = null;
@@ -104,7 +151,11 @@ function montarMensagens(p: PedidoIa): ModelMessage[] {
   return mensagens;
 }
 
-async function executarComReserva<T>(p: PedidoIa, chamar: (alvo: Alvo) => Promise<{ valor: T; uso?: { inputTokens?: number; outputTokens?: number } }>) {
+async function executarComReserva<T>(
+  p: PedidoIa,
+  prompt: string,
+  chamar: (alvo: Alvo) => Promise<{ valor: T; uso?: { inputTokens?: number; outputTokens?: number } }>,
+) {
   rotas ??= rotasDoAmbiente();
   const alvos = alvosDoPapel(p.papel, rotas);
   if (!alvos.length) throw new Error("Nenhuma chave de IA configurada. Defina GEMINI_API_KEY no .env.");
@@ -125,6 +176,8 @@ async function executarComReserva<T>(p: PedidoIa, chamar: (alvo: Alvo) => Promis
         tokensSaida: t.ok ? t.valor.uso?.outputTokens : undefined,
         duracaoMs: t.ms,
         erro: t.ok ? undefined : `${t.tipo}: ${t.erro instanceof Error ? t.erro.message : String(t.erro)}`.slice(0, 500),
+        prompt,
+        resposta: t.ok ? cortar(typeof t.valor.valor === "string" ? t.valor.valor : JSON.stringify(t.valor.valor)) : textoDoErro(t.erro),
         pedidoId: p.contexto?.pedidoId,
         itemPedidoId: p.contexto?.itemPedidoId,
       }),
@@ -141,7 +194,7 @@ const opcoesComuns = () => ({
 /** Texto livre: redação de mensagens e explicações. */
 export async function gerarTexto(p: PedidoIa) {
   const mensagens = montarMensagens(p);
-  return executarComReserva(p, async (alvo) => {
+  return executarComReserva(p, textoDoPrompt(p.sistema, mensagens), async (alvo) => {
     const r = await generateText({
       model: provedor(alvo.rota)(alvo.modelo),
       system: p.sistema,
@@ -158,7 +211,7 @@ export async function gerarTexto(p: PedidoIa) {
  */
 export async function gerarObjeto<S extends z.ZodType>(p: PedidoIa & { schema: S }) {
   const mensagens = montarMensagens(p);
-  return executarComReserva(p, async (alvo) => {
+  return executarComReserva(p, textoDoPrompt(p.sistema, mensagens), async (alvo) => {
     const r = await generateText({
       model: provedor(alvo.rota)(alvo.modelo),
       system: p.sistema,

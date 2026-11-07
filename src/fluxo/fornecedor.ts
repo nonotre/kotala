@@ -7,7 +7,7 @@ import { extrair, type Extracao } from "../agentes/extrator/index.ts";
 import { db } from "../nucleo/db/cliente.ts";
 import { contato as tContato, cotacao, fornecedor, itemPedido, oferta, pedido } from "../nucleo/db/schema.ts";
 import type { AnexoIa } from "../nucleo/ia/index.ts";
-import { baixarAnexo, enviar, marcarParouContato, type MensagemRecebida } from "../nucleo/mensagens/index.ts";
+import { baixarAnexo, enviar, marcarParouContato, vincularMensagem, type MensagemRecebida } from "../nucleo/mensagens/index.ts";
 import { registrar } from "../nucleo/registro.ts";
 import { aoRespostaDoVencedor, pedidoEnviadoPara } from "./decisao.ts";
 import { cnpjValido, formatarCnpj, verificarFornecedor } from "../agentes/verificacao/index.ts";
@@ -26,7 +26,10 @@ export async function aoMensagemDoFornecedor({ contato, mensagemId, entrada }: M
   // Botões do pedido de compra.
   if (entrada.botao) {
     const m = /^compra:(\d+):(confirmo|desisto)$/.exec(entrada.botao);
-    if (m) await aoRespostaDoVencedor(contato, Number(m[1]), m[2] === "confirmo");
+    if (m) {
+      await vincularMensagem(mensagemId, { itemPedidoId: Number(m[1]) });
+      await aoRespostaDoVencedor(contato, Number(m[1]), m[2] === "confirmo");
+    }
     return;
   }
 
@@ -91,13 +94,14 @@ async function processarResposta(
     .where(eq(itemPedido.id, c.itemPedidoId));
   if (!l) return;
   const ctx = { pedidoId: l.pedido.id, itemPedidoId: l.item.id };
+  await vincularMensagem(mensagemId, ctx);
 
   // E5: PDF e foto vão junto para o Extrator.
   const anexos: AnexoIa[] = [];
   const arquivos = (entrada.anexos ?? []).filter((a) => a.tipo === "pdf" || a.tipo === "foto");
   for (const a of arquivos) {
     try {
-      const r = await baixarAnexo(entrada.canal, a);
+      const r = await baixarAnexo(entrada.canal, a, mensagemId);
       anexos.push({ dados: r.dados, mediaType: r.mediaType });
     } catch (erro) {
       console.error("[fornecedor] anexo", erro);

@@ -131,6 +131,29 @@ As sanções vêm dos arquivos de dados abertos do dia anterior, sem chave. Com 
 
 Feito: `pessoa-juridica` na Verificação. A fazer: `notas-fiscais` na Busca, como mais uma fonte de candidatos com CNPJ (não de preço unitário, porque o valor é da nota inteira). Limites de uso e o formato real das respostas precisam ser conferidos com a chave.
 
+## Rastreio: nada se perde
+
+Dá para saber o valor exato de qualquer dado e o estado de qualquer pedido em qualquer instante, e quem mudou o quê e por quê.
+
+| Camada | O que guarda | Onde |
+|---|---|---|
+| Auditoria por gatilho | Toda inserção, alteração e remoção em `pedido`, `item_pedido`, `cotacao`, `oferta`, `fornecedor`, `contato`, `referencia_preco`, `mapa_cotacao`, `historico_compra` e `arquivo`, com a linha antes e depois. Feita no próprio Postgres, na mesma transação, seja qual for o código que mudou | tabela `auditoria`, migração `0007` |
+| Eventos dos agentes | Quem fez, o quê, por quê, de qual estado para qual. O `txid` liga o evento às linhas de auditoria que ele mudou | tabela `evento` |
+| Chamadas de IA | Agente, modelo, chave principal ou reserva, tokens, tempo, erro, e o prompt e a resposta (cortados em 8.000 caracteres; anexos viram tipo, tamanho e hash; resposta fora do formato também fica) | tabela `uso_ia` |
+| Mensagens | Toda mensagem que entra e sai, ligada ao pedido e ao item depois que o fluxo descobre a qual pertence | tabela `mensagem` |
+| Arquivos | PDF, foto e áudio baixados ficam em disco pelo hash (`ARQUIVOS_DIR`, volume `arquivos` no docker). Se o id do Telegram expirar, o original continua | tabela `arquivo` |
+| Respostas cruas de APIs | Busca, CNPJ, TJSP e Portal, como vieram | tabela `cache_busca` |
+
+Consultas prontas em `src/nucleo/rastreio.ts`: `estadoEm(tabela, chave, instante)`, `historicoDaLinha`, `fotoDoPedido(pedido, instante)` e `linhaDoTempo(pedido)`, que junta eventos, mudanças de dados, chamadas de IA e mensagens em ordem. A tela N5 da Frente 1 mostra essa linha do tempo. Pelo terminal:
+
+```bash
+npm run rastro -- 12                    # linha do tempo do pedido 12
+npm run rastro -- 12 --completo         # com prompt e resposta da IA e todos os campos
+npm run rastro -- 12 --em "2026-11-07T13:05:00-03:00"   # estado exato naquele instante
+```
+
+O que não entra no rastro: o raciocínio interno do modelo (a tela mostra o motivo declarado por cada agente e os números do Comparador) e os bytes dos anexos dentro do `uso_ia` (estão na tabela `arquivo`).
+
 ## Segurança
 
 - Texto de fornecedor, página da web e resposta de API são dados, entre delimitadores, nunca instrução. O Extrator não tem ferramentas, só saída estruturada validada com zod.
@@ -149,6 +172,7 @@ Feito: `pessoa-juridica` na Verificação. A fazer: `notas-fiscais` na Busca, co
 | `npm run busca:testar -- "Cimento CP II 50 kg" saco 40 01310-100` | Uma busca real (gasta até 2 consultas do Serper se não estiver no cache) |
 | `npm run verificacao:testar -- https://www.telhanorte.com.br` | Verificação de um fornecedor |
 | `npm run ia:testar` | Uma chamada real ao Gemini |
+| `npm run rastro -- <pedido>` | Linha do tempo completa de um pedido (`--teste` para o banco de teste) |
 
 ## O que falta
 

@@ -3,6 +3,8 @@
 
 import { sql } from "drizzle-orm";
 import {
+  bigint,
+  bigserial,
   boolean,
   index,
   integer,
@@ -284,9 +286,11 @@ export const evento = pgTable(
     paraEstado: text("para_estado"),
     fornecedorIds: jsonb("fornecedor_ids").$type<string[]>(),
     dados: jsonb("dados"),
+    /** Transação do banco: liga o evento às linhas de auditoria que ele mudou. */
+    txid: bigint("txid", { mode: "number" }).default(sql`txid_current()`),
     criadoEm: criadoEm(),
   },
-  (t) => [index("evento_pedido").on(t.pedidoId, t.criadoEm)],
+  (t) => [index("evento_pedido").on(t.pedidoId, t.criadoEm), index("evento_txid").on(t.txid)],
 );
 
 // ---------- Uso de IA: tokens, modelo e se caiu na reserva ----------
@@ -302,6 +306,9 @@ export const usoIa = pgTable("uso_ia", {
   tokensSaida: integer("tokens_saida"),
   duracaoMs: integer("duracao_ms").notNull(),
   erro: text("erro"),
+  /** Entrada e saída da chamada (instruções, mensagens e resposta), cortadas; anexos viram só tipo, tamanho e hash. */
+  prompt: text("prompt"),
+  resposta: text("resposta"),
   pedidoId: integer("pedido_id"),
   itemPedidoId: integer("item_pedido_id"),
   criadoEm: criadoEm(),
@@ -428,4 +435,45 @@ export const sancao = pgTable(
     carregadoEm: timestamp("carregado_em", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("sancao_cnpj").on(t.cnpj), index("sancao_raiz").on(t.raiz)],
+);
+
+// ---------- Rastreio: nada se perde ----------
+
+/**
+ * Toda inserção, alteração e remoção nas tabelas de negócio, gravada por gatilho
+ * no próprio Postgres (migração 0007), na mesma transação. Com ela dá para
+ * saber o valor exato de qualquer linha em qualquer instante.
+ */
+export const auditoria = pgTable(
+  "auditoria",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    tabela: text("tabela").notNull(),
+    operacao: text("operacao").notNull(), // INSERT, UPDATE, DELETE
+    chave: text("chave").notNull(),
+    antes: jsonb("antes"),
+    depois: jsonb("depois"),
+    txid: bigint("txid", { mode: "number" }).notNull().default(sql`txid_current()`),
+    criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().default(sql`clock_timestamp()`),
+  },
+  (t) => [index("auditoria_linha").on(t.tabela, t.chave, t.criadoEm), index("auditoria_txid").on(t.txid)],
+);
+
+/** Arquivos recebidos (PDF, foto, áudio), guardados em disco com hash: o original não se perde. */
+export const arquivo = pgTable(
+  "arquivo",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sha256: text("sha256").notNull(),
+    mediaType: text("media_type").notNull(),
+    tamanho: integer("tamanho").notNull(),
+    caminho: text("caminho").notNull(),
+    nome: text("nome"),
+    canal: canalEnum("canal").notNull(),
+    /** Id do arquivo no canal (file_id do Telegram). */
+    ref: text("ref").notNull(),
+    mensagemId: uuid("mensagem_id").references(() => mensagem.id),
+    criadoEm: criadoEm(),
+  },
+  (t) => [index("arquivo_sha").on(t.sha256), index("arquivo_ref").on(t.canal, t.ref)],
 );

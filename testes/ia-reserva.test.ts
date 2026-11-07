@@ -75,3 +75,11 @@ test("disjuntor deixa o alvo que deu 429 descansar", async () => {
   await comReserva({ alvos, classificar, executar, disjuntor });
   assert.deepEqual(tentados, ["m1@principal", "m2@principal"]);
 });
+
+test("prompt do rastro troca os bytes do anexo por tipo, tamanho e hash", async () => {
+  process.env.DATABASE_URL ??= "postgres://x@127.0.0.1:1/x";
+  const { textoDoPrompt } = await import("../src/nucleo/ia/index.ts");
+  const t = textoDoPrompt("regras", [{ role: "user", content: [{ type: "text", text: "leia" }, { type: "file", data: new Uint8Array([1, 2, 3]), mediaType: "application/pdf" }] }]);
+  assert.match(t, /\[sistema\]\nregras/);
+  assert.match(t, /\[arquivo application\/pdf, 3 bytes, sha256 [0-9a-f]{16}\]/);
+});
