@@ -23,6 +23,8 @@ export type EntradaJulgamento = {
   prazosAvaliados: number;
   /** CEIS e CNEP (Portal da Transparência); null quando a base não carregou. */
   sancoes?: { base: string | null; vigentes: { cadastro: string; categoria: string | null; orgao: string | null; fim: string | null; mesmaUnidade: boolean }[]; encerradas: number } | null;
+  /** Portal da Transparência pela API (pessoa-juridica); null sem chave ou fora do ar. */
+  portal?: { sancoes: string[]; forneceGoverno: boolean; sinais: string[] } | null;
   /** Processos no TJSP; null quando não consultou. */
   tjsp?: { disponivel: true; processos: number; classesGraves: string[] } | { disponivel: false; motivo: string } | null;
   hoje?: Date;
@@ -109,6 +111,23 @@ export function julgar(e: EntradaJulgamento): Julgamento {
       motivos.push(`Sem sanção vigente no CEIS e no CNEP${e.sancoes.base ? ` (base de ${e.sancoes.base})` : ""}`);
     }
     if (e.sancoes.encerradas) motivos.push(`${e.sancoes.encerradas} ${e.sancoes.encerradas === 1 ? "sanção encerrada" : "sanções encerradas"} no passado`);
+  }
+
+  if (e.portal) {
+    // Sanção que o arquivo diário ainda não trazia: a API é mais recente.
+    const novas = e.portal.sancoes.filter((c) => !e.sancoes?.vigentes.some((s) => s.cadastro === c));
+    if (novas.length && !e.sancoes?.vigentes.length) {
+      pontos -= 40;
+      const texto = `sancionada no ${novas.join(" e ")} (Portal da Transparência)`;
+      motivos.push(`Empresa ${texto}`);
+      alertas.push(`Empresa punida pelo poder público: ${texto}`);
+    }
+    if (e.portal.forneceGoverno) {
+      // Fornecer ao governo é sinal de empresa real; com sanção vigente, não soma pontos.
+      const punida = !!e.sancoes?.vigentes.length || e.portal.sancoes.length > 0;
+      if (!punida) pontos += 5;
+      motivos.push(`Já fornece ao governo federal: ${e.portal.sinais.join(", ")}`);
+    }
   }
 
   if (e.tjsp) {

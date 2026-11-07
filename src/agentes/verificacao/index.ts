@@ -11,6 +11,7 @@ import { acharCnpjs, consultarCnpj, formatarCnpj, limparCnpj, type DadosCnpj } f
 import { julgar, ROTULO_NIVEL, type EntradaJulgamento, type Julgamento } from "./confianca.ts";
 import { atualizarSancoes, sancoesDo } from "./sancoes.ts";
 import { consultarTjsp } from "./tjsp.ts";
+import { consultarPortal } from "./portal.ts";
 
 export * from "./confianca.ts";
 export { cnpjValido, formatarCnpj, acharCnpjs } from "./cnpj.ts";
@@ -59,6 +60,7 @@ export async function verificarFornecedor(fornecedorId: string, opcoes: { forcar
 
   let sancoes: EntradaJulgamento["sancoes"] = null;
   let tjsp: EntradaJulgamento["tjsp"] = null;
+  let portal: EntradaJulgamento["portal"] = null;
   if (f.origem === "real" && cnpj) {
     try {
       await atualizarSancoes();
@@ -68,6 +70,7 @@ export async function verificarFornecedor(fornecedorId: string, opcoes: { forcar
       console.error("[sanções]", erro);
     }
     tjsp = await consultarTjsp(cnpj);
+    portal = await consultarPortal(cnpj);
   }
 
   let dados: DadosCnpj | null = null;
@@ -103,12 +106,13 @@ export async function verificarFornecedor(fornecedorId: string, opcoes: { forcar
     prazosAvaliados: h?.avaliados ?? 0,
     sancoes,
     tjsp,
+    portal,
   });
   const v: Verificacao = {
     ...j,
     em: new Date().toISOString(),
     fonte: dados
-      ? [`Receita (${dados.fonte}), CNPJ ${fonteCnpj}`, sancoes ? "CEIS e CNEP (Portal da Transparência)" : null, tjsp?.disponivel ? "TJSP (e-SAJ)" : null].filter(Boolean).join("; ")
+      ? [`Receita (${dados.fonte}), CNPJ ${fonteCnpj}`, sancoes ? "CEIS e CNEP (dados abertos do Portal da Transparência)" : null, portal ? "Portal da Transparência (API)" : null, tjsp?.disponivel ? "TJSP (e-SAJ)" : null].filter(Boolean).join("; ")
       : f.origem === "simulado" ? "Base fictícia" : "Sem consulta à Receita",
     resumo: "",
     cnpj: cnpj ? formatarCnpj(cnpj) : null,

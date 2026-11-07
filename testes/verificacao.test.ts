@@ -94,3 +94,14 @@ test("leitura da página do TJSP", () => {
   assert.equal(lerResultadoTjsp("<div>captcha</div>", u).disponivel, false);
   assert.equal(lerResultadoTjsp("<html>algo diferente</html>", u).disponivel, false);
 });
+
+test("Portal da Transparência: indicadores da pessoa jurídica", async () => {
+  const { lerPessoaJuridica } = await import("../src/agentes/verificacao/portal.ts");
+  const p = lerPessoaJuridica({ cnpj: "x", sancionadoCEIS: true, sancionadoCNEP: false, possuiContratacao: true, emitiuNFe: true });
+  assert.deepEqual(p.sancoes, ["CEIS"]);
+  assert.ok(p.forneceGoverno);
+  const j = julgar({ ...base, cnpj: ativa, presencaVerificavel: true, portal: p, sancoes: { base: "06/11/2026", vigentes: [], encerradas: 0 } });
+  assert.ok(j.alertas.some((a) => a.includes("CEIS") && a.includes("Portal")));
+  const limpa = julgar({ ...base, cnpj: ativa, presencaVerificavel: true, portal: lerPessoaJuridica({ possuiContratacao: true }) });
+  assert.ok(limpa.motivos.some((m) => m.startsWith("Já fornece ao governo federal")));
+});

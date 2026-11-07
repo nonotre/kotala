@@ -116,9 +116,9 @@ Quando roda: quando a busca aceita uma loja, quando o fornecedor manda o CNPJ na
 
 **TJSP.** O e-SAJ ficou em manutenção em 07 e 08/11/2026, então a leitura da página foi escrita sobre o formato conhecido e não pôde ser conferida. Captcha ou formato desconhecido viram "indisponível".
 
-## Portal da Transparência pela API (próximo passo)
+## Portal da Transparência pela API
 
-Hoje as sanções vêm dos arquivos de dados abertos do dia anterior, sem chave. A API (chave gratuita por e-mail, variável `PORTAL_TRANSPARENCIA_CHAVE`) complementa os dois lados. Endpoints conferidos no Swagger oficial em 07/11/2026:
+As sanções vêm dos arquivos de dados abertos do dia anterior, sem chave. Com a chave (variável `PORTAL_TRANSPARENCIA_CHAVE`, enviada no cabeçalho `chave-api-dados`), a Verificação também consulta `pessoa-juridica` (`src/agentes/verificacao/portal.ts`): sanção que o arquivo ainda não trazia derruba os pontos e gera alerta, e fornecer ao governo federal soma 5 pontos. Sem chave ou com a API fora do ar, segue só com os arquivos. Endpoints conferidos no Swagger oficial em 07/11/2026:
 
 | Endpoint | Para quê | Lado |
 |---|---|---|
@@ -129,7 +129,7 @@ Hoje as sanções vêm dos arquivos de dados abertos do dia anterior, sem chave.
 | `GET /api-de-dados/notas-fiscais?nomeProduto=` | Notas fiscais emitidas ao governo federal por produto, com nome, CNPJ e município do fornecedor e valor da nota | Busca: descobrir fornecedores reais do item, já com CNPJ |
 | `GET /api-de-dados/licitacoes/itens-licitados` | Itens licitados de uma licitação | Busca: referência de preço público (a conferir) |
 
-Plano de encaixe: na Verificação, chamar `pessoa-juridica` primeiro e cair para os arquivos diários se a API falhar; na Busca, usar `notas-fiscais` como mais uma fonte de candidatos com CNPJ (não de preço unitário, porque o valor é da nota inteira). Limites de uso e o formato real das respostas precisam ser conferidos com a chave.
+Feito: `pessoa-juridica` na Verificação. A fazer: `notas-fiscais` na Busca, como mais uma fonte de candidatos com CNPJ (não de preço unitário, porque o valor é da nota inteira). Limites de uso e o formato real das respostas precisam ser conferidos com a chave.
 
 ## Segurança
 
@@ -154,6 +154,6 @@ Plano de encaixe: na Verificação, chamar `pessoa-juridica` primeiro e cair par
 
 - Quadro (R10) e as telas do mapa (Q1) e do raciocínio (N5): os dados já estão no banco.
 - Fornecedor convidado por e-mail com link pessoal (decidido, adiado).
-- API do Portal da Transparência (acima).
+- API do Portal da Transparência na Busca (`notas-fiscais`).
 - Confirmação do preço retido com o fornecedor; resposta do comprador à dúvida de um fornecedor.
 - Áudio (R1b), base de itens (E6), negociação (X3), economia (X4), voz (X5).
