@@ -496,3 +496,19 @@ export const arquivo = pgTable(
   },
   (t) => [index("arquivo_sha").on(t.sha256), index("arquivo_ref").on(t.canal, t.ref)],
 );
+
+// ---------- Catálogo de itens cadastrados pelo agente (complementa a base fictícia) ----------
+
+/** Item pedido que não estava na base: o agente cadastra (regra da área de compras). */
+export const itemCatalogo = pgTable("item_catalogo", {
+  id: serial("id").primaryKey(),
+  /** Código no mesmo formato da base: ITM-1001 em diante. */
+  codigo: text("codigo").notNull().unique(),
+  descricao: text("descricao").notNull(),
+  unidade: text("unidade").notNull(),
+  especificacao: jsonb("especificacao").$type<Record<string, string>>().notNull().default({}),
+  categoria: text("categoria"),
+  /** Pedido em que o item apareceu pela primeira vez. */
+  pedidoId: integer("pedido_id").references(() => pedido.id),
+  criadoEm: criadoEm(),
+});

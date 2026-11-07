@@ -17,9 +17,17 @@ export type ItemBase = {
 
 const ARQUIVO = new URL("../../dados/itens.json", import.meta.url);
 let cache: ItemBase[] | null = null;
+/** Itens cadastrados pelo agente (tabela item_catalogo), carregados por carregarCatalogo(). */
+let cadastrados: ItemBase[] = [];
+
+/** Base fixa (fictícia, da Ester) mais os itens que o agente cadastrou. */
 export function baseDeItens(): ItemBase[] {
   cache ??= (JSON.parse(readFileSync(ARQUIVO, "utf8")) as { itens: ItemBase[] }).itens;
-  return cache;
+  return cadastrados.length ? [...cache, ...cadastrados] : cache;
+}
+
+export function definirCadastrados(itens: ItemBase[]) {
+  cadastrados = itens;
 }
 
 /** Palavras que não dizem nada sobre o produto. */

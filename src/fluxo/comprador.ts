@@ -2,6 +2,7 @@
 // "Entendi assim, confirma?" e trata confirmação, correção e cancelamento.
 // Áudio, foto, print de loja e PDF viram texto antes (R1b), em lerAnexos.
 
+import { cadastrarItensNovos } from "../agentes/interpretador/catalogo.ts";
 import { repassarRespostaDoComprador } from "../agentes/cotador/index.ts";
 import { casarComBase, especificacaoEmTexto, itemDaBase, rotuloOpcao } from "../agentes/interpretador/base-itens.ts";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
@@ -297,6 +298,8 @@ async function confirmar(pedidoId: number, compradorId: string) {
   if (resto.length) linhas.push(`${resto.length === 1 ? "O outro item fica" : `Os outros ${resto.length} itens ficam`} na fila.`);
   linhas.push("Aviso você a cada novidade.");
   await enviar(compradorId, linhas.join(" "), { pedidoId });
+  // Item que não estava na base vira item cadastrado, com código, antes de a busca começar.
+  await cadastrarItensNovos(pedidoId).catch((e) => console.error("[catálogo]", e));
   try {
     await avancarPedido(pedidoId, "comprador_confirmou", { agente: "Comprador", motivo: "Confirmou o pedido." });
   } catch (erro) {

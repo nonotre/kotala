@@ -9,6 +9,7 @@ import { registrarCanal } from "./nucleo/mensagens/index.ts";
 import { iniciarVarredor } from "./nucleo/orquestrador/index.ts";
 import { adaptadorSimulado, semearSimulados } from "./simulador/index.ts";
 import { adaptadorWeb } from "./canais/web.ts";
+import { carregarCatalogo } from "./agentes/interpretador/catalogo.ts";
 import { iniciarApiInterna } from "./api-interna.ts";
 
 const tokens: [Papel, string | undefined][] = [
@@ -29,6 +30,7 @@ registrarCanal(adaptadorWeb());
 const tokenFornecedor = process.env.TELEGRAM_TOKEN_FORNECEDOR;
 registrarCanal(adaptadorEmail({ usuarioBot: tokenFornecedor ? await usuarioDoBot(tokenFornecedor).catch(() => undefined) : undefined }));
 await semearSimulados();
+await carregarCatalogo();
 ligarFluxos();
 const pararVarredor = iniciarVarredor();
 const runners = iniciarBots(Object.values(bots));

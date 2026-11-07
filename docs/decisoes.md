@@ -17,7 +17,9 @@ Feito:
 
 - **Lista de bloqueio e homologação:** na tela de fornecedores; bloquear exige motivo e tira o fornecedor da busca e da recompra; homologar soma pontos na confiança.
 
-Para depois: entregas parciais (uma parte em 20 dias, outra em 30), cadastro automático de item novo na base e campos extras do fornecedor (filial ou sede, atendente).
+- **Item novo é cadastrado:** na confirmação do pedido, com código próprio no catálogo.
+
+Para depois: entregas parciais (uma parte em 20 dias, outra em 30) e campos extras do fornecedor (filial ou sede, atendente).
 
 ## 07/11/2026 · Negociação sem citar valor de outro fornecedor
 

@@ -184,6 +184,7 @@ Base fictícia feita pela Ester, copiada para `src/dados/` (a pasta de trabalho 
 - **Casamento** (`src/agentes/interpretador/base-itens.ts`), sem IA: família pelas palavras do nome, com sinônimos de obra (vergalhão = barra de aço, isopor = EPS, fio = cabo, cano = tubo), e termos decisivos (números e classes) que têm de bater com a especificação.
 - **Uma correspondência:** o item ganha o código, o nome técnico e a especificação; a unidade do comprador continua. O código deixa a chave do item estável, o que também ajuda a recompra.
 - **Várias:** a confirmação traz botões curtos só com o que diferencia ("50 mm", "25 mm", "100 mm, alta densidade"). "Confirmar assim" segue com o item genérico. Texto solto continua valendo.
+- **Item novo** (`src/agentes/interpretador/catalogo.ts`): na confirmação do pedido, o item que não casou com a base é cadastrado no catálogo (`item_catalogo`) com código próprio (`ITM-1001` em diante), regra da área de compras. Nas próximas vezes, casa com ele e recebe o mesmo código. A base fictícia não é alterada.
 - **Fornecedores da base** (`src/simulador/personas.ts`): entram como simulados ao lado das 6 personas, cada um cotando só itens das categorias dele. O preço segue a referência real da internet; sem referência, ele responde que não tem o item, em vez de inventar.
 
 ## Memória e recompra (X2)
@@ -297,7 +298,7 @@ O fornecedor não se cadastra: recebe um e-mail com um link pessoal do bot (`t.m
 - Telas: tema escuro, filtro e busca no quadro, tela de configurações (pesos, prazo das respostas), convite do fornecedor pela tela.
 - Ler respostas do fornecedor por e-mail (E2); guardar o e-mail das lojas achadas na busca.
 - API do Portal da Transparência na Busca (`notas-fiscais`).
-- Entregas parciais; cadastro automático de item novo na base.
+- Entregas parciais.
 - Preço do print do comprador no mapa de cotação. Escolha da variação da base também pela tela (hoje no Telegram e no chat).
 - Voz: ligação pelo celular (exige HTTPS, por exemplo um túnel) e ligação telefônica de verdade.
 - Memória: contrato anual com pedido automático.

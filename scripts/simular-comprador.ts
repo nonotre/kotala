@@ -24,6 +24,7 @@ const { adaptadorSimulado, semearSimulados } = await import("../src/simulador/in
 
 await migrate(db, { migrationsFolder: "drizzle" });
 await semearSimulados();
+await (await import("../src/agentes/interpretador/catalogo.ts")).carregarCatalogo();
 
 const { adaptador, enviadas } = canalEmMemoria("web");
 registrarCanal(adaptador);
