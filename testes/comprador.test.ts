@@ -44,3 +44,10 @@ test("confirmação mostra itens, prazo, suposições e perguntas", () => {
   assert.match(t, /- Saco de 50 kg/);
   assert.match(t, /Antes de cotar, me diga:\n- Quantas carradas de areia\?/);
 });
+
+test("quantidade sem repetir a unidade no nome", async () => {
+  const { quantidadeDe } = await import("../src/texto.ts");
+  assert.equal(quantidadeDe(10, "placa", "Placa de isopor (EPS)"), "10 placas de isopor (EPS)");
+  assert.equal(quantidadeDe(40, "saco", "Cimento CP II"), "40 sacos de Cimento CP II");
+  assert.equal(quantidadeDe(5, "barra", "Barra de aço CA-50"), "5 barras de aço CA-50");
+});

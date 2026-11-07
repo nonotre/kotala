@@ -8,9 +8,9 @@ import { db } from "../nucleo/db/cliente.ts";
 import { contato, fornecedor, itemPedido, pedido } from "../nucleo/db/schema.ts";
 import { receber, type AdaptadorCanal, type OpcoesEnvio } from "../nucleo/mensagens/index.ts";
 import { referenciasDoItem } from "../agentes/busca/internet.ts";
-import { PERGUNTA_ANTES, PERSONAS, textoProposta, type Persona } from "./personas.ts";
+import { PERGUNTA_ANTES, TODAS_PERSONAS, textoProposta, type Persona } from "./personas.ts";
 
-const personaPorChave = new Map(PERSONAS.map((p) => [p.chave, p]));
+const personaPorChave = new Map(TODAS_PERSONAS.map((p) => [p.chave, p]));
 /** Quem já perguntou antes de cotar, por item. */
 const perguntou = new Set<string>();
 /** Quem "esqueceu" e espera o lembrete, por item. */
@@ -99,7 +99,7 @@ export function adaptadorSimulado(): AdaptadorCanal {
 
 /** Cria ou atualiza os fornecedores simulados e seus contatos no canal "simulado". */
 export async function semearSimulados() {
-  for (const p of PERSONAS) {
+  for (const p of TODAS_PERSONAS) {
     const [f] = await db
       .insert(fornecedor)
       .values({ chave: p.chave, nome: p.nome, origem: "simulado", regiao: p.regiao, fonte: "Base fictícia do time" })
@@ -110,5 +110,5 @@ export async function semearSimulados() {
       .values({ canal: "simulado", endereco: p.chave, papel: "fornecedor", fornecedorId: f!.id, nome: p.nome, avisoPrivacidadeEm: new Date() })
       .onConflictDoUpdate({ target: [contato.canal, contato.endereco], set: { fornecedorId: f!.id, papel: "fornecedor" } });
   }
-  return db.select({ id: fornecedor.id }).from(fornecedor).where(inArray(fornecedor.chave, PERSONAS.map((p) => p.chave)));
+  return db.select({ id: fornecedor.id }).from(fornecedor).where(inArray(fornecedor.chave, TODAS_PERSONAS.map((p) => p.chave)));
 }

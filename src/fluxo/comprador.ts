@@ -2,6 +2,7 @@
 // "Entendi assim, confirma?" e trata confirmação, correção e cancelamento.
 // Áudio, foto, print de loja e PDF viram texto antes (R1b), em lerAnexos.
 
+import { casarComBase, especificacaoEmTexto, itemDaBase, rotuloOpcao } from "../agentes/interpretador/base-itens.ts";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { lerAnexoDoComprador, textoDoPedidoComAnexo, type LeituraAnexo } from "../agentes/interpretador/anexos.ts";
 import { chaveDoItem, interpretar, type Interpretacao } from "../agentes/interpretador/index.ts";
@@ -19,7 +20,7 @@ import {
 import { registrar } from "../nucleo/registro.ts";
 import { EMPRESA } from "../config.ts";
 import { aoBotaoDoComprador } from "./decisao.ts";
-import { dias, fmtNumero, quantidade } from "../texto.ts";
+import { dias, fmtNumero, quantidade, quantidadeDe } from "../texto.ts";
 
 export const TEXTO_BOAS_VINDAS =
   "Olá! Sou o assistente de cotações. Mande o que precisa comprar, do seu jeito, por exemplo: " +
@@ -50,7 +51,7 @@ function lerBotao(dado: string): { pedidoId: number; acao: Acao } | null {
 
 // ---------- Texto da confirmação ----------
 
-type ItemResumo = { descricao: string; quantidade: string | number; unidade: string; aceitaSimilar: boolean };
+type ItemResumo = { descricao: string; quantidade: string | number; unidade: string; aceitaSimilar: boolean; itemChave?: string | null; especificacao?: Record<string, string> };
 
 export function textoConfirmacao(p: {
   id: number;
@@ -67,8 +68,10 @@ export function textoConfirmacao(p: {
 }): string {
   const linhas = [`Pedido ${p.id}. Entendi assim:`, ""];
   p.itens.forEach((it, i) => {
-    const qtd = Number(it.quantidade) > 0 ? quantidadeTexto(it.quantidade, it.unidade) : `? ${it.unidade}`;
-    linhas.push(`${i + 1}. ${qtd} de ${it.descricao}${it.aceitaSimilar ? " (aceita similar)" : ""}`);
+    const nome = Number(it.quantidade) > 0 ? quantidadeDe(it.quantidade, it.unidade, it.descricao) : `? ${it.unidade} de ${it.descricao}`;
+    // Item da base: mostra o código e as duas primeiras especificações técnicas.
+    const espec = it.itemChave?.startsWith("ITM-") && it.especificacao ? Object.values(it.especificacao).slice(0, 2).join(", ") : "";
+    linhas.push(`${i + 1}. ${nome}${espec ? ` (${espec})` : ""}${it.aceitaSimilar ? " (aceita similar)" : ""}`);
   });
   linhas.push("");
   const entrega = p.modoEntrega === "retirada" ? "Retirada na loja" : `Entrega: ${p.destino ?? "não informado"}${p.cep ? `, CEP ${p.cep}` : ""}`;
@@ -141,18 +144,26 @@ export async function interpretarEResponder(pedidoId: number) {
   }
 
   const perguntar = i.faltando.length > 0 && p.perguntasFeitas === 0;
+  // E6: casa cada item com a base; com uma correspondência, ganha código e especificação técnica.
+  const daBase: string[] = [];
   const itens = await definirItens(
     db,
     pedidoId,
-    i.itens.map((it) => ({
-      descricao: it.descricao,
-      quantidade: it.quantidade,
-      unidade: it.unidade,
-      itemChave: chaveDoItem(it.descricao),
-      especificacao: Object.fromEntries(it.especificacao.map((e) => [e.nome, e.valor])),
-      aceitaSimilar: it.aceitaSimilar ?? false,
-    })),
+    i.itens.map((it) => {
+      const espec = Object.fromEntries(it.especificacao.map((e) => [e.nome, e.valor]));
+      const c = casarComBase(it.descricao, espec);
+      if (c.tipo === "unico") daBase.push(`${c.item.id} ${c.item.descricao}`);
+      return {
+        descricao: c.tipo === "unico" ? c.item.descricao : it.descricao,
+        quantidade: it.quantidade,
+        unidade: it.unidade,
+        itemChave: c.tipo === "unico" ? c.item.id : chaveDoItem(it.descricao),
+        especificacao: c.tipo === "unico" ? { ...especificacaoEmTexto(c.item), ...espec } : espec,
+        aceitaSimilar: it.aceitaSimilar ?? false,
+      };
+    }),
   );
+  if (daBase.length) i.suposicoes = [...i.suposicoes, `Da base de itens: ${daBase.join("; ")}`];
 
   const alteracoes = {
     destino: i.destino,
@@ -196,7 +207,57 @@ export async function interpretarEResponder(pedidoId: number) {
     suposicoes: i.suposicoes,
     perguntas: perguntar ? i.faltando : [],
   });
-  await enviar(p.compradorId, texto, { pedidoId, botoes: botoesConfirmacao(pedidoId, perguntar) });
+  const escolha = escolhasDaBase(pedidoId, itens);
+  await enviar(p.compradorId, texto + escolha.texto, { pedidoId, botoes: [...escolha.botoes, ...botoesConfirmacao(pedidoId, perguntar)] });
+}
+
+/** E6: itens com variações na base viram botões ("1: 50 mm", "1: 25 mm"). */
+function escolhasDaBase(pedidoId: number, itens: { ordem: number; descricao: string; itemChave: string | null; especificacao: Record<string, string> }[]) {
+  const botoes: Botao[] = [];
+  const linhas: string[] = [];
+  for (const it of itens) {
+    if (it.itemChave?.startsWith("ITM-")) continue;
+    const c = casarComBase(it.descricao, it.especificacao);
+    if (c.tipo !== "varios") continue;
+    linhas.push(`Item ${it.ordem}: qual destes? Escolha abaixo ou confirme assim mesmo.`);
+    for (const o of c.opcoes) botoes.push({ rotulo: `${it.ordem}: ${rotuloOpcao(o, c.opcoes)}`, dado: `pedido:${pedidoId}:base:${it.ordem}:${o.id}` });
+    if (botoes.length >= 6) break;
+  }
+  return { botoes, texto: linhas.length ? `\n\n${linhas.join("\n")}` : "" };
+}
+
+/** Comprador escolheu a variação de um item na base: atualiza e mostra a confirmação de novo. */
+async function escolherDaBase(pedidoId: number, ordem: number, idBase: string, compradorId: string) {
+  const [p] = await db.select().from(pedido).where(eq(pedido.id, pedidoId));
+  const b = itemDaBase(idBase);
+  if (!p || p.compradorId !== compradorId || !b) return;
+  if (p.estado !== "aguardando_confirmacao") {
+    await enviar(compradorId, `O pedido ${pedidoId} não está esperando confirmação.`, { pedidoId });
+    return;
+  }
+  const [it] = await db.select().from(itemPedido).where(and(eq(itemPedido.pedidoId, pedidoId), eq(itemPedido.ordem, ordem)));
+  if (!it) return;
+  await db
+    .update(itemPedido)
+    .set({ descricao: b.descricao, itemChave: b.id, especificacao: { ...it.especificacao, ...especificacaoEmTexto(b) } })
+    .where(eq(itemPedido.id, it.id));
+  await registrar(db, { agente: "Comprador", acao: `Escolheu ${b.id} (${b.descricao}) para o item ${ordem}.`, motivo: "Escolha na base de itens.", pedidoId, itemPedidoId: it.id });
+  const itens = await db.select().from(itemPedido).where(eq(itemPedido.pedidoId, pedidoId)).orderBy(asc(itemPedido.ordem));
+  const texto = textoConfirmacao({
+    id: pedidoId,
+    itens: itens.map((x) => ({ ...x })),
+    destino: p.destino,
+    cep: p.cep,
+    prazoTexto: p.prazoTexto,
+    prazoMaxDias: p.prazoMaxDias,
+    urgencia: p.urgencia,
+    modoEntrega: p.modoEntrega,
+    janelaRecebimento: p.janelaRecebimento,
+    suposicoes: p.suposicoes,
+    perguntas: [],
+  });
+  const escolha = escolhasDaBase(pedidoId, itens);
+  await enviar(compradorId, texto + escolha.texto, { pedidoId, botoes: [...escolha.botoes, ...botoesConfirmacao(pedidoId, false)] });
 }
 
 function ignorarCorrida(erro: unknown) {
@@ -254,6 +315,11 @@ async function pedidoPendente(compradorId: string) {
 
 export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: MensagemRecebida) {
   if (entrada.botao) {
+    const base = /^pedido:(\d+):base:(\d+):(ITM-\d+)$/.exec(entrada.botao);
+    if (base) {
+      await vincularMensagem(mensagemId, { pedidoId: Number(base[1]) });
+      return escolherDaBase(Number(base[1]), Number(base[2]), base[3]!, contato.id);
+    }
     const ref = /^(pedido|item):(\d+):/.exec(entrada.botao);
     if (ref) await vincularMensagem(mensagemId, ref[1] === "pedido" ? { pedidoId: Number(ref[2]) } : { itemPedidoId: Number(ref[2]) });
     if (await aoBotaoDoComprador(contato, entrada.botao)) return;

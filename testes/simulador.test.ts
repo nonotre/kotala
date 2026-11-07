@@ -27,3 +27,20 @@ test("segunda rodada baixa o preço", () => {
   const r2 = textoProposta(perto, { descricao: "Cimento CP II", quantidade: 1, unidade: "saco", destino: null }, 2)!;
   assert.notEqual(r1, r2);
 });
+
+test("fornecedores da base vendem pela categoria; os outros, pelo catálogo", async () => {
+  const { PERSONAS_BASE, personaVende } = await import("../src/simulador/personas.ts");
+  assert.equal(PERSONAS_BASE.length, 12);
+  const isoterm = PERSONAS_BASE.find((p) => p.nome === "Isoterm Isopor")!;
+  assert.ok(personaVende(isoterm, "Placa de isopor (EPS)", "Isolamento térmico"));
+  assert.ok(!personaVende(isoterm, "Cimento Portland CP II-E-32", "Cimentícios"));
+  assert.ok(personaVende(perto, "Cimento Portland CP II", null));
+  assert.ok(PERSONAS_BASE.every((p) => p.chave.startsWith("sim-base-")));
+});
+
+test("fornecedor da base sem referência de preço diz que não tem, sem inventar", async () => {
+  const { PERSONAS_BASE } = await import("../src/simulador/personas.ts");
+  const t = textoProposta(PERSONAS_BASE[0]!, { descricao: "Registro de gaveta bruto", quantidade: 5, unidade: "unidade", destino: null }, 1, null)!;
+  assert.match(t, /não temos/);
+  assert.doesNotMatch(t, /R\$|\d+,\d{2}/);
+});

@@ -8,19 +8,32 @@ import { db } from "../../nucleo/db/cliente.ts";
 import { contato, cotacao, fornecedor, itemPedido, pedido } from "../../nucleo/db/schema.ts";
 import { aoEntrarItem, avancarItem, type MudancaItem } from "../../nucleo/orquestrador/index.ts";
 import { registrar } from "../../nucleo/registro.ts";
-import { PERSONAS, vendeItem } from "../../simulador/personas.ts";
+import { TODAS_PERSONAS, personaVende } from "../../simulador/personas.ts";
+import { casarComBase, itemDaBase } from "../interpretador/base-itens.ts";
 import { buscarNaInternet } from "./internet.ts";
 import { acharRecompra, textoRecompra } from "../memoria/index.ts";
 import { enviar } from "../../nucleo/mensagens/index.ts";
 
 export { buscarNaInternet, referenciasDoItem } from "./internet.ts";
 
-const personaPorChave = new Map(PERSONAS.map((p) => [p.chave, p]));
+const personaPorChave = new Map(TODAS_PERSONAS.map((p) => [p.chave, p]));
+const ordemPersona = new Map(TODAS_PERSONAS.map((p, i) => [p.chave, i]));
 
-export type Candidato = { fornecedorId: string; nome: string; origem: "real" | "simulado"; motivoCorte?: string };
+/** Categoria do item na base (E6), pelo código ou pelo nome. */
+export function categoriaDoItem(item: { itemChave: string | null; descricao: string }): string | null {
+  if (item.itemChave?.startsWith("ITM-")) return itemDaBase(item.itemChave)?.categoria ?? null;
+  const c = casarComBase(item.descricao);
+  if (c.tipo === "unico") return c.item.categoria;
+  if (c.tipo === "varios") return c.opcoes[0]!.categoria;
+  return null;
+}
+
+export type Candidato = { fornecedorId: string; nome: string; origem: "real" | "simulado"; chave?: string | null; motivoCorte?: string };
 
 /** Fornecedores com canal ativo, com o motivo de cada corte. */
-export async function candidatos(descricao: string): Promise<Candidato[]> {
+export async function candidatos(item: { descricao: string; itemChave: string | null }): Promise<Candidato[]> {
+  const { descricao } = item;
+  const categoria = categoriaDoItem(item);
   const linhas = await db
     .select({
       fornecedorId: fornecedor.id,
@@ -40,13 +53,14 @@ export async function candidatos(descricao: string): Promise<Candidato[]> {
     vistos.add(l.fornecedorId);
     let motivoCorte: string | undefined;
     if (l.parouEm) motivoCorte = "Pediu para não receber mensagens";
-    else if (l.origem === "simulado" && l.chave && personaPorChave.has(l.chave) && !vendeItem(descricao)) {
+    else if (l.origem === "simulado" && l.chave && personaPorChave.has(l.chave) && !personaVende(personaPorChave.get(l.chave)!, descricao, categoria)) {
       motivoCorte = "Não vende este item";
     }
-    lista.push({ fornecedorId: l.fornecedorId, nome: l.nome, origem: l.origem, motivoCorte });
+    lista.push({ fornecedorId: l.fornecedorId, nome: l.nome, origem: l.origem, chave: l.chave, motivoCorte });
   }
-  // Reais primeiro: são quem pode responder de verdade.
-  return lista.sort((a, b) => (a.origem === b.origem ? a.nome.localeCompare(b.nome) : a.origem === "real" ? -1 : 1));
+  // Reais primeiro (são quem pode responder de verdade); entre os simulados, as personas de comportamento especial antes.
+  const ordem = (c: Candidato) => (c.origem === "real" ? -1 : (ordemPersona.get(c.chave ?? "") ?? 999));
+  return lista.sort((a, b) => ordem(a) - ordem(b) || a.nome.localeCompare(b.nome));
 }
 
 async function buscar(m: MudancaItem) {
@@ -97,7 +111,7 @@ async function buscar(m: MudancaItem) {
     });
   }
 
-  const todos = await candidatos(item.descricao);
+  const todos = await candidatos(item);
   const aptos = todos.filter((c) => !c.motivoCorte).slice(0, MAX_FORNECEDORES());
   const cortados = todos.filter((c) => c.motivoCorte);
 

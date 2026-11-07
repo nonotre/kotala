@@ -177,6 +177,15 @@ O que não entra no rastro: o raciocínio interno do modelo (a tela mostra o mot
 
 Estados novos do item: `negociar` (aguardando_decisao → cotando) e `reavaliar` (aguardando_decisao → comparando).
 
+## Base de itens (E6) e fornecedores da base
+
+Base fictícia feita pela Ester, copiada para `src/dados/` (a pasta de trabalho dela não é alterada): 36 itens com código (`ITM-001`…), especificação técnica, unidade e categoria, e 12 fornecedores com as categorias que vendem.
+
+- **Casamento** (`src/agentes/interpretador/base-itens.ts`), sem IA: família pelas palavras do nome, com sinônimos de obra (vergalhão = barra de aço, isopor = EPS, fio = cabo, cano = tubo), e termos decisivos (números e classes) que têm de bater com a especificação.
+- **Uma correspondência:** o item ganha o código, o nome técnico e a especificação; a unidade do comprador continua. O código deixa a chave do item estável, o que também ajuda a recompra.
+- **Várias:** a confirmação traz botões curtos só com o que diferencia ("50 mm", "25 mm", "100 mm, alta densidade"). "Confirmar assim" segue com o item genérico. Texto solto continua valendo.
+- **Fornecedores da base** (`src/simulador/personas.ts`): entram como simulados ao lado das 6 personas, cada um cotando só itens das categorias dele. O preço segue a referência real da internet; sem referência, ele responde que não tem o item, em vez de inventar.
+
 ## Memória e recompra (X2)
 
 `src/agentes/memoria/`. Compra repetida em menos de 3 meses quase não muda de preço (regra da área de compras): antes de buscar, o sistema procura no histórico uma compra confirmada do mesmo item nos últimos 90 dias, com fornecedor que ainda tem canal e sem atraso registrado.
@@ -278,5 +287,5 @@ O fornecedor não se cadastra: recebe um e-mail com um link pessoal do bot (`t.m
 - Ler respostas do fornecedor por e-mail (E2); guardar o e-mail das lojas achadas na busca.
 - API do Portal da Transparência na Busca (`notas-fiscais`).
 - Resposta do comprador à dúvida de um fornecedor.
-- Preço do print do comprador no mapa de cotação; base de itens (E6), voz (X5).
+- Preço do print do comprador no mapa de cotação; voz (X5). Escolha da variação da base também pela tela (hoje no Telegram e no chat).
 - Memória: bloquear fornecedor que deu problema (lista de bloqueio) e contrato anual com pedido automático.

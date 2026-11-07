@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 // Q3: fornecedores simulados. Base fictícia feita pelo time; sempre aparecem
 // como simulados. Os agentes do comprador não leem este arquivo: só recebem o
 // texto livre que cada persona manda, como um fornecedor real mandaria.
@@ -39,6 +40,8 @@ export type Persona = {
   validadeDias: number | null;
   /** Segundos até responder (antes do SIM_ATRASO_FATOR). */
   atrasoSeg: number;
+  /** Categorias da base de itens que vende (fornecedores da base da Ester). Sem isso, vale o catálogo por palavra. */
+  categorias?: string[];
 };
 
 export const PERSONAS: Persona[] = [
@@ -49,6 +52,36 @@ export const PERSONAS: Persona[] = [
   { chave: "sim-serra", nome: "Atacado Serra Exemplo", regiao: "Outro estado", comportamento: "suspeito", fatorPreco: 0.6, frete: null, prazoDias: 10, pagamento: "depósito antecipado", validadeDias: null, atrasoSeg: 12 },
   { chave: "sim-aurora", nome: "Loja Aurora Exemplo", regiao: "Mesma cidade", comportamento: "esquece", fatorPreco: 1.04, frete: 70, prazoDias: 2, pagamento: "boleto 28 dias", validadeDias: 7, atrasoSeg: 5 },
 ];
+
+// Fornecedores fictícios da base da Ester: comportamento normal, preço e condições
+// variando de um para outro, sempre os mesmos para o mesmo fornecedor.
+type FornecedorBase = { id: string; nome: string; cidade: string; categorias: string[] };
+const BASE_FORNECEDORES = (
+  JSON.parse(readFileSync(new URL("../dados/fornecedores-simulados.json", import.meta.url), "utf8")) as { fornecedores: FornecedorBase[] }
+).fornecedores;
+const PAGAMENTOS = ["boleto 28 dias", "30/60 dias no boleto", "PIX à vista com 3% de desconto", "boleto 21 dias", "cartão em 3x"];
+export const PERSONAS_BASE: Persona[] = BASE_FORNECEDORES.map((f, i) => ({
+  chave: `sim-base-${f.id.toLowerCase()}`,
+  nome: f.nome,
+  regiao: f.cidade,
+  comportamento: "normal",
+  fatorPreco: Math.round((0.94 + ((i * 37) % 15) / 100) * 100) / 100,
+  frete: [50, 80, 0, 120, 65, 95][i % 6]!,
+  prazoDias: 1 + (i % 4),
+  pagamento: PAGAMENTOS[i % PAGAMENTOS.length]!,
+  validadeDias: [7, 10, 15][i % 3]!,
+  atrasoSeg: 6 + ((i * 5) % 14),
+  categorias: f.categorias,
+}));
+
+/** Todas as personas: as de comportamento especial primeiro (mais úteis na demo), depois as da base. */
+export const TODAS_PERSONAS: Persona[] = [...PERSONAS, ...PERSONAS_BASE];
+
+/** Vende o item? Pela categoria da base de itens, quando a persona tem categorias; senão, pelo catálogo. */
+export function personaVende(p: Persona, descricao: string, categoria: string | null): boolean {
+  if (p.categorias) return categoria !== null && p.categorias.includes(categoria);
+  return vendeItem(descricao);
+}
 
 export function precoDoCatalogo(descricao: string) {
   const d = descricao.toLowerCase();
@@ -68,10 +101,10 @@ const brl = (v: number) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2,
  */
 export function precoUnitario(p: Persona, descricao: string, unidade: string, referencia?: number | null): number | null {
   const c = precoDoCatalogo(descricao);
-  if (!c) return null;
-  let base = c.preco;
-  if (/carrad|caçamba|caminh/i.test(unidade) && c.unidade === "m³") base *= M3_POR_CARRADA;
-  if (/milheiro/i.test(unidade) && c.unidade === "unidade") base *= 1000;
+  if (!c && !(referencia && referencia > 0)) return null;
+  let base = c?.preco ?? referencia!;
+  if (c && /carrad|caçamba|caminh/i.test(unidade) && c.unidade === "m³") base *= M3_POR_CARRADA;
+  if (c && /milheiro/i.test(unidade) && c.unidade === "unidade") base *= 1000;
   if (referencia && referencia > 0) base = referencia;
   return Math.round(base * p.fatorPreco * 100) / 100;
 }
@@ -81,6 +114,8 @@ export type ItemPedido = { descricao: string; quantidade: number; unidade: strin
 /** Texto livre da proposta, do jeito que cada persona escreveria. */
 export function textoProposta(p: Persona, item: ItemPedido, rodada: number, referencia?: number | null): string | null {
   let unit = precoUnitario(p, item.descricao, item.unidade, referencia);
+  // Fornecedor da base sem referência de preço: diz que não tem, em vez de inventar.
+  if (unit === null && p.categorias) return `Bom dia! No momento não temos ${item.descricao} para pronta entrega. Obrigado pelo contato.`;
   if (unit === null) return null;
   if (rodada > 1) unit = Math.round(unit * (p.comportamento === "infla" ? 0.88 : 0.97) * 100) / 100;
   const qtd = `${item.quantidade} ${item.unidade}`;
@@ -90,7 +125,7 @@ export function textoProposta(p: Persona, item: ItemPedido, rodada: number, refe
     case "suspeito":
       return `Bom dia. Tenho ${item.descricao} a ${brl(unit)} cada, pronta entrega. Entrega em uns ${p.prazoDias} dias. Pagamento só com depósito antecipado.`;
     case "similar": {
-      const eq = precoDoCatalogo(item.descricao)!.equivalente;
+      const eq = precoDoCatalogo(item.descricao)?.equivalente ?? `${item.descricao} de outra marca`;
       return `Olá! Não tenho exatamente o pedido, mas tenho ${eq}, mesma especificação técnica. R$ ${brl(unit)} a unidade, total R$ ${total} para ${qtd}. ${frete} Entrego em ${p.prazoDias} dias úteis no local. ${p.pagamento}. Proposta válida por ${p.validadeDias} dias. Preço já com impostos.`;
     }
     case "infla":

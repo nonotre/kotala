@@ -17,3 +17,12 @@ export const quantidade = (q: number | string, unidade: string) => `${fmtNumero(
 
 /** "1 dia", "3 dias". */
 export const dias = (n: number) => `${n} ${n === 1 ? "dia" : "dias"}`;
+
+/** "10 placas de isopor (EPS)" em vez de "10 placas de Placa de isopor (EPS)". */
+export function quantidadeDe(q: number | string, unidade: string, descricao: string): string {
+  const sem = (t: string) => t.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+  const [primeira, ...resto] = descricao.trim().split(/\s+/);
+  const repete = primeira && resto.length && sem(primeira) === sem(unidade.trim());
+  const nome = repete ? resto.join(" ").replace(/^(de|da|do)\s+/i, "") : descricao;
+  return `${quantidade(q, unidade)} de ${nome}`;
+}

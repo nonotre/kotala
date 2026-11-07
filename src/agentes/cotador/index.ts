@@ -3,7 +3,7 @@
 // cotação quando todos responderam ou o prazo venceu.
 
 import { textoNegociacao } from "../negociador/index.ts";
-import { quantidade } from "../../texto.ts";
+import { quantidade, quantidadeDe } from "../../texto.ts";
 import { and, asc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { EMPRESA, FRACAO_LEMBRETE, PRAZO_RESPOSTAS_SEG } from "../../config.ts";
@@ -50,7 +50,7 @@ export function textoCotacao(d: Dados, nomeFornecedor: string): string {
       ? `Nova rodada da cotação ${item.id}: conseguem melhorar a proposta? Sem compromisso de compra.`
       : `Pedido de cotação ${item.id}, sem compromisso de compra:`,
     "",
-    `Item: ${quantidade(item.quantidade, item.unidade)} de ${item.descricao}`,
+    `Item: ${quantidadeDe(item.quantidade, item.unidade, item.descricao)}${item.itemChave?.startsWith("ITM-") ? ` (código ${item.itemChave})` : ""}`,
   ];
   if (espec) linhas.push(`Especificação: ${espec}`);
   linhas.push(`Aceita equivalente (outra marca, mesma especificação): ${item.aceitaSimilar ? "sim" : "não"}`);
