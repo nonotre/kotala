@@ -3,12 +3,13 @@
 // (Cotador) e confirmação do pedido de compra (R11).
 
 import { randomBytes } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { cotacaoAbertaDo, encerrarSeTodosResponderam, reenviarCotacaoAberta, responderDuvida } from "../agentes/cotador/index.ts";
 import { emailValido, FONTE_CONVITE_MANUAL, linkConvite, normalizarEmail } from "../canais/email.ts";
 import { EMPRESA } from "../config.ts";
 import { extrair, type Extracao } from "../agentes/extrator/index.ts";
 import { db } from "../nucleo/db/cliente.ts";
+import { avancarItem, TransicaoConcorrente, TransicaoInvalida } from "../nucleo/orquestrador/index.ts";
 import { contato as tContato, cotacao, fornecedor, itemPedido, oferta, pedido } from "../nucleo/db/schema.ts";
 import type { AnexoIa } from "../nucleo/ia/index.ts";
 import {
@@ -87,6 +88,9 @@ export async function aoMensagemDoFornecedor({ contato, mensagemId, entrada }: M
     await enviar(contato.id, `Você já está cadastrado como ${f?.nome}. Quando houver cotação, mando por aqui.`);
     return;
   }
+
+  // R8: resposta a um pedido de confirmação de preço retido.
+  if (await respostaConfirmacaoDePreco(contato.id, contato.fornecedorId, mensagemId, texto)) return;
 
   // Confirmação do pedido de compra por texto.
   if (CONFIRMA.test(texto)) {
@@ -315,4 +319,41 @@ async function processarResposta(
     default:
       await enviar(contatoId, "Não encontrei preço na sua mensagem. Pode mandar o preço unitário, o frete e o prazo de entrega?", ctx);
   }
+}
+
+const SIM_PRECO = /^(sim|s|confirmo|confirmado|confirmamos|isso|correto|é isso|e isso|exato|pode ser|esse mesmo|é esse)\b/i;
+const NAO_PRECO = /^(n[aã]o|errei|me enganei|errado|corrigindo|na verdade)\b/i;
+
+/** Confirmação do preço que ficou retido por estar muito abaixo da referência. */
+async function respostaConfirmacaoDePreco(contatoId: string, fornecedorId: string, mensagemId: string, texto: string): Promise<boolean> {
+  const [pend] = await db
+    .select({ oferta, item: itemPedido })
+    .from(oferta)
+    .innerJoin(itemPedido, eq(itemPedido.id, oferta.itemPedidoId))
+    .where(and(eq(oferta.fornecedorId, fornecedorId), isNotNull(oferta.confirmacaoPedidaEm), eq(oferta.precoConfirmado, false), eq(itemPedido.estado, "aguardando_decisao")))
+    .orderBy(desc(oferta.confirmacaoPedidaEm))
+    .limit(1);
+  if (!pend) return false;
+  const ctx = { pedidoId: pend.item.pedidoId, itemPedidoId: pend.item.id };
+  if (SIM_PRECO.test(texto.trim())) {
+    await vincularMensagem(mensagemId, ctx);
+    await db.update(oferta).set({ precoConfirmado: true }).where(eq(oferta.id, pend.oferta.id));
+    await enviar(contatoId, "Obrigado, preço confirmado. Vou refazer o mapa com a sua proposta.", { ...ctx, tipo: "resposta" });
+    await avancarItem(pend.item.id, "reavaliar", {
+      agente: "Fornecedor",
+      acao: "Confirmou o preço que estava retido.",
+      motivo: "Com a confirmação, a proposta volta para a comparação.",
+      fornecedorIds: [fornecedorId],
+    }).catch((erro) => {
+      if (!(erro instanceof TransicaoInvalida || erro instanceof TransicaoConcorrente)) throw erro;
+    });
+    return true;
+  }
+  if (NAO_PRECO.test(texto.trim())) {
+    await vincularMensagem(mensagemId, ctx);
+    await registrar(db, { agente: "Fornecedor", acao: "Não confirmou o preço retido.", motivo: texto.slice(0, 200), ...ctx, fornecedorIds: [fornecedorId] });
+    await enviar(contatoId, "Obrigado por avisar. A proposta fica fora desta comparação; se quiser, mande o preço certo.", { ...ctx, tipo: "resposta" });
+    return true;
+  }
+  return false;
 }

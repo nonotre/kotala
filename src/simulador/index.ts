@@ -67,6 +67,12 @@ function reagir(p: Persona, texto: string, opcoes: OpcoesEnvio) {
       // Resposta à dúvida: agora cota.
       if (perguntou.has(chaveItem)) return depois(p.atrasoSeg / 2, () => enviarProposta(p, opcoes));
       return;
+    case "negociacao":
+      // Quem esquece não responde à contraproposta; os outros melhoram a proposta.
+      if (p.comportamento === "esquece") return;
+      return depois(p.atrasoSeg, () => enviarProposta(p, opcoes));
+    case "confirmar_preco":
+      return depois(p.atrasoSeg / 2, () => responder(p.chave, "Sim, confirmo o preço. É promoção de estoque."));
     case "lembrete":
       if (esperandoLembrete.delete(chaveItem)) return depois(p.atrasoSeg, () => enviarProposta(p, opcoes));
       return;

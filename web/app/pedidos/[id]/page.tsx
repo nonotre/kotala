@@ -95,7 +95,8 @@ export default async function Pedido({ params }: { params: Promise<{ id: string 
 
             {cotacoes.length ? (
               <Tile className={estilos.bloco}>
-                <h3>Fornecedores consultados</h3>
+                <h3>{item.rodada > 1 ? `Consultados na rodada ${item.rodada}` : "Fornecedores consultados"}</h3>
+                {item.rodada > 1 ? <p className={estilos.ajuda}>Quem não foi consultado nesta rodada mantém a proposta anterior no mapa.</p> : null}
                 <ul className={estilos.chips}>
                   {cotacoes.map(({ cotacao: ct, nome: n, origem }) => (
                     <li key={ct.id}>
@@ -137,6 +138,9 @@ export default async function Pedido({ params }: { params: Promise<{ id: string 
                             </TableCell>
                             <TableCell>
                               <strong>{brl(l.custo)}</strong>
+                              {l.oferta.produtoAnterior && l.produto !== null && l.oferta.produtoAnterior - l.produto >= 0.01 ? (
+                                <div className={estilos.ajuda}>Negociado: produto era {brl(l.oferta.produtoAnterior)}</div>
+                              ) : null}
                             </TableCell>
                             <TableCell>{brl(l.produto)}</TableCell>
                             <TableCell>{l.origemFrete === "nao_se_aplica" ? "Retirada" : `${brl(l.frete)} (${l.origemFrete})`}</TableCell>
@@ -190,10 +194,38 @@ export default async function Pedido({ params }: { params: Promise<{ id: string 
                         }}
                       />
                     ))}
-                    <BotaoAcao dado={`item:${item.id}:reprovar`} rotulo="Cotar de novo" kind="ghost" />
-                    <BotaoAcao dado={`item:${item.id}:buscar`} rotulo="Buscar mais fornecedores" kind="ghost" />
                   </div>
                 ) : null}
+                {aguardando && c.vencedora ? (
+                  <>
+                    <h4 className={estilos.sub}>Reprovar</h4>
+                    <p className={estilos.ajuda}>Cada motivo leva a um caminho diferente.</p>
+                    <div className={estilos.acoes}>
+                      {item.rodada < 3 ? <BotaoAcao dado={`item:${item.id}:negociar`} rotulo="Preço alto: negociar" kind="tertiary" /> : null}
+                      <BotaoAcao dado={`item:${item.id}:buscar`} rotulo="Prazo longo: buscar mais fornecedores" kind="ghost" />
+                      <BotaoAcao
+                        dado={`item:${item.id}:excluir:${c.vencedora.oferta.fornecedorId}`}
+                        rotulo={`Não confio em ${c.vencedora.oferta.fornecedorNome}`}
+                        kind="ghost"
+                        confirmar={{ titulo: `Tirar ${c.vencedora.oferta.fornecedorNome} do mapa?`, texto: "O mapa é refeito sem esse fornecedor, só para este item.", botao: "Tirar do mapa" }}
+                      />
+                      <BotaoAcao dado={`item:${item.id}:reprovar`} rotulo="Cotar de novo com todos" kind="ghost" />
+                      <BotaoAcao
+                        dado={`item:${item.id}:cancelar`}
+                        rotulo="Desistir deste item"
+                        kind="ghost"
+                        confirmar={{ titulo: "Desistir deste item?", texto: `${item.descricao} será cancelado. Nada será comprado.`, botao: "Desistir" }}
+                      />
+                    </div>
+                    {item.rodada >= 3 ? <p className={estilos.ajuda}>Já foram 3 rodadas: é o limite de negociação para não cansar os fornecedores.</p> : null}
+                  </>
+                ) : null}
+                {item.negociacao && item.negociacao.rodada === item.rodada ? (
+                  <p className={estilos.ajuda}>
+                    Negociação na rodada {item.rodada}: {item.negociacao.motivo}
+                  </p>
+                ) : null}
+                {item.excluidos.length ? <p className={estilos.ajuda}>{item.excluidos.length === 1 ? "1 fornecedor foi tirado" : `${item.excluidos.length} fornecedores foram tirados`} deste mapa por você.</p> : null}
                 {aguardando ? <p className={estilos.ajuda}>A decisão é sua: nada é comprado sem a sua aprovação.</p> : null}
               </Tile>
             ) : null}

@@ -154,6 +154,10 @@ export const itemPedido = pgTable(
     prazoRespostasEm: timestamp("prazo_respostas_em", { withTimezone: true }),
     lembreteEm: timestamp("lembrete_em", { withTimezone: true }),
     rodada: integer("rodada").notNull().default(1),
+    /** N6: fornecedores que o comprador tirou do mapa deste item. */
+    excluidos: jsonb("excluidos").$type<string[]>().notNull().default([]),
+    /** X3: rodada de negociação em curso (alvos e números reais citados). */
+    negociacao: jsonb("negociacao").$type<{ rodada: number; alvos: string[]; melhorCusto: number | null; referencia: number | null; motivo: string }>(),
     fornecedorEscolhidoId: uuid("fornecedor_escolhido_id").references(() => fornecedor.id),
     ofertaEscolhidaId: uuid("oferta_escolhida_id"),
     /** Q2: observação quando segue com menos de 3 propostas válidas. */
@@ -228,6 +232,8 @@ export const oferta = pgTable("oferta", {
   mensagemId: uuid("mensagem_id"),
   /** R8: preço suspeito confirmado pelo fornecedor. */
   precoConfirmado: boolean("preco_confirmado").notNull().default(false),
+  /** R8: quando o Cotador pediu ao fornecedor para confirmar o preço retido. */
+  confirmacaoPedidaEm: timestamp("confirmacao_pedida_em", { withTimezone: true }),
   /** Saída crua do extrator, para auditoria. */
   extraido: jsonb("extraido"),
   criadoEm: criadoEm(),

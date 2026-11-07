@@ -2,14 +2,15 @@
 // código, pede à IA só a justificativa em texto (com checagem de números) e
 // manda ao comprador com os botões de decisão. A IA nunca aprova nada.
 
+import { registrar } from "../../nucleo/registro.ts";
 import { dias, quantidade } from "../../texto.ts";
 import { referenciasDoItem } from "../busca/internet.ts";
 import { verificarVarios, type Verificacao } from "../verificacao/index.ts";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, lte, sql } from "drizzle-orm";
 import { db } from "../../nucleo/db/cliente.ts";
 import { cotacao, fornecedor, historicoCompra, itemPedido, mapaCotacao, oferta, pedido } from "../../nucleo/db/schema.ts";
 import { gerarTexto } from "../../nucleo/ia/index.ts";
-import { enviar, type Botao } from "../../nucleo/mensagens/index.ts";
+import { contatoAtivoDoFornecedor, enviar, type Botao } from "../../nucleo/mensagens/index.ts";
 import { aoEntrarItem, avancarItem, TransicaoConcorrente, TransicaoInvalida, type MudancaItem } from "../../nucleo/orquestrador/index.ts";
 import { comparar, formatarBRL, formatarNota, MINIMO_PROPOSTAS_VALIDAS, type Comparacao, type Linha, type OfertaComparavel } from "./calculo.ts";
 
@@ -25,14 +26,29 @@ async function carregar(itemPedidoId: number) {
     .where(eq(itemPedido.id, itemPedidoId));
   if (!l) return null;
 
-  // Ofertas da rodada atual, de quem não desistiu nem pediu PARAR.
-  const linhas = await db
+  // A proposta mais recente de cada fornecedor, até a rodada atual: quem não respondeu à
+  // negociação mantém a anterior. Fica de fora quem desistiu, pediu PARAR ou foi tirado do mapa.
+  const todas = await db
     .select({ oferta, fornecedor, situacao: cotacao.situacao })
     .from(oferta)
     .innerJoin(fornecedor, eq(fornecedor.id, oferta.fornecedorId))
     .leftJoin(cotacao, eq(cotacao.id, oferta.cotacaoId))
-    .where(and(eq(oferta.itemPedidoId, itemPedidoId), eq(oferta.rodada, l.item.rodada)));
-  const validasParaComparar = linhas.filter((x) => x.situacao !== "desistiu" && x.situacao !== "parou" && !x.fornecedor.parouEm);
+    .where(and(eq(oferta.itemPedidoId, itemPedidoId), lte(oferta.rodada, l.item.rodada)))
+    .orderBy(desc(oferta.rodada), desc(oferta.criadoEm));
+  const fora = new Set([
+    ...l.item.excluidos,
+    ...todas.filter((x) => x.situacao === "desistiu" || x.situacao === "parou" || x.fornecedor.parouEm).map((x) => x.fornecedor.id),
+  ]);
+  const vistos = new Set<string>();
+  const validasParaComparar = todas.filter((x) => {
+    if (fora.has(x.fornecedor.id) || vistos.has(x.fornecedor.id)) return false;
+    vistos.add(x.fornecedor.id);
+    return true;
+  });
+  const qtd = Number(l.item.quantidade);
+  const produtoDe = (o: typeof oferta.$inferSelect) => (o.totalProduto !== null ? Number(o.totalProduto) : o.precoUnitario !== null ? Number(o.precoUnitario) * qtd : null);
+  /** Proposta anterior (rodada menor) do mesmo fornecedor, para mostrar quanto a negociação baixou. */
+  const anterior = (fornecedorId: string, rodada: number) => todas.find((x) => x.fornecedor.id === fornecedorId && x.oferta.rodada < rodada)?.oferta ?? null;
 
   const ids = [...new Set(validasParaComparar.map((x) => x.fornecedor.id))];
   const conhecidos = new Set(
@@ -67,13 +83,19 @@ async function carregar(itemPedidoId: number) {
     prazoPagamentoDias: o.prazoPagamentoDias,
     entregaNoLocal: o.entregaNoLocal,
     precoConfirmado: o.precoConfirmado,
+    rodada: o.rodada,
+    produtoAnterior: (() => {
+      const a = anterior(f.id, o.rodada);
+      return a ? produtoDe(a) : null;
+    })(),
   }));
 
   const [respostas] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(cotacao)
     .where(and(eq(cotacao.itemPedidoId, itemPedidoId), eq(cotacao.rodada, l.item.rodada)));
-  return { ...l, ofertas, verificacoes, consultados: respostas?.n ?? 0 };
+  const brutas = new Map(validasParaComparar.map((x) => [x.oferta.id, x.oferta]));
+  return { ...l, ofertas, brutas, verificacoes, consultados: respostas?.n ?? 0 };
 }
 
 const nomeComSelo = (o: OfertaComparavel) => `${o.fornecedorNome}${o.simulado ? " (simulado)" : ""}`;
@@ -88,6 +110,9 @@ function linhaMapa(l: Linha, i: number, verificacoes: Map<string, Verificacao>):
   ];
   const v = verificacoes.get(o.fornecedorId);
   if (v && !o.simulado) partes.push(`   ${v.resumo}`);
+  if (o.produtoAnterior && l.produto !== null && o.produtoAnterior - l.produto >= 0.01) {
+    partes.push(`   Negociado: o produto baixou de ${formatarBRL(o.produtoAnterior)} para ${formatarBRL(l.produto)}`);
+  }
   if (!o.itemExato) partes.push(`   Equivalente: ${o.itemOferecido}`);
   if (l.alertas.length) partes.push(`   Atenção: ${l.alertas.join("; ")}`);
   return partes.join("\n");
@@ -165,8 +190,7 @@ export function botoesDecisao(itemPedidoId: number, c: Comparacao): Botao[] {
   const b: Botao[] = [];
   if (c.vencedora) b.push({ rotulo: `Aprovar ${c.vencedora.oferta.fornecedorNome}`, dado: `item:${itemPedidoId}:aprovar:${c.vencedora.oferta.id}` });
   if (c.validas.length > 1) b.push({ rotulo: "Escolher outra", dado: `item:${itemPedidoId}:outras` });
-  b.push({ rotulo: "Cotar de novo", dado: `item:${itemPedidoId}:reprovar` });
-  b.push({ rotulo: "Buscar mais fornecedores", dado: `item:${itemPedidoId}:buscar` });
+  b.push({ rotulo: "Reprovar", dado: `item:${itemPedidoId}:motivos` });
   return b;
 }
 
@@ -237,8 +261,14 @@ async function montarMapa(m: MudancaItem) {
     return;
   }
 
+  const motivoNovoMapa =
+    m.evento === "reavaliar"
+      ? "Mapa refeito."
+      : m.de === "cotando" && item.negociacao && item.negociacao.rodada === item.rodada
+        ? "Mapa depois da negociação."
+        : null;
   const texto = [
-    cabecalho,
+    motivoNovoMapa ? `${cabecalho}\n${motivoNovoMapa}` : cabecalho,
     `Mapa de cotação${item.rodada > 1 ? `, rodada ${item.rodada}` : ""}: ${c.validas.length} ${c.validas.length === 1 ? "proposta válida" : "propostas válidas"} de ${d.ofertas.length} recebidas (${d.consultados} consultados).`,
     "",
     ...c.validas.map((l, i) => linhaMapa(l, i, d.verificacoes)),
@@ -254,6 +284,8 @@ async function montarMapa(m: MudancaItem) {
   texto.push("", "A decisão é sua: nada é comprado sem a sua aprovação.");
 
   await enviar(p.compradorId, texto.join("\n"), { pedidoId: p.id, itemPedidoId: item.id, botoes: botoesDecisao(item.id, c), tipo: "aviso" });
+  // Só depois do mapa pronto: a resposta do fornecedor encontra o item esperando a decisão.
+  await pedirConfirmacaoDePreco(d, c);
 }
 
 const hora = (d: Date) => d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
@@ -273,6 +305,36 @@ export function textoReferencias(refs: Awaited<ReturnType<typeof referenciasDoIt
     linhas.push(`  ${r.url}`);
   }
   return linhas;
+}
+
+/**
+ * R8: preço muito abaixo da referência fica retido. Em vez de só cortar, pergunta
+ * ao fornecedor se é isso mesmo (uma vez por proposta). Se ele confirmar, o mapa é refeito.
+ */
+async function pedirConfirmacaoDePreco(d: NonNullable<Awaited<ReturnType<typeof carregar>>>, c: Comparacao) {
+  for (const l of c.cortadas) {
+    if (l.portoes.naoRetida) continue;
+    const bruta = d.brutas.get(l.oferta.id);
+    if (!bruta || bruta.confirmacaoPedidaEm || bruta.precoConfirmado) continue;
+    const ct = await contatoAtivoDoFornecedor(l.oferta.fornecedorId);
+    if (!ct) continue;
+    const unit = l.precoUnitarioEfetivo !== null ? `${formatarBRL(l.precoUnitarioEfetivo)} por ${d.item.unidade}` : formatarBRL(l.produto ?? 0);
+    const texto =
+      `Sobre a cotação ${d.item.id} (${quantidade(d.item.quantidade, d.item.unidade)} de ${d.item.descricao}): ` +
+      `o seu preço de ${unit} ficou bem abaixo das outras propostas. Pode confirmar que é esse valor mesmo, para o item pedido e entregue no local? ` +
+      "Responda SIM para confirmar.";
+    const r = await enviar(ct.id, texto, { pedidoId: d.pedido.id, itemPedidoId: d.item.id, tipo: "confirmar_preco" });
+    if (r.situacao !== "enviada") continue;
+    await db.update(oferta).set({ confirmacaoPedidaEm: new Date() }).where(eq(oferta.id, l.oferta.id));
+    await registrar(db, {
+      agente: "Comparador",
+      acao: `Pediu a ${l.oferta.fornecedorNome} para confirmar o preço.`,
+      motivo: `Preço ${Math.round(l.abaixoDaReferencia * 100)}% abaixo da referência: fica retido até o fornecedor confirmar.`,
+      pedidoId: d.pedido.id,
+      itemPedidoId: d.item.id,
+      fornecedorIds: [l.oferta.fornecedorId],
+    });
+  }
 }
 
 function ignorarCorrida(erro: unknown) {

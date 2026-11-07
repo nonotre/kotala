@@ -154,6 +154,29 @@ npm run rastro -- 12 --em "2026-11-07T13:05:00-03:00"   # estado exato naquele i
 
 O que não entra no rastro: o raciocínio interno do modelo (a tela mostra o motivo declarado por cada agente e os números do Comparador) e os bytes dos anexos dentro do `uso_ia` (estão na tabela `arquivo`).
 
+## Negociação e reprovação com motivo (Frente 2)
+
+**Reprovar com motivo (N6).** No mapa, "Reprovar" abre os motivos; cada um leva o item a um ponto diferente (`src/fluxo/decisao.ts`):
+
+| Motivo | Caminho |
+|---|---|
+| Preço alto | Negociação (X3), nova rodada só com os alvos |
+| Prazo longo | Volta à busca, rodada nova com todos os fornecedores |
+| Não confio no fornecedor | Ele sai do mapa deste item (`item_pedido.excluidos`) e o mapa é refeito |
+| Cotar de novo com todos | Nova rodada com quem respondeu |
+| Desistir deste item | Item cancelado, nada é comprado |
+
+**Negociação (X3).** `src/agentes/negociador/`. Regras em código:
+
+- Alvos: as propostas válidas que não são a mais barata, das de maior nota, até 3. Com uma só proposta, negocia contra a referência pública.
+- A contraproposta cita só número real (o melhor custo total recebido, sem dizer de quem, ou a referência pública), oferece pagamento mais rápido como troca e diz que, se o fornecedor não responder, a proposta continua valendo. Nunca inventa proposta nem concorrente.
+- No máximo 3 rodadas. A IA não redige nem decide nada aqui: é template.
+- O Comparador usa a proposta mais recente de cada fornecedor até a rodada atual, então quem não responde mantém a anterior. O mapa mostra "o produto baixou de R$ A para R$ B", e o painel de economia soma o que a negociação conseguiu na compra escolhida.
+
+**Preço retido (R8).** Proposta 30% ou mais abaixo da referência fica retida. Depois de mandar o mapa, o Comparador pergunta ao fornecedor se o valor é esse mesmo (uma vez por proposta). "Sim" confirma, o item volta a `comparando` (evento `reavaliar`) e o mapa é refeito; "não" deixa a proposta fora.
+
+Estados novos do item: `negociar` (aguardando_decisao → cotando) e `reavaliar` (aguardando_decisao → comparando).
+
 ## Telas (Frente 1)
 
 `web/`, app Next 16 com Carbon, porta 3300 (serviço `telas` no compose).
@@ -231,5 +254,5 @@ O fornecedor não se cadastra: recebe um e-mail com um link pessoal do bot (`t.m
 - Telas: tema escuro, filtro e busca no quadro, tela de configurações (pesos, prazo das respostas), convite do fornecedor pela tela.
 - Ler respostas do fornecedor por e-mail (E2); guardar o e-mail das lojas achadas na busca.
 - API do Portal da Transparência na Busca (`notas-fiscais`).
-- Confirmação do preço retido com o fornecedor; resposta do comprador à dúvida de um fornecedor.
-- Preço do print do comprador no mapa de cotação; base de itens (E6), negociação (X3), voz (X5).
+- Resposta do comprador à dúvida de um fornecedor.
+- Preço do print do comprador no mapa de cotação; base de itens (E6), voz (X5).

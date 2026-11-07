@@ -2,6 +2,7 @@
 // aprovar sem querer), o pedido de compra vai ao vencedor, os demais são
 // avisados e a confirmação do fornecedor fecha o item. A IA não fecha compra.
 
+import { MAX_RODADAS, planejarNegociacao } from "../agentes/negociador/index.ts";
 import { dias, quantidade } from "../texto.ts";
 import { and, eq, ne } from "drizzle-orm";
 import { formatarBRL, ultimoMapa, type Linha } from "../agentes/comparador/index.ts";
@@ -40,7 +41,7 @@ const nomeComSelo = (l: Linha) => `${l.oferta.fornecedorNome}${l.oferta.simulado
 // ---------- Botões do comprador: item:<id>:<acao>[:<ofertaId>] ----------
 
 export async function aoBotaoDoComprador(contato: Contato, dado: string): Promise<boolean> {
-  const m = /^item:(\d+):(aprovar|confirmar|outras|reprovar|buscar|voltar)(?::([0-9a-f-]{36}))?$/.exec(dado);
+  const m = /^item:(\d+):(aprovar|confirmar|outras|reprovar|buscar|voltar|motivos|negociar|excluir|cancelar)(?::([0-9a-f-]{36}))?$/.exec(dado);
   if (!m) return false;
   const itemPedidoId = Number(m[1]);
   const acao = m[2]!;
@@ -91,11 +92,52 @@ export async function aoBotaoDoComprador(contato: Contato, dado: string): Promis
       await enviar(contato.id, "Qual proposta você quer aprovar?", { ...ctx, botoes });
       break;
     }
+    // N6: reprovar abre os motivos; cada motivo leva o pedido a um ponto diferente.
+    case "motivos": {
+      const v = mapa?.comparacao.vencedora;
+      const botoes: Botao[] = [];
+      if (d.item.rodada < MAX_RODADAS) botoes.push({ rotulo: "Preço alto: negociar", dado: `item:${itemPedidoId}:negociar` });
+      botoes.push({ rotulo: "Prazo longo: buscar mais fornecedores", dado: `item:${itemPedidoId}:buscar` });
+      if (v) botoes.push({ rotulo: `Não confio em ${v.oferta.fornecedorNome}`, dado: `item:${itemPedidoId}:excluir:${v.oferta.fornecedorId}` });
+      botoes.push({ rotulo: "Cotar de novo com todos", dado: `item:${itemPedidoId}:reprovar` });
+      botoes.push({ rotulo: "Desistir deste item", dado: `item:${itemPedidoId}:cancelar` });
+      await enviar(contato.id, "Por que reprovar? Cada motivo leva a um caminho diferente.", { ...ctx, botoes });
+      break;
+    }
+    case "negociar": {
+      const plano = await planejarNegociacao(itemPedidoId, d.item.rodada);
+      if (!("alvos" in plano)) {
+        await enviar(contato.id, `Pedido ${d.pedido.id}: não dá para negociar agora. ${plano.motivo}`, ctx);
+        break;
+      }
+      await avancarItem(
+        itemPedidoId,
+        "negociar",
+        { agente: "Comprador", acao: "Reprovou por preço alto e pediu negociação.", motivo: "Motivo: preço alto.", fornecedorIds: plano.alvos },
+        { rodada: plano.rodada, negociacao: plano, prazoRespostasEm: null, lembreteEm: null },
+      ).catch(ignorarCorrida);
+      break;
+    }
+    case "excluir": {
+      if (!ofertaId) break;
+      const [f] = await db.select({ nome: fornecedor.nome }).from(fornecedor).where(eq(fornecedor.id, ofertaId));
+      await avancarItem(
+        itemPedidoId,
+        "reavaliar",
+        { agente: "Comprador", acao: `Tirou ${f?.nome ?? "um fornecedor"} do mapa.`, motivo: "Motivo: não confia no fornecedor.", fornecedorIds: [ofertaId] },
+        { excluidos: [...new Set([...d.item.excluidos, ofertaId])] },
+      ).catch(ignorarCorrida);
+      break;
+    }
+    case "cancelar":
+      await avancarItem(itemPedidoId, "cancelar", { agente: "Comprador", acao: "Desistiu deste item.", motivo: "Motivo: não quer mais comprar." }).catch(ignorarCorrida);
+      await enviar(contato.id, `Pedido ${d.pedido.id}: ${d.item.descricao} cancelado. Nada foi comprado.`, ctx);
+      break;
     case "reprovar":
       await avancarItem(
         itemPedidoId,
         "reprovar",
-        { agente: "Comprador", motivo: "Pediu nova rodada de cotação para tentar preço melhor." },
+        { agente: "Comprador", acao: "Reprovou e pediu nova rodada com todos.", motivo: "Motivo: quer nova rodada de cotação." },
         { prazoRespostasEm: null, lembreteEm: null },
       ).catch(ignorarCorrida);
       break;
@@ -103,7 +145,7 @@ export async function aoBotaoDoComprador(contato: Contato, dado: string): Promis
       await avancarItem(
         itemPedidoId,
         "voltar_busca",
-        { agente: "Comprador", motivo: "Pediu para buscar mais fornecedores." },
+        { agente: "Comprador", acao: "Reprovou e pediu mais fornecedores.", motivo: "Motivo: prazo longo ou poucas opções." },
         { prazoRespostasEm: null, lembreteEm: null },
       ).catch(ignorarCorrida);
       break;

@@ -47,6 +47,8 @@ export const EVENTOS_ITEM = [
   "aprovar",
   "reprovar", // N6: volta para nova rodada de cotação
   "voltar_busca", // N6: volta para buscar mais fornecedores
+  "negociar", // X3: nova rodada só com os fornecedores escolhidos para negociar
+  "reavaliar", // refaz o mapa (preço confirmado, fornecedor tirado do mapa)
   "pedido_enviado",
   "fornecedor_confirmou",
   "fornecedor_desistiu", // volta ao mapa, sem o desistente
@@ -79,6 +81,8 @@ export const TRANSICOES_ITEM: readonly Transicao<EstadoItem, EventoItem>[] = [
   { de: ["aguardando_decisao"], evento: "aprovar", para: "aprovado" },
   { de: ["aguardando_decisao"], evento: "reprovar", para: "cotando" },
   { de: ["aguardando_decisao", "comparando"], evento: "voltar_busca", para: "buscando" },
+  { de: ["aguardando_decisao"], evento: "negociar", para: "cotando" },
+  { de: ["aguardando_decisao"], evento: "reavaliar", para: "comparando" },
   { de: ["aprovado"], evento: "pedido_enviado", para: "pedido_enviado" },
   { de: ["pedido_enviado"], evento: "fornecedor_confirmou", para: "confirmado" },
   { de: ["pedido_enviado"], evento: "fornecedor_desistiu", para: "comparando" },

@@ -243,6 +243,7 @@ export async function economia() {
       referenciaProduto: medianaRef !== null ? Math.round(medianaRef * qtd * 100) / 100 : null,
       referenciaLojas: ref?.n ?? 0,
       minutos: Math.round((item.atualizadoEm.getTime() - p.criadoEm.getTime()) / 60_000),
+      produtoAntesNegociar: escolhida?.oferta.produtoAnterior ?? null,
     });
   }
 

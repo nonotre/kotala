@@ -2,7 +2,7 @@
 // MensagemEntrada e chama receber(); toda saída passa por enviar(), que é o
 // único lugar que fala com os canais e o único que confere o PARAR.
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "../db/cliente.ts";
 import { contato, fornecedor, mensagem, type Anexo, type Canal } from "../db/schema.ts";
 import { registrar } from "../registro.ts";
@@ -32,7 +32,7 @@ export type MensagemEntrada = {
 
 export type Botao = { rotulo: string; dado: string };
 /** Para que serve a mensagem de saída; o simulador de fornecedor reage por aqui. */
-export type TipoEnvio = "cotacao" | "lembrete" | "resposta" | "pedido_compra" | "nao_venceu" | "encerrada" | "aviso" | "convite";
+export type TipoEnvio = "cotacao" | "lembrete" | "resposta" | "pedido_compra" | "nao_venceu" | "encerrada" | "aviso" | "convite" | "negociacao" | "confirmar_preco";
 export type OpcoesEnvio = {
   botoes?: Botao[];
   anexos?: Anexo[];
@@ -159,6 +159,15 @@ async function marcarParou(c: Contato) {
     motivo: "Respondeu PARAR. Nada mais é enviado a este contato, em nenhum canal.",
     fornecedorIds: c.fornecedorId ? [c.fornecedorId] : undefined,
   });
+}
+
+/** Canal ativo do fornecedor: Telegram primeiro, depois qualquer outro que não parou. */
+export async function contatoAtivoDoFornecedor(fornecedorId: string) {
+  const lista = await db
+    .select()
+    .from(contato)
+    .where(and(eq(contato.fornecedorId, fornecedorId), isNull(contato.parouEm)));
+  return lista.find((c) => c.canal === "telegram") ?? lista[0] ?? null;
 }
 
 /** Bloqueado se o contato parou, ou se é fornecedor que parou em qualquer canal. */

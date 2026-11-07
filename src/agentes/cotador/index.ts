@@ -2,6 +2,7 @@
 // manda o lembrete (Q4), responde dúvidas com os dados do pedido e encerra a
 // cotação quando todos responderam ou o prazo venceu.
 
+import { textoNegociacao } from "../negociador/index.ts";
 import { quantidade } from "../../texto.ts";
 import { and, asc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -9,7 +10,7 @@ import { EMPRESA, FRACAO_LEMBRETE, PRAZO_RESPOSTAS_SEG } from "../../config.ts";
 import { db } from "../../nucleo/db/cliente.ts";
 import { contato, cotacao, fornecedor, itemPedido, pedido } from "../../nucleo/db/schema.ts";
 import { gerarObjeto } from "../../nucleo/ia/index.ts";
-import { enviar } from "../../nucleo/mensagens/index.ts";
+import { contatoAtivoDoFornecedor, enviar } from "../../nucleo/mensagens/index.ts";
 import {
   aoEntrarItem,
   aoVarrer,
@@ -25,13 +26,7 @@ export const TEXTO_ENCERRADO = "Este pedido de cotação foi encerrado. Obrigado
 const hora = (d: Date) => d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
 
 /** Canal ativo do fornecedor: Telegram primeiro, depois qualquer outro que não parou. */
-export async function contatoAtivo(fornecedorId: string) {
-  const lista = await db
-    .select()
-    .from(contato)
-    .where(and(eq(contato.fornecedorId, fornecedorId), isNull(contato.parouEm)));
-  return lista.find((c) => c.canal === "telegram") ?? lista[0] ?? null;
-}
+export const contatoAtivo = contatoAtivoDoFornecedor;
 
 async function dadosDoItem(itemPedidoId: number) {
   const [l] = await db
@@ -75,6 +70,54 @@ export function textoCotacao(d: Dados, nomeFornecedor: string): string {
 async function enviarCotacoes(m: MudancaItem) {
   const d = await dadosDoItem(m.itemPedidoId);
   if (!d) return;
+
+  // X3: rodada de negociação, só com os alvos escolhidos pelo Negociador. Quem não
+  // recebe a contraproposta mantém a proposta anterior no mapa.
+  if (m.evento === "negociar" && d.item.negociacao) {
+    const plano = d.item.negociacao;
+    const prazoMs = PRAZO_RESPOSTAS_SEG() * 1000;
+    const prazoRespostasEm = new Date(Date.now() + prazoMs);
+    await db
+      .update(itemPedido)
+      .set({ prazoRespostasEm, lembreteEm: new Date(Date.now() + prazoMs * FRACAO_LEMBRETE) })
+      .where(eq(itemPedido.id, m.itemPedidoId));
+    await db
+      .insert(cotacao)
+      .values(plano.alvos.map((fornecedorId) => ({ itemPedidoId: m.itemPedidoId, fornecedorId, rodada: d.item.rodada })))
+      .onConflictDoNothing();
+    const alvos = await db
+      .select({ cotacao, nome: fornecedor.nome })
+      .from(cotacao)
+      .innerJoin(fornecedor, eq(fornecedor.id, cotacao.fornecedorId))
+      .where(and(eq(cotacao.itemPedidoId, m.itemPedidoId), eq(cotacao.rodada, d.item.rodada), isNull(cotacao.enviadaEm)));
+    let enviadas = 0;
+    for (const { cotacao: c, nome } of alvos) {
+      const ct = await contatoAtivo(c.fornecedorId);
+      if (!ct) {
+        await db.update(cotacao).set({ situacao: "parou" }).where(eq(cotacao.id, c.id));
+        continue;
+      }
+      const texto = textoNegociacao(nome, d.item, plano, hora(prazoRespostasEm));
+      const r = await enviar(ct.id, texto, { pedidoId: d.pedido.id, itemPedidoId: d.item.id, tipo: "negociacao" });
+      await db
+        .update(cotacao)
+        .set(r.situacao === "enviada" ? { enviadaEm: new Date(), contatoId: ct.id } : { situacao: r.situacao === "bloqueada_parar" ? "parou" : "sem_resposta", contatoId: ct.id })
+        .where(eq(cotacao.id, c.id));
+      if (r.situacao === "enviada") enviadas++;
+    }
+    await registrar(db, {
+      agente: "Negociador",
+      acao: `Mandou contraproposta a ${enviadas} ${enviadas === 1 ? "fornecedor" : "fornecedores"} (rodada ${d.item.rodada}).`,
+      motivo: plano.motivo + (plano.melhorCusto !== null ? ` Citou o melhor custo total real: R$ ${plano.melhorCusto.toFixed(2).replace(".", ",")}, sem dizer de quem.` : ""),
+      pedidoId: d.pedido.id,
+      itemPedidoId: d.item.id,
+      fornecedorIds: plano.alvos,
+      dados: plano,
+    });
+    await avisarComprador(d, `Voltei a ${enviadas} ${enviadas === 1 ? "fornecedor" : "fornecedores"} para negociar o preço de ${d.item.descricao}. Fecho as respostas às ${hora(prazoRespostasEm)}; quem não responder mantém a proposta.`);
+    if (!enviadas) await encerrarSeTodosResponderam(d.item.id);
+    return;
+  }
 
   // Reprovação: nova rodada com quem respondeu na anterior (o comprador quer preço melhor).
   if (m.evento === "reprovar") {

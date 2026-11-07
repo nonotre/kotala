@@ -47,6 +47,10 @@ export type OfertaComparavel = {
   prazoPagamentoDias: number | null;
   entregaNoLocal: boolean | null;
   precoConfirmado: boolean;
+  /** Rodada em que esta proposta foi feita. */
+  rodada?: number;
+  /** X3: total do produto na proposta anterior do mesmo fornecedor (antes de negociar). */
+  produtoAnterior?: number | null;
 };
 
 export type ItemComparado = {

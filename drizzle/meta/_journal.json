@@ -64,6 +64,13 @@
       "when": 1794072211322,
       "tag": "0008_convite_fornecedor",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794074234357,
+      "tag": "0009_negociacao",
+      "breakpoints": true
     }
   ]
 }

@@ -16,6 +16,8 @@ export default async function Economia() {
   const minutos = e.linhas.map((l) => l.minutos).sort((a, b) => a - b);
   const medianaMin = minutos.length ? minutos[Math.floor(minutos.length / 2)]! : null;
   const simuladas = e.linhas.filter((l) => l.simulado).length;
+  const negociadas = e.linhas.filter((l) => l.produtoAntesNegociar !== null && l.produto !== null && l.produtoAntesNegociar - l.produto >= 0.01);
+  const ganhoNegociacao = negociadas.reduce((t, l) => t + (l.produtoAntesNegociar! - l.produto!), 0);
 
   return (
     <>
@@ -34,6 +36,11 @@ export default async function Economia() {
           <span>Contra a referência pública</span>
           <strong>{comRef.length ? brl(vsReferencia) : "—"}</strong>
           <p>{comRef.length ? `Produto comprado contra a mediana dos preços da internet × quantidade, em ${comRef.length} ${comRef.length === 1 ? "compra" : "compras"}. Positivo é economia. Frete fora.` : "Nenhuma compra com referência da internet ainda."}</p>
+        </Tile>
+        <Tile className={estilos.numero}>
+          <span>Conseguido na negociação</span>
+          <strong>{negociadas.length ? brl(ganhoNegociacao) : "—"}</strong>
+          <p>{negociadas.length ? `O fornecedor escolhido baixou o preço do produto depois da contraproposta, em ${negociadas.length} ${negociadas.length === 1 ? "compra" : "compras"}: era quanto custava antes, contra o que pagou.` : "Nenhuma compra negociada ainda. Reprove por preço alto para o assistente negociar."}</p>
         </Tile>
         <Tile className={estilos.numero}>
           <span>Contra a proposta mais cara</span>
@@ -79,6 +86,7 @@ export default async function Economia() {
                 <TableHeader>Custo total</TableHeader>
                 <TableHeader>Referência pública (produto)</TableHeader>
                 <TableHeader>Proposta mais cara</TableHeader>
+                <TableHeader>Negociação</TableHeader>
                 <TableHeader>Tempo</TableHeader>
               </TableRow>
             </TableHead>
@@ -97,6 +105,7 @@ export default async function Economia() {
                   <TableCell>{brl(l.custo)}</TableCell>
                   <TableCell>{l.referenciaProduto !== null ? `${brl(l.referenciaProduto)} (${l.referenciaLojas} ${l.referenciaLojas === 1 ? "loja" : "lojas"})` : "—"}</TableCell>
                   <TableCell>{l.validas > 1 ? `${brl(l.maisCaraCusto)} · ${l.maisCaraNome}` : "—"}</TableCell>
+                  <TableCell>{l.produtoAntesNegociar !== null && l.produto !== null && l.produtoAntesNegociar - l.produto >= 0.01 ? `de ${brl(l.produtoAntesNegociar)} para ${brl(l.produto)}` : "—"}</TableCell>
                   <TableCell>{l.minutos} min</TableCell>
                 </TableRow>
               ))}
