@@ -1,0 +1,509 @@
+// Telas de consulta: fornecedores, ficha do fornecedor, itens, convite e ligação. Só tokens do Carbon.
+@use '@carbon/react/scss/theme';
+@use '@carbon/react/scss/spacing';
+@use '@carbon/react/scss/type';
+@use '@carbon/react/scss/breakpoint';
+@use '@carbon/colors';
+
+// ---------- Texto ----------
+.texto {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-primary;
+}
+
+.apoio {
+  @include type.type-style('label-01');
+
+  color: theme.$text-secondary;
+}
+
+.apoioCorpo {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-secondary;
+}
+
+.alerta {
+  @include type.type-style('label-01');
+
+  color: theme.$text-error;
+}
+
+.rotulo {
+  @include type.type-style('label-01');
+
+  color: theme.$text-secondary;
+}
+
+.valor {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-primary;
+  font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
+}
+
+.numero {
+  font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
+}
+
+.semValor {
+  color: theme.$text-secondary;
+}
+
+.nomeForte {
+  @include type.type-style('heading-compact-01');
+
+  color: theme.$text-primary;
+}
+
+.quebra {
+  overflow-wrap: anywhere;
+}
+
+.subtitulo {
+  @include type.type-style('heading-compact-01');
+
+  color: theme.$text-primary;
+}
+
+.duasLinhas {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: spacing.$spacing-02;
+  min-inline-size: 0;
+}
+
+// Alinha a segunda linha ao texto do indicador, depois do ícone.
+.apoioRecuado {
+  @include type.type-style('label-01');
+
+  padding-inline-start: spacing.$spacing-05;
+  color: theme.$text-secondary;
+}
+
+.nomeSelo {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: spacing.$spacing-02 spacing.$spacing-03;
+  min-inline-size: 0;
+}
+
+// ---------- Lista de fornecedores ----------
+// Abaixo de lg, a ação mora na barra do pé.
+.acaoTopo {
+  display: inline-flex;
+
+  @include breakpoint.breakpoint-down(lg) {
+    display: none;
+  }
+}
+
+// Título solto sobre o fundo, alinhado ao texto de dentro da tabela.
+.lista > section > header {
+  padding-inline: spacing.$spacing-05;
+}
+
+.tabela td {
+  padding-block: spacing.$spacing-04;
+  vertical-align: top;
+}
+
+// A tabela larga rola no próprio bloco, não na página.
+.rolagem {
+  position: relative;
+  max-inline-size: 100%;
+  overflow-x: auto;
+
+  table {
+    min-inline-size: calc(#{spacing.$spacing-13} * 7);
+  }
+}
+
+.filtros {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-inline-size: 0;
+  padding-inline: spacing.$spacing-05;
+
+  > * {
+    flex: 1 1 auto;
+  }
+}
+
+.seletor {
+  min-inline-size: 0;
+}
+
+.semLinhas {
+  padding-inline: spacing.$spacing-05;
+  background: theme.$layer-01;
+  border-block-start: 1px solid theme.$border-subtle-01;
+}
+
+.rodape {
+  @include type.type-style('label-01');
+
+  padding: spacing.$spacing-04 spacing.$spacing-05;
+  color: theme.$text-secondary;
+  background: theme.$layer-01;
+  border-block-start: 1px solid theme.$border-subtle-01;
+}
+
+.motivos {
+  @include type.type-style('body-compact-01');
+
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-02;
+  color: theme.$text-primary;
+}
+
+.glossario {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: spacing.$spacing-05;
+  padding-inline: spacing.$spacing-05;
+
+  @include breakpoint.breakpoint-down(lg) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @include breakpoint.breakpoint-down(md) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  dt {
+    @include type.type-style('heading-compact-01');
+
+    margin-block-end: spacing.$spacing-02;
+    color: theme.$text-primary;
+  }
+
+  dd {
+    @include type.type-style('body-compact-01');
+
+    color: theme.$text-secondary;
+  }
+}
+
+// ---------- Celular ----------
+.celularBarra {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+  margin-block-end: spacing.$spacing-03;
+}
+
+.celularFiltro {
+  padding-inline: spacing.$spacing-05;
+}
+
+.celularLista {
+  background: theme.$layer-01;
+  list-style: none;
+
+  > li + li {
+    border-block-start: 1px solid theme.$border-subtle-01;
+  }
+}
+
+.celularLinha {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: spacing.$spacing-03;
+  padding: spacing.$spacing-05;
+}
+
+// ---------- Ficha ----------
+// Duas pilhas independentes: nenhuma caixa estica para acompanhar a vizinha.
+.principal,
+.lateral {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-05;
+  min-inline-size: 0;
+}
+
+.lateral {
+  @include breakpoint.breakpoint(lg) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  @include breakpoint.breakpoint(xlg) {
+    position: sticky;
+    display: flex;
+    align-items: stretch;
+    align-self: start;
+    inset-block-start: spacing.$spacing-10;
+  }
+}
+
+.titulo {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: spacing.$spacing-02 spacing.$spacing-03;
+  align-items: center;
+}
+
+.situacao {
+  display: flex;
+  gap: spacing.$spacing-03;
+  align-items: flex-start;
+}
+
+.situacaoIcone {
+  display: inline-flex;
+  flex: none;
+  padding-block-start: spacing.$spacing-01;
+}
+
+.situacaoTexto {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-02;
+  min-inline-size: 0;
+}
+
+.situacaoFrase {
+  @include type.type-style('heading-02');
+
+  color: theme.$text-primary;
+}
+
+.acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: spacing.$spacing-03 spacing.$spacing-05;
+  align-items: center;
+
+  &:empty {
+    display: none;
+  }
+}
+
+.outros {
+  @include type.type-style('body-compact-01');
+
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-02;
+  padding-block-start: spacing.$spacing-05;
+  border-block-start: 1px solid theme.$border-subtle-01;
+  color: theme.$text-secondary;
+}
+
+.parte {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: spacing.$spacing-03;
+}
+
+.parte + .parte {
+  padding-block-start: spacing.$spacing-05;
+  border-block-start: 1px solid theme.$border-subtle-01;
+}
+
+// Rótulo e valor na mesma linha: a lateral lê como ficha, não como formulário.
+.ficha {
+  display: grid;
+  grid-template-columns: calc(#{spacing.$spacing-13} - #{spacing.$spacing-05}) minmax(0, 1fr); /* stylelint-disable-line carbon/layout-use */
+  gap: spacing.$spacing-03;
+  align-items: baseline;
+  inline-size: 100%;
+
+  > div {
+    display: contents;
+  }
+}
+
+.numeros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: spacing.$spacing-05 spacing.$spacing-07;
+  align-items: flex-start;
+
+  @include breakpoint.breakpoint-down(md) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  > div {
+    display: flex;
+    flex-direction: column;
+    gap: spacing.$spacing-01;
+    min-inline-size: 0;
+  }
+}
+
+.destaque .valor {
+  @include type.type-style('heading-03');
+}
+
+.compras {
+  display: flex;
+  flex-direction: column;
+}
+
+.compra {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+  padding-block: spacing.$spacing-05;
+  border-block-start: 1px solid theme.$border-subtle-01;
+
+  &:first-child {
+    padding-block-start: 0;
+    border-block-start: 0;
+  }
+
+  &:last-child {
+    padding-block-end: 0;
+  }
+}
+
+.compraTopo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: spacing.$spacing-02 spacing.$spacing-03;
+  align-items: center;
+}
+
+.compraTitulo {
+  @include type.type-style('heading-compact-02');
+
+  color: theme.$text-primary;
+}
+
+.listaSimples {
+  @include type.type-style('body-compact-01');
+
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+  color: theme.$text-primary;
+}
+
+// ---------- Itens ----------
+.grade {
+  align-items: start;
+}
+
+.achar {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+  min-inline-size: 0;
+}
+
+.linha {
+  cursor: pointer;
+}
+
+.linhaMarcada td {
+  background: theme.$layer-selected-01;
+}
+
+.colEscolha {
+  inline-size: spacing.$spacing-09;
+}
+
+// Abaixo de md, só o nome: o resto vai em uma linha de apoio dentro da célula.
+.soMaior {
+  @include breakpoint.breakpoint-down(md) {
+    display: none;
+  }
+}
+
+.apoioCelular {
+  @include type.type-style('label-01');
+
+  display: none;
+  color: theme.$text-secondary;
+
+  @include breakpoint.breakpoint-down(md) {
+    display: block;
+  }
+}
+
+.painel {
+  @include breakpoint.breakpoint(xlg) {
+    position: sticky;
+    inset-block-start: spacing.$spacing-10;
+  }
+}
+
+.resumoRotulo {
+  @include type.type-style('label-01');
+
+  color: theme.$text-secondary;
+}
+
+.precoGrande {
+  @include type.type-style('heading-05');
+
+  color: theme.$text-primary;
+  font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
+}
+
+// ---------- Convite ----------
+.convite {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: spacing.$spacing-07;
+  align-items: start;
+
+  @include breakpoint.breakpoint-down(md) {
+    grid-template-columns: minmax(0, 1fr);
+    gap: spacing.$spacing-05;
+  }
+}
+
+// O QR precisa de fundo branco para a câmera ler, também no tema escuro.
+.qrCodigo {
+  inline-size: calc(#{spacing.$spacing-13} * 3); /* stylelint-disable-line carbon/layout-use */
+  max-inline-size: 100%;
+  padding: spacing.$spacing-03;
+  background: colors.$white;
+
+  svg {
+    display: block;
+    inline-size: 100%;
+    block-size: auto;
+  }
+}
+
+.conviteTexto {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: spacing.$spacing-05;
+  min-inline-size: 0;
+}
+
+.conviteLink {
+  @include type.type-style('heading-03');
+
+  overflow-wrap: anywhere;
+  color: theme.$text-primary;
+}
+
+.passos {
+  padding-inline-start: spacing.$spacing-05;
+}
+
+.somenteLeitor {
+  position: absolute;
+  overflow: hidden;
+  clip-path: inset(50%);
+  inline-size: 1px;
+  block-size: 1px;
+  white-space: nowrap;
+}
