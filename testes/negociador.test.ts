@@ -7,19 +7,21 @@ const { textoNegociacao, MAX_RODADAS } = await import("../src/agentes/negociador
 
 const item = { id: 12, quantidade: "40", unidade: "saco", descricao: "Cimento CP II" };
 
-test("contraproposta cita só o número real, sem nome de concorrente", () => {
+test("contraproposta nunca cita valor nem nome de outro fornecedor", () => {
   const t = textoNegociacao("Loja Aurora Exemplo", item, { melhorCusto: 1583.6, referencia: null }, "14:30");
   assert.match(t, /Olá, Loja Aurora Exemplo/);
-  assert.match(t, /R\$\s1\.583,60/);
   assert.match(t, /40 sacos de Cimento CP II \(cotação 12\)/);
-  assert.match(t, /pagamento mais rápido/);
+  assert.match(t, /preço, no frete ou no prazo de entrega/);
+  assert.match(t, /forma de pagamento/);
   assert.match(t, /não precisa responder/);
+  assert.doesNotMatch(t, /1\.583|R\$/);
   assert.doesNotMatch(t, /Depósito|Lagoa|Vale|Serra|Ipê/);
 });
 
-test("com uma proposta só, negocia contra a referência pública", () => {
-  const t = textoNegociacao("Depósito Perto Exemplo", item, { melhorCusto: null, referencia: 38.9 }, null);
-  assert.match(t, /referência que encontramos na internet está em R\$\s38,90 por saco/);
+test("só a referência pública da internet pode ser citada", () => {
+  const t = textoNegociacao("Depósito Perto Exemplo", item, { melhorCusto: 1583.6, referencia: 38.9 }, null);
+  assert.match(t, /preço publicado na internet para este item está em R\$\s38,90 por saco/);
+  assert.doesNotMatch(t, /1\.583/);
 });
 
 test("negociar e reavaliar só a partir da decisão do comprador", () => {

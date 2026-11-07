@@ -168,8 +168,8 @@ O que não entra no rastro: o raciocínio interno do modelo (a tela mostra o mot
 
 **Negociação (X3).** `src/agentes/negociador/`. Regras em código:
 
-- Alvos: as propostas válidas que não são a mais barata, das de maior nota, até 3. Com uma só proposta, negocia contra a referência pública.
-- A contraproposta cita só número real (o melhor custo total recebido, sem dizer de quem, ou a referência pública), oferece pagamento mais rápido como troca e diz que, se o fornecedor não responder, a proposta continua valendo. Nunca inventa proposta nem concorrente.
+- Alvos: as propostas válidas que não são a mais barata, das de maior nota, até 3. Com uma só proposta, pede melhora a ela.
+- A contraproposta **nunca cita valor de outro fornecedor** (proposta é dado sensível; ver [decisoes.md](decisoes.md)). Pode citar só a referência pública da internet. Pede melhora no preço, no frete ou no prazo de entrega, oferece combinar a forma de pagamento e diz que, se o fornecedor não responder, a proposta continua valendo. Nunca inventa proposta nem concorrente.
 - No máximo 3 rodadas. A IA não redige nem decide nada aqui: é template.
 - O Comparador usa a proposta mais recente de cada fornecedor até a rodada atual, então quem não responde mantém a anterior. O mapa mostra "o produto baixou de R$ A para R$ B", e o painel de economia soma o que a negociação conseguiu na compra escolhida.
 

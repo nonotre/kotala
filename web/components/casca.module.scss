@@ -4,3 +4,24 @@
   align-items: center;
   padding-inline-end: s.$spacing-05;
 }
+
+.marca {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.logo {
+  block-size: 1.5rem;
+  inline-size: auto;
+  display: block;
+}
+.nome {
+  margin-inline-start: s.$spacing-03;
+  font-weight: 400;
+}
+// Em tela estreita o selo sairia da borda; a marca "simulado" continua em cada fornecedor.
+@media (max-width: 30rem) {
+  .selo {
+    display: none;
+  }
+}

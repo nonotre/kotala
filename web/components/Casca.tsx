@@ -26,8 +26,12 @@ export function Casca() {
     <Header aria-label="Kotala">
       <SkipToContent>Pular para o conteúdo</SkipToContent>
       <HeaderMenuButton aria-label={aberto ? "Fechar menu" : "Abrir menu"} isActive={aberto} onClick={() => setAberto((a) => !a)} aria-expanded={aberto} />
-      <HeaderName href="/" prefix="Kotala">
-        Cotações
+      <HeaderName href="/" prefix="">
+        {/* Logo do Kotala, desenhada pela Liria */}
+        <span className={estilos.marca}>
+          <img src="/logo.svg" alt="Kotala" className={estilos.logo} />
+          <span className={estilos.nome}>Cotações</span>
+        </span>
       </HeaderName>
       <HeaderNavigation aria-label="Navegação">{itens}</HeaderNavigation>
       <HeaderGlobalBar>

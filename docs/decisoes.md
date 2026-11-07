@@ -2,6 +2,16 @@
 
 Registro curto das decisões que mudam o escopo ou o desenho. A mais nova fica no topo.
 
+## 07/11/2026 · Negociação sem citar valor de outro fornecedor
+
+**Situação:** implementado.
+
+A Ester apontou, nas anotações dela, que valores de cotação e dados de pagamento são sensíveis e que o assistente não pode citar o valor de outros fornecedores para conseguir desconto. A contraproposta agora só pede melhora (preço, frete ou prazo de entrega), oferece combinar a forma de pagamento e, quando houver, cita a referência pública da internet, que não é proposta de ninguém. O melhor custo recebido fica só no registro e no mapa do comprador.
+
+## 07/11/2026 · Logo nas telas
+
+A logo do coala feita pela Liria entra no cabeçalho das telas (`web/public/logo.svg`, sem o fundo branco) e o coala, recortado, vira o ícone da aba.
+
 ## 07/11/2026 · Busca e verificação com fontes públicas
 
 **Situação:** implementado.

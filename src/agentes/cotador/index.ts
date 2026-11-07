@@ -108,7 +108,7 @@ async function enviarCotacoes(m: MudancaItem) {
     await registrar(db, {
       agente: "Negociador",
       acao: `Mandou contraproposta a ${enviadas} ${enviadas === 1 ? "fornecedor" : "fornecedores"} (rodada ${d.item.rodada}).`,
-      motivo: plano.motivo + (plano.melhorCusto !== null ? ` Citou o melhor custo total real: R$ ${plano.melhorCusto.toFixed(2).replace(".", ",")}, sem dizer de quem.` : ""),
+      motivo: plano.motivo + (plano.referencia !== null ? ` Citou só a referência pública: R$ ${plano.referencia.toFixed(2).replace(".", ",")} por unidade.` : " Não citou nenhum valor."),
       pedidoId: d.pedido.id,
       itemPedidoId: d.item.id,
       fornecedorIds: plano.alvos,

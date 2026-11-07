@@ -1,7 +1,9 @@
 // X3: Agente Negociador. Quando o comprador acha o preço alto, volta a quem
-// vale a pena com uma contraproposta. Regras em código: só cita número real
-// (o melhor custo recebido ou a referência pública), nunca inventa proposta
-// nem concorrente, não revela quem ofereceu o quê e para em MAX_RODADAS.
+// vale a pena com uma contraproposta. Regras em código:
+// - nunca cita valor de outro fornecedor (proposta é dado sensível, regra da área de compras);
+// - pode citar só a referência pública (preço publicado na internet), que não é proposta de ninguém;
+// - nunca inventa proposta nem concorrente; para em MAX_RODADAS.
+// Pede melhora em preço, frete e prazo de entrega, e oferece prazo de pagamento como troca.
 // O comprador continua decidindo.
 
 import { formatarBRL, ultimoMapa } from "../comparador/index.ts";
@@ -15,9 +17,9 @@ const MAX_ALVOS = 3;
 export type PlanoNegociacao = {
   rodada: number;
   alvos: string[];
-  /** Melhor custo total válido recebido (número real, citado sem dizer de quem é). */
+  /** Melhor custo total válido recebido: guardado para o registro e o comprador, NUNCA vai na mensagem ao fornecedor. */
   melhorCusto: number | null;
-  /** Preço de referência público por unidade, quando só há uma proposta válida. */
+  /** Preço de referência público por unidade (internet), o único valor que pode ser citado. */
   referencia: number | null;
   motivo: string;
 };
@@ -32,14 +34,14 @@ export async function planejarNegociacao(itemPedidoId: number, rodadaAtual: numb
   if (!validas.length) return { motivo: "Não há proposta válida para negociar." };
 
   const maisBarata = validas.reduce((a, b) => (b.custo! < a.custo! ? b : a));
+  const { mediana } = await referenciasDoItem(itemPedidoId);
   if (validas.length === 1) {
-    const { mediana } = await referenciasDoItem(itemPedidoId);
     return {
       rodada: rodadaAtual + 1,
       alvos: [validas[0]!.oferta.fornecedorId],
-      melhorCusto: null,
+      melhorCusto: maisBarata.custo,
       referencia: mediana,
-      motivo: mediana ? "Só uma proposta válida: negocia contra a referência pública." : "Só uma proposta válida: pede para melhorar.",
+      motivo: mediana ? "Só uma proposta válida: pede melhora citando a referência pública." : "Só uma proposta válida: pede para melhorar.",
     };
   }
   // Quem não é o mais barato e tem boa nota: se baixar, pode virar a melhor opção.
@@ -52,8 +54,8 @@ export async function planejarNegociacao(itemPedidoId: number, rodadaAtual: numb
     rodada: rodadaAtual + 1,
     alvos,
     melhorCusto: maisBarata.custo,
-    referencia: null,
-    motivo: `Contraproposta a ${alvos.length} ${alvos.length === 1 ? "fornecedor" : "fornecedores"}, citando o melhor custo total recebido.`,
+    referencia: mediana,
+    motivo: `Contraproposta a ${alvos.length} ${alvos.length === 1 ? "fornecedor" : "fornecedores"}, sem citar valor de outro fornecedor.`,
   };
 }
 
@@ -63,17 +65,15 @@ export function textoNegociacao(
   plano: Pick<PlanoNegociacao, "melhorCusto" | "referencia">,
   respostaAte: string | null,
 ): string {
+  // Nunca cita valor de outro fornecedor: só a referência pública, quando houver.
   const linhas = [
     `Olá, ${nome}! Obrigado pela proposta para ${quantidade(item.quantidade, item.unidade)} de ${item.descricao} (cotação ${item.id}).`,
+    "Estamos fechando esta compra e a sua proposta está entre as que estamos avaliando. Consegue melhorar a condição? Pode ser no preço, no frete ou no prazo de entrega.",
   ];
-  if (plano.melhorCusto !== null) {
-    linhas.push(`Recebemos uma condição total melhor: ${formatarBRL(plano.melhorCusto)}, somando produto e frete. Consegue melhorar o preço ou o frete?`);
-  } else if (plano.referencia !== null) {
-    linhas.push(`O preço de referência que encontramos na internet está em ${formatarBRL(plano.referencia)} por ${item.unidade}. Consegue chegar mais perto disso?`);
-  } else {
-    linhas.push("Consegue melhorar o preço ou o frete?");
+  if (plano.referencia !== null) {
+    linhas.push(`Para referência, o preço publicado na internet para este item está em ${formatarBRL(plano.referencia)} por ${item.unidade}.`);
   }
-  linhas.push("Se ajudar, podemos combinar um pagamento mais rápido.");
+  linhas.push("Se ajudar, podemos combinar a forma de pagamento que for melhor para você.");
   linhas.push("Se preferir manter a proposta, não precisa responder: ela continua valendo.");
   if (respostaAte) linhas.push(`Respondo ao comprador às ${respostaAte}.`);
   return linhas.join("\n");
