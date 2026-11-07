@@ -1,11 +1,14 @@
 // Conversa com o comprador: abre o pedido, chama o Interpretador, pergunta
 // "Entendi assim, confirma?" e trata confirmação, correção e cancelamento.
+// Áudio, foto, print de loja e PDF viram texto antes (R1b), em lerAnexos.
 
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { lerAnexoDoComprador, textoDoPedidoComAnexo, type LeituraAnexo } from "../agentes/interpretador/anexos.ts";
 import { chaveDoItem, interpretar, type Interpretacao } from "../agentes/interpretador/index.ts";
 import { db } from "../nucleo/db/cliente.ts";
 import { contato as tContato, itemPedido, pedido } from "../nucleo/db/schema.ts";
-import { enviar, vincularMensagem, type Botao, type MensagemRecebida } from "../nucleo/mensagens/index.ts";
+import type { AnexoIa } from "../nucleo/ia/index.ts";
+import { baixarAnexo, enviar, vincularMensagem, type Anexo, type Botao, type Canal, type MensagemRecebida } from "../nucleo/mensagens/index.ts";
 import {
   abrirPedido,
   avancarPedido,
@@ -263,7 +266,7 @@ export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: Me
     return void (await enviar(contato.id, "O que devo mudar? Escreva do seu jeito.", { pedidoId: b.pedidoId }));
   }
 
-  const texto = entrada.texto.trim();
+  let texto = entrada.texto.trim();
   if (texto === "/start" || texto.startsWith("/start ") || texto === "/ajuda") {
     if (!contato.avisoPrivacidadeEm) {
       await db.update(tContato).set({ avisoPrivacidadeEm: new Date() }).where(eq(tContato.id, contato.id));
@@ -272,8 +275,16 @@ export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: Me
     await enviar(contato.id, TEXTO_BOAS_VINDAS);
     return;
   }
+  // R1b: áudio, foto, print ou PDF viram texto de pedido.
+  let leitura: LeituraAnexo | null = null;
+  const arquivos = (entrada.anexos ?? []).filter((a) => a.tipo !== "outro");
+  if (arquivos.length) {
+    leitura = await lerAnexos(contato.id, mensagemId, entrada.canal, arquivos, texto);
+    if (!leitura) return;
+    texto = textoDoPedidoComAnexo(texto, leitura);
+  }
   if (!texto) {
-    await enviar(contato.id, "Por enquanto eu leio só texto. Pode escrever o pedido?");
+    await enviar(contato.id, "Pode escrever o pedido, mandar um áudio, uma foto do material ou o print do anúncio?");
     return;
   }
 
@@ -300,6 +311,7 @@ export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: Me
   }
   if (pendente) {
     await vincularMensagem(mensagemId, { pedidoId: pendente.id });
+    if (leitura) await anotarLeitura(pendente.id, contato.id, leitura);
     const correcoes = [...pendente.correcoes, texto];
     if (pendente.estado === "aguardando_confirmacao") {
       await avancarPedido(
@@ -317,5 +329,59 @@ export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: Me
 
   const novo = await abrirPedido({ compradorId: contato.id, canalOrigem: contato.canal, textoOriginal: texto });
   await vincularMensagem(mensagemId, { pedidoId: novo.id });
+  if (leitura) await anotarLeitura(novo.id, contato.id, leitura);
   await interpretarEResponder(novo.id);
+}
+
+const NOME_ANEXO: Record<Anexo["tipo"], string> = { audio: "o áudio", foto: "a imagem", pdf: "o PDF", outro: "o arquivo" };
+
+/** Baixa e lê os anexos do comprador. Devolve null quando já respondeu ao comprador (falha ou ilegível). */
+async function lerAnexos(contatoId: string, mensagemId: string, canal: Canal, arquivos: Anexo[], legenda: string) {
+  const qual = NOME_ANEXO[arquivos[0]!.tipo];
+  const anexos: AnexoIa[] = [];
+  for (const a of arquivos) {
+    try {
+      const r = await baixarAnexo(canal, a, mensagemId);
+      anexos.push({ dados: r.dados, mediaType: r.mediaType });
+    } catch (erro) {
+      console.error("[comprador] anexo", erro);
+    }
+  }
+  if (!anexos.length) {
+    await enviar(contatoId, `Não consegui abrir ${qual}. Pode mandar de novo ou escrever o pedido?`);
+    return null;
+  }
+  let l: LeituraAnexo;
+  try {
+    l = await lerAnexoDoComprador(anexos, legenda);
+  } catch (erro) {
+    await registrar(db, { agente: "Interpretador", acao: `Não conseguiu ler ${qual} do comprador.`, motivo: erro instanceof Error ? erro.message : String(erro) });
+    await enviar(contatoId, TEXTO_FALHA_IA);
+    return null;
+  }
+  if (!l.texto && !legenda) {
+    await enviar(contatoId, `Não consegui entender ${qual}. Pode mandar de novo ou escrever o pedido?`);
+    return null;
+  }
+  return l;
+}
+
+/** Guarda no rastro do pedido o que foi lido do anexo e, se for print de loja, avisa o preço visto. */
+async function anotarLeitura(pedidoId: number, contatoId: string, l: LeituraAnexo) {
+  const a = l.anuncio;
+  await registrar(db, {
+    agente: "Interpretador",
+    acao: l.tipo === "audio" ? "Transcreveu o áudio do comprador." : l.tipo === "print_loja" ? "Leu o print do anúncio mandado pelo comprador." : "Leu a imagem mandada pelo comprador.",
+    motivo: l.texto ? l.texto.slice(0, 300) : "Sem pedido legível no anexo.",
+    pedidoId,
+    dados: { leitura: l },
+  });
+  if (a?.preco) {
+    const onde = [a.loja, a.vendedor].filter(Boolean).join(", ");
+    await enviar(
+      contatoId,
+      `No print: ${a.titulo}, R$ ${a.preco.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${a.unidade ? ` por ${a.unidade}` : ""}${onde ? ` (${onde})` : ""}. Anotei no pedido.`,
+      { pedidoId },
+    );
+  }
 }

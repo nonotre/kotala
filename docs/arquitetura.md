@@ -154,6 +154,16 @@ npm run rastro -- 12 --em "2026-11-07T13:05:00-03:00"   # estado exato naquele i
 
 O que não entra no rastro: o raciocínio interno do modelo (a tela mostra o motivo declarado por cada agente e os números do Comparador) e os bytes dos anexos dentro do `uso_ia` (estão na tabela `arquivo`).
 
+## Áudio, foto e print do comprador (R1b)
+
+O comprador pode mandar áudio, foto do material, print de anúncio (Mercado Livre, Leroy...) ou PDF, com ou sem legenda. `src/agentes/interpretador/anexos.ts` transforma o anexo em texto de pedido antes do Interpretador, e o resto do fluxo (confirmação, correção, reinterpretação) segue só com texto.
+
+- **Áudio:** vira a transcrição, como se tivesse sido escrita. "Sim, pode cotar" falado confirma o pedido.
+- **Foto, lista e print:** viram uma descrição com a origem marcada (`[Foto]`, `[Lista]`, `[Print de loja]`). Do print saem também título, loja, vendedor, preço e unidade: o comprador recebe "No print: ... R$ 42,90 por saco (Mercado Livre, ...). Anotei no pedido." e a leitura fica no rastro do pedido (evento do Interpretador com `dados.leitura`). Por enquanto o preço do print não entra no mapa de cotação; isso fica para depois da junção.
+- **Rastreio:** o original é guardado com hash pelo `baixarAnexo` e a chamada de IA fica no `uso_ia`.
+- **Fornecedor:** áudio vai direto para o Extrator, junto com PDF e foto (formato `voz` na oferta).
+- **Teste ao vivo:** `npm run anexo:testar -- arquivo.ogg|.png|.pdf ["legenda"]` mostra a leitura e o texto que entraria no pedido, sem bot nem banco.
+
 ## Convite do fornecedor por e-mail (E1)
 
 O fornecedor não se cadastra: recebe um e-mail com um link pessoal do bot (`t.me/<bot_fornecedor>?start=<código>`). Ao abrir, o bot liga a conversa ao fornecedor já conhecido, sem perguntar o nome, e reenvia no Telegram a cotação que ele ainda deve. O link genérico com pergunta do nome (`?start=cadastro`) continua como reserva para o QR do pitch.
@@ -182,6 +192,7 @@ O fornecedor não se cadastra: recebe um e-mail com um link pessoal do bot (`t.m
 | `npm run verificacao:testar -- https://www.telhanorte.com.br` | Verificação de um fornecedor |
 | `npm run ia:testar` | Uma chamada real ao Gemini |
 | `npm run rastro -- <pedido>` | Linha do tempo completa de um pedido (`--teste` para o banco de teste) |
+| `npm run anexo:testar -- audio.ogg` | Leitura de áudio, foto, print ou PDF do comprador, ao vivo com o Gemini |
 | `npm run convidar -- pessoa@exemplo.com "Nome"` | Convite manual por e-mail com o link pessoal do bot do fornecedor (manda e-mail de verdade) |
 
 ## O que falta
@@ -190,4 +201,4 @@ O fornecedor não se cadastra: recebe um e-mail com um link pessoal do bot (`t.m
 - Ler respostas do fornecedor por e-mail (E2); guardar o e-mail das lojas achadas na busca.
 - API do Portal da Transparência na Busca (`notas-fiscais`).
 - Confirmação do preço retido com o fornecedor; resposta do comprador à dúvida de um fornecedor.
-- Áudio (R1b), base de itens (E6), negociação (X3), economia (X4), voz (X5).
+- Preço do print do comprador no mapa de cotação; base de itens (E6), negociação (X3), economia (X4), voz (X5).

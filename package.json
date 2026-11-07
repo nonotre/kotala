@@ -20,7 +20,8 @@
     "busca:testar": "node --env-file=.env scripts/testar-busca.ts",
     "verificacao:testar": "node --env-file=.env scripts/testar-verificacao.ts",
     "rastro": "node --env-file=.env scripts/rastro.ts",
-    "convidar": "node --env-file=.env scripts/convidar.ts"
+    "convidar": "node --env-file=.env scripts/convidar.ts",
+    "anexo:testar": "node --env-file=.env scripts/testar-anexo.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.113",

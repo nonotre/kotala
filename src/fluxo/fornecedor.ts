@@ -200,9 +200,9 @@ async function processarResposta(
   const ctx = { pedidoId: l.pedido.id, itemPedidoId: l.item.id };
   await vincularMensagem(mensagemId, ctx);
 
-  // E5: PDF e foto vão junto para o Extrator.
+  // E5: PDF, foto e áudio (R1b) vão junto para o Extrator.
   const anexos: AnexoIa[] = [];
-  const arquivos = (entrada.anexos ?? []).filter((a) => a.tipo === "pdf" || a.tipo === "foto");
+  const arquivos = (entrada.anexos ?? []).filter((a) => a.tipo === "pdf" || a.tipo === "foto" || a.tipo === "audio");
   for (const a of arquivos) {
     try {
       const r = await baixarAnexo(entrada.canal, a, mensagemId);
@@ -212,7 +212,7 @@ async function processarResposta(
     }
   }
   if (!entrada.texto.trim() && !anexos.length) {
-    await enviar(contatoId, "Por enquanto leio texto, PDF e foto. Pode mandar a proposta assim?", ctx);
+    await enviar(contatoId, "Por enquanto leio texto, PDF, foto e áudio. Pode mandar a proposta assim?", ctx);
     return;
   }
 
@@ -273,7 +273,7 @@ async function processarResposta(
           impostosNaoInclusos: e.impostosNaoInclusos,
           impostosValor: e.impostosValor?.toString(),
           entregaNoLocal: e.entregaNoLocal,
-          formato: anexos.length ? (arquivos[0]?.tipo === "pdf" ? "pdf" : "foto") : "texto",
+          formato: anexos.length ? ({ pdf: "pdf", foto: "foto", audio: "voz" } as const)[arquivos[0]!.tipo as "pdf" | "foto" | "audio"] : "texto",
           mensagemId,
           extraido: { ...e, modelo },
         });
