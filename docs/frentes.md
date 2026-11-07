@@ -11,6 +11,34 @@ Divisão do trabalho a partir do commit do rastreio completo (07/11/2026, logo d
 
 Frentes 2 (negociação e reprovação com motivo), 4 (voz) e 5 (pitch e testes de manipulação) ficam para depois.
 
+## Como abrir a worktree de uma frente
+
+Para outra pessoa ou outro agente trabalhar em paralelo sem mexer na pasta principal. Exemplo para a Frente 3; para outra frente, troque o nome da pasta, do branch e do banco de teste.
+
+```bash
+# na pasta principal do repositório:
+git worktree add ../kotala-frente-3 -b frente-3-entradas main
+cp .env ../kotala-frente-3/.env        # o .env fica fora do git e não vem junto
+cd ../kotala-frente-3 && npm ci
+```
+
+No `.env` da worktree nova, troque só o banco de teste, para os testes de integração de uma frente não apagarem os dados de teste da outra (cada rodada de testes limpa o banco de teste):
+
+```
+DATABASE_URL_TESTE=postgres://kotala:<a mesma senha>@127.0.0.1:5433/kotala_teste3
+```
+
+O banco `kotala_teste3` já existe. Para outra frente, crie o seu uma vez: `docker compose exec banco psql -U kotala -c "create database kotala_testeN"`, rodando o comando na pasta principal.
+
+Cuidados na worktree:
+
+- **Não rode `docker compose up` nela.** O compose usa o nome da pasta como nome do projeto e tentaria subir um segundo banco na mesma porta. O banco e os bots que já rodam a partir da pasta principal servem para todas as worktrees.
+- **Bot do Telegram:** um processo por token. Na worktree, teste o fluxo com `npm run simular` (banco de teste), e não com `npm run bots`.
+- **Migrações:** `npm run db:migrar` aplica no banco principal compartilhado. Só a frente dona das migrações (ver "Arquivos comuns") gera migração nova.
+- **Leia antes de começar:** este arquivo, [arquitetura.md](arquitetura.md) e [decisoes.md](decisoes.md).
+- **Antes de cada commit:** `npm run checar`, `git add` com caminhos explícitos (nunca `git add -A`) e conferir que nada de `.env`, de arquivos locais fora do git ou de valores de chave vai junto.
+- **Ao terminar:** siga "Como juntar", no fim deste arquivo. Para apagar a worktree depois da junção: `git worktree remove ../kotala-frente-3`.
+
 ## Arquivos de cada frente
 
 Cada frente só edita os arquivos dela. Precisou mexer num arquivo da outra ou num arquivo comum? Siga a seção "Arquivos comuns".
