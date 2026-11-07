@@ -7,6 +7,8 @@ import { conexao } from "./nucleo/index.ts";
 import { registrarCanal } from "./nucleo/mensagens/index.ts";
 import { iniciarVarredor } from "./nucleo/orquestrador/index.ts";
 import { adaptadorSimulado, semearSimulados } from "./simulador/index.ts";
+import { adaptadorWeb } from "./canais/web.ts";
+import { iniciarApiInterna } from "./api-interna.ts";
 
 const tokens: [Papel, string | undefined][] = [
   ["comprador", process.env.TELEGRAM_TOKEN_COMPRADOR],
@@ -21,10 +23,16 @@ if (!bots.comprador) {
 
 registrarCanal(adaptadorTelegram(bots));
 registrarCanal(adaptadorSimulado());
+registrarCanal(adaptadorWeb());
 await semearSimulados();
 ligarFluxos();
 const pararVarredor = iniciarVarredor();
 const runners = iniciarBots(Object.values(bots));
+
+// Telas: ações e chat web chegam por aqui (só com token).
+const apiToken = process.env.API_INTERNA_TOKEN;
+const api = apiToken ? iniciarApiInterna(Number(process.env.API_INTERNA_PORTA ?? 3301), apiToken, process.env.API_INTERNA_HOST ?? "127.0.0.1") : null;
+if (!apiToken) console.log("Sem API_INTERNA_TOKEN: as telas ficam só de leitura.");
 
 for (const [papel, bot] of Object.entries(bots)) {
   const eu = await bot.api.getMe();
@@ -36,6 +44,7 @@ async function sair() {
   if (saindo) return;
   saindo = true;
   pararVarredor();
+  api?.close();
   await Promise.all(runners.map((r) => (r.isRunning() ? r.stop() : undefined)));
   await conexao.end();
   process.exit(0);

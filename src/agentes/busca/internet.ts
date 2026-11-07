@@ -8,7 +8,7 @@ import { fornecedor, itemPedido, pedido, referenciaPreco } from "../../nucleo/db
 import { registrar } from "../../nucleo/registro.ts";
 import { verificarVarios } from "../verificacao/index.ts";
 import { planejar } from "./entende.ts";
-import { confianca, converter, mediana, ordenar, relevante, type Termos } from "./filtro.ts";
+import { confianca, converter, mediana, normalizar, ordenar, relevante, type Termos } from "./filtro.ts";
 import { baixarPagina, precoDoJsonLd, precoPorIa } from "./pagina.ts";
 import { LimiteDeBusca, MAX_CONSULTAS_ITEM, MODO_SNAPSHOT } from "./rede.ts";
 import * as serper from "./serper.ts";
@@ -235,9 +235,16 @@ export async function buscarNaInternet(itemPedidoId: number): Promise<ResultadoB
       let fornecedorId: string | null = null;
       if (a.aceita && a.dominio) {
         // Loja real encontrada vira fornecedor conhecido, sem canal: não é contatada.
+        // O link do Google Shopping aponta para o Google: aí a chave é o nome da loja, sem site.
+        const doShopping = a.metodo === "serper_shopping";
         const [f] = await tx
           .insert(fornecedor)
-          .values({ chave: `web:${a.dominio}`, nome: a.loja, origem: "real", fonte: `https://${a.dominio}` })
+          .values({
+            chave: doShopping ? `loja:${normalizar(a.loja)}` : `web:${a.dominio}`,
+            nome: a.loja,
+            origem: "real",
+            fonte: doShopping ? null : `https://${a.dominio}`,
+          })
           .onConflictDoUpdate({ target: fornecedor.chave, set: { nome: a.loja } })
           .returning({ id: fornecedor.id });
         fornecedorId = f!.id;

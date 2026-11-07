@@ -1,0 +1,26 @@
+{
+  "name": "kotala-telas",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "IBM_TELEMETRY_DISABLED=true next dev -p 3300",
+    "build": "IBM_TELEMETRY_DISABLED=true next build",
+    "start": "IBM_TELEMETRY_DISABLED=true next start -p 3300",
+    "tipos": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@carbon/icons-react": "11.92.0",
+    "@carbon/react": "1.119.0",
+    "next": "16.4.5",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "sass": "1.107.1",
+    "typescript": "5.9.3"
+  }
+}

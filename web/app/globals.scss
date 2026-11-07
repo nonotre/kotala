@@ -1,0 +1,13 @@
+// Base do Carbon (v11). A fonte IBM Plex vem do sistema ou cai para sans-serif.
+@use '@carbon/react' with ($css--font-face: false);
+@use '@carbon/react/scss/spacing' as s;
+
+html[data-tema='claro'] {
+  @extend .cds--g10;
+}
+html[data-tema='escuro'] {
+  @extend .cds--g100;
+}
+body {
+  margin: 0;
+}

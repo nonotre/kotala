@@ -154,6 +154,35 @@ npm run rastro -- 12 --em "2026-11-07T13:05:00-03:00"   # estado exato naquele i
 
 O que não entra no rastro: o raciocínio interno do modelo (a tela mostra o motivo declarado por cada agente e os números do Comparador) e os bytes dos anexos dentro do `uso_ia` (estão na tabela `arquivo`).
 
+## Telas (Frente 1)
+
+`web/`, app Next 16 com Carbon, porta 3300 (serviço `telas` no compose).
+
+| Tela | Rota | O que mostra |
+|---|---|---|
+| Quadro (R10) | `/` | As 4 colunas (Solicitado, Cotando, Comparando, Decidido), um cartão por item, com etiquetas de estado (aguardando você, 3/6 respostas, fecha às, com alerta, pedido enviado, confirmado, obra parada). Atualiza a cada 3 s |
+| Pedidos | `/pedidos` | Lista de pedidos |
+| Pedido | `/pedidos/[id]` | O que foi pedido e o que o assistente considerou; por item: fornecedores consultados e situação, mapa de cotação (Q1) com custo total, frete com a origem, prazo, pagamento, confiança e nota, motivos de corte, recomendação e pesos; aprovar (com confirmação), cotar de novo, buscar mais; referência pública com link; linha do tempo (N5) com filtros e prompt e resposta de cada chamada de IA |
+| Fornecedores | `/fornecedores` | Confiança de cada fornecedor (Q8) com os motivos e alertas |
+| Economia (X4) | `/economia` | Compras confirmadas, comparação com a referência pública e com a proposta mais cara, tempo até a confirmação e trabalho feito (cotações, mensagens, chamadas de IA), sempre dizendo contra o que compara |
+| Conversar (E3) | `/chat` | Chat web com o mesmo assistente do Telegram |
+
+Como as telas conversam com o resto:
+
+```mermaid
+flowchart LR
+  T[Telas: web/] -- lê --> DB[(Postgres)]
+  T -- ações com token --> A[API interna: src/api-interna.ts]
+  A -- receber() --> F[Fluxos e agentes no processo dos bots]
+  F --> DB
+  F --> TG[Telegram]
+```
+
+- As telas não rodam agente nenhum: os agentes ficam num processo só. A ação da tela entra pela mesma `receber()` do Telegram, como se o comprador dono do pedido tivesse tocado no botão, e por isso aparece no rastro e avisa o comprador no canal dele.
+- A aprovação pela tela também tem dois toques (botão e confirmação no modal).
+- API interna: `POST /acoes/botao` (botão de um pedido) e `POST /chat` (mensagem do chat web), cabeçalho `x-kotala-token`. No docker fica aberta só na rede interna e publicada em `127.0.0.1:3301`.
+- O canal `web` (`src/canais/web.ts`) não empurra nada: a saída já fica na tabela `mensagem`, e o chat consulta a cada 1,5 s.
+
 ## Segurança
 
 - Texto de fornecedor, página da web e resposta de API são dados, entre delimitadores, nunca instrução. O Extrator não tem ferramentas, só saída estruturada validada com zod.
@@ -173,10 +202,12 @@ O que não entra no rastro: o raciocínio interno do modelo (a tela mostra o mot
 | `npm run verificacao:testar -- https://www.telhanorte.com.br` | Verificação de um fornecedor |
 | `npm run ia:testar` | Uma chamada real ao Gemini |
 | `npm run rastro -- <pedido>` | Linha do tempo completa de um pedido (`--teste` para o banco de teste) |
+| `npm run telas:dev` / `npm run telas` | Telas em modo de desenvolvimento ou produção, porta 3300 |
+| `npm run telas:tipos` | Tipos das telas |
 
 ## O que falta
 
-- Quadro (R10) e as telas do mapa (Q1) e do raciocínio (N5): os dados já estão no banco.
+- Telas: tema escuro, filtro e busca no quadro, tela de configurações (pesos, prazo das respostas).
 - Fornecedor convidado por e-mail com link pessoal (decidido, adiado).
 - API do Portal da Transparência na Busca (`notas-fiscais`).
 - Confirmação do preço retido com o fornecedor; resposta do comprador à dúvida de um fornecedor.
