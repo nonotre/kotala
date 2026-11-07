@@ -1,7 +1,0 @@
-@use '@carbon/react/scss/spacing' as s;
-
-.conteudo {
-  padding-block-start: calc(#{s.$spacing-09} + #{s.$spacing-05});
-  padding-inline: s.$spacing-05;
-  min-block-size: 100vh;
-}

@@ -1,0 +1,25 @@
+// IBM Plex servida de public/fontes, sem CDN: as telas rodam sem rede.
+// O @font-face do Carbon fica desligado ($css--font-face: false) porque o Turbopack
+// não resolve o caminho '~@ibm/plex' dele. Os arquivos vêm de node_modules/@ibm/plex 6.4.1.
+// Pesos: só os que o Carbon usa (300, 400 e 600), mais a Mono de código.
+// O font-weight aqui descreve o arquivo, não é estilo: o lint de tipo não vale neste arquivo.
+/* stylelint-disable carbon/type-use */
+
+@mixin face($familia, $arquivo, $peso, $estilo: normal) {
+  @font-face {
+    font-family: $familia;
+    font-style: $estilo;
+    font-weight: $peso;
+    font-display: swap;
+    src: url('/fontes/#{$arquivo}.woff2') format('woff2');
+  }
+}
+
+@include face('IBM Plex Sans', 'IBMPlexSans-Light', 300);
+@include face('IBM Plex Sans', 'IBMPlexSans-LightItalic', 300, italic);
+@include face('IBM Plex Sans', 'IBMPlexSans-Regular', 400);
+@include face('IBM Plex Sans', 'IBMPlexSans-Italic', 400, italic);
+@include face('IBM Plex Sans', 'IBMPlexSans-SemiBold', 600);
+@include face('IBM Plex Sans', 'IBMPlexSans-SemiBoldItalic', 600, italic);
+@include face('IBM Plex Mono', 'IBMPlexMono-Regular', 400);
+@include face('IBM Plex Mono', 'IBMPlexMono-SemiBold', 600);

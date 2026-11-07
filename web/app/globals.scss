@@ -1,13 +1,31 @@
-// Base do Carbon (v11). A fonte IBM Plex vem do sistema ou cai para sans-serif.
+// Base do Carbon (v11): reset, tokens e o CSS de todos os componentes.
+// $css--font-face false: o Turbopack não resolve o '~@ibm/plex' do Carbon; a fonte vem de _fontes.scss.
 @use '@carbon/react' with ($css--font-face: false);
-@use '@carbon/react/scss/spacing' as s;
+@use '@carbon/react/scss/zone';
+@use '@carbon/react/scss/spacing';
+// ibm-products (prefixo c4p): só os componentes usados. O pacote inteiro soma ~830 KB de CSS.
+@use '@carbon/ibm-products/scss/components/BigNumber';
+@use '@carbon/ibm-products/scss/components/EmptyStates';
+@use '@carbon/ibm-products/scss/components/SidePanel';
+@use '@carbon/ibm-products/scss/components/Tearsheet';
+@use '@carbon/ibm-products/scss/components/TruncatedText';
+@use 'fontes';
 
+// Tema por atributo no html, trocado em tempo de execução por lib/tema.tsx.
+// O @extend reaproveita as zonas do Carbon, que já trazem os tokens de botão, tag e aviso.
 html[data-tema='claro'] {
   @extend .cds--g10;
 }
+
 html[data-tema='escuro'] {
   @extend .cds--g100;
 }
+
 body {
   margin: 0;
+}
+
+// O Header é fixo: âncora e foco de teclado param abaixo dele, com folga.
+html {
+  scroll-padding-block-start: calc(#{spacing.$spacing-09} + #{spacing.$spacing-03});
 }

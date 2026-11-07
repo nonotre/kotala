@@ -1,0 +1,15 @@
+// Mixins comuns às telas em Carbon. Uso: @use '@/components/estilo' não funciona em Sass; use o caminho relativo.
+// Ex.: @use '../estilo' as e; e depois @include e.borda-igual;
+@use '@carbon/react/scss/spacing';
+
+// grid.narrow deixa 16 e 32; aqui as duas bordas ficam em 16, sem transbordar.
+@mixin borda-igual {
+  --cds-grid-margin: #{spacing.$spacing-03};
+  --cds-grid-gutter-start: #{spacing.$spacing-03};
+  --cds-grid-gutter-end: #{spacing.$spacing-03};
+}
+
+// Superfície de bloco: camada, por dentro $spacing-05.
+@mixin superficie {
+  padding: spacing.$spacing-05;
+}

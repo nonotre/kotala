@@ -1,0 +1,632 @@
+// Peças comuns das telas. Só tokens do Carbon.
+@use '@carbon/react/scss/theme';
+@use '@carbon/react/scss/spacing';
+@use '@carbon/react/scss/type';
+@use '@carbon/react/scss/breakpoint';
+@use 'estilo' as e;
+
+// ---------- Página ----------
+.pagina {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 100%;
+}
+
+.cabecalho {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: spacing.$spacing-03 spacing.$spacing-05;
+  padding: spacing.$spacing-05 spacing.$spacing-05 0;
+  background: theme.$layer-01;
+  border-block-end: 1px solid theme.$border-subtle-01;
+}
+
+.cabecalhoTexto {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-02;
+  min-inline-size: 0;
+}
+
+.cabecalhoLado {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: spacing.$spacing-03;
+  min-inline-size: 0;
+
+  @include breakpoint.breakpoint-down(md) {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+
+.cabecalhoAbas {
+  grid-column: 1 / -1;
+  min-inline-size: 0;
+}
+
+.cabecalhoSemAbas {
+  padding-block-end: spacing.$spacing-05;
+}
+
+.titulo {
+  @include type.type-style('heading-04');
+
+  color: theme.$text-primary;
+  text-wrap: balance;
+}
+
+.contexto {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-secondary;
+}
+
+.trilha ol {
+  display: flex;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.corpo {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-05;
+  padding-block: spacing.$spacing-05;
+}
+
+.grade {
+  @include e.borda-igual;
+
+  row-gap: spacing.$spacing-05;
+}
+
+// ---------- Bloco ----------
+.bloco {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-05;
+  padding: spacing.$spacing-05;
+  background: theme.$layer-01;
+}
+
+.blocoPlano {
+  padding: 0;
+  background: transparent;
+
+  // Texto solto alinha com o texto de dentro dos cartões.
+  > .blocoTopo {
+    padding-inline: spacing.$spacing-05;
+  }
+}
+
+.blocoSolto {
+  padding-inline: spacing.$spacing-05;
+
+  > .blocoTopo {
+    padding-inline: 0;
+  }
+}
+
+.blocoTopo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: spacing.$spacing-03 spacing.$spacing-05;
+}
+
+.blocoTitulos {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: spacing.$spacing-02;
+  min-inline-size: 0;
+}
+
+.blocoTitulo {
+  @include type.type-style('heading-03');
+
+  color: theme.$text-primary;
+}
+
+.blocoDescricao {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-secondary;
+}
+
+// ---------- Tabela ----------
+.tabelaRolagem {
+  // Sem isto, o texto só para leitor de tela de uma célula escapa do corte e estica a página.
+  position: relative;
+  max-inline-size: 100%;
+  overflow-x: auto;
+
+  // O foco fica no <table>, dentro de quem rola: o anel vai para fora dele, e por dentro, para o corte não comê-lo.
+  &:has(table:focus-visible) {
+    outline: spacing.$spacing-01 solid theme.$focus;
+    outline-offset: calc(-1 * #{spacing.$spacing-01});
+  }
+
+  table:focus-visible {
+    outline: none;
+  }
+
+  // Abaixo de lg, a largura vem do número de colunas e o corte é o sinal de que há mais.
+  // A partir de lg, a tabela fica em 100% e o texto quebra linha: no notebook, cortar esconderia coluna sem aviso.
+  table {
+    @include breakpoint.breakpoint-down(lg) {
+      min-inline-size: calc(var(--tabela-colunas, 0) * #{spacing.$spacing-13});
+    }
+  }
+}
+
+// No celular, a rolagem vai até a borda da superfície: o corte mostra que há mais à direita.
+.bloco:not(.blocoPlano) .tabelaRolagem {
+  @include breakpoint.breakpoint-down(md) {
+    margin-inline: calc(-1 * #{spacing.$spacing-05});
+    max-inline-size: none;
+  }
+}
+
+// Fundo um degrau abaixo, para o link da linha manter o contraste, e filete neutro: azul é só para o que se clica.
+.linhaDestaque td {
+  background: theme.$layer-02;
+}
+
+.linhaDestaque td:first-child {
+  border-inline-start: spacing.$spacing-01 solid theme.$border-strong-01;
+}
+
+.linhaApagada td {
+  color: theme.$text-secondary;
+}
+
+.numero {
+  font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
+}
+
+// ---------- Fornecedor e selos ----------
+.fornecedor {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: spacing.$spacing-02 spacing.$spacing-03;
+  min-inline-size: 0;
+}
+
+// Em tabela, o arranjo não pode depender do tamanho do nome: selo sempre abaixo, em toda largura.
+td .fornecedor {
+  flex-flow: column nowrap;
+  align-items: flex-start;
+}
+
+.selo {
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.somenteLeitor {
+  position: absolute;
+  overflow: hidden;
+  clip-path: inset(50%);
+  inline-size: 1px;
+  block-size: 1px;
+  white-space: nowrap;
+}
+
+.painelOculto.painelOculto {
+  display: none;
+}
+
+// O botão de rolagem e o degradê das abas usam o fundo: sobre superfície, o fundo é ela.
+.abasSobreSuperficie {
+  --cds-background: #{theme.$layer-01}; /* stylelint-disable-line carbon/theme-use */
+}
+
+.legendaGuia {
+  @include type.type-style('label-01');
+
+  display: inline-flex;
+  align-items: center;
+  gap: spacing.$spacing-02;
+  color: theme.$text-secondary;
+}
+
+// ---------- Estados ----------
+.vazioFrase {
+  @include type.type-style('body-compact-01');
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: spacing.$spacing-03;
+  color: theme.$text-secondary;
+}
+
+.vazio {
+  padding-block: spacing.$spacing-07;
+}
+
+// Mesma borda esquerda do texto do estado vazio.
+.vazioAcao {
+  padding-block-start: spacing.$spacing-05;
+  padding-inline: spacing.$spacing-05;
+}
+
+.carregando {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-05;
+  padding: spacing.$spacing-05;
+}
+
+// Uma linha do cabeçalho: o espaço em branco dá a altura do texto real, e a largura vale antes da hidratação.
+.esqueletoLinha {
+  position: relative;
+
+  > p {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+  }
+}
+
+.esqueletoTrilhaTexto {
+  @include type.type-style('body-compact-01');
+
+  inline-size: 30%;
+
+  @include breakpoint.breakpoint-down(md) {
+    inline-size: 50%;
+  }
+}
+
+.esqueletoTitulo {
+  inline-size: 40%;
+
+  @include breakpoint.breakpoint-down(md) {
+    inline-size: 85%;
+  }
+}
+
+// No celular, o título do pedido ocupa duas linhas.
+.esqueletoTituloPedido {
+  @include breakpoint.breakpoint-down(md) {
+    min-block-size: calc(#{spacing.$spacing-11} - #{spacing.$spacing-03});
+  }
+}
+
+// Rótulo, barra e texto de apoio do ProgressBar pequeno: 54 px medidos.
+.esqueletoProgressoPequeno {
+  min-block-size: calc(#{spacing.$spacing-09} + #{spacing.$spacing-02} + #{spacing.$spacing-01});
+  overflow: hidden;
+}
+
+.esqueletoContexto {
+  inline-size: 60%;
+
+  @include breakpoint.breakpoint-down(md) {
+    inline-size: 90%;
+  }
+}
+
+.esqueletoCartoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(#{spacing.$spacing-13} + #{spacing.$spacing-10}), 1fr));
+  gap: spacing.$spacing-05;
+}
+
+.esqueletoCartao {
+  block-size: calc(#{spacing.$spacing-13} - #{spacing.$spacing-05});
+  inline-size: 100%;
+}
+
+.esqueletoRaias {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: spacing.$spacing-03;
+
+  @include breakpoint.breakpoint-down(lg) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.esqueletoRaia {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+  padding: spacing.$spacing-03;
+  background: theme.$layer-01;
+}
+
+.esqueletoSoXlg {
+  @include breakpoint.breakpoint-down(xlg) {
+    display: none;
+  }
+}
+
+.esqueletoTopoInicio.esqueletoTopoInicio {
+  block-size: calc(#{spacing.$spacing-12} + #{spacing.$spacing-03});
+  inline-size: 100%;
+}
+
+.esqueletoHeroi.esqueletoHeroi {
+  block-size: calc(#{spacing.$spacing-13} * 2 + #{spacing.$spacing-12});
+  inline-size: 100%;
+}
+
+.esqueletoCampo.esqueletoCampo {
+  block-size: spacing.$spacing-12;
+  inline-size: 100%;
+}
+
+.esqueletoTabela {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-05;
+  padding: spacing.$spacing-05;
+  background: theme.$layer-01;
+}
+
+.esqueletoTituloBloco {
+  inline-size: 30%;
+}
+
+// A faixa de próximo passo só existe a partir de lg: abaixo, ela é a barra do pé.
+.esqueletoFaixa {
+  block-size: spacing.$spacing-09;
+  background: theme.$layer-01;
+  border-block-end: 1px solid theme.$border-subtle-01;
+
+  @include breakpoint.breakpoint-down(lg) {
+    display: none;
+  }
+}
+
+.esqueletoConversa {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+  max-inline-size: calc(#{spacing.$spacing-13} * 2 + #{spacing.$spacing-10});
+  margin-inline: auto;
+  inline-size: 100%;
+}
+
+.esqueletoFormulario {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-05;
+  max-inline-size: calc(#{spacing.$spacing-13} * 3);
+}
+
+.semMargem {
+  margin: 0;
+}
+
+// ---------- Marcas de oferta ----------
+.melhor {
+  @include type.type-style('label-01');
+
+  display: inline-flex;
+  align-items: center;
+  gap: spacing.$spacing-02;
+  color: theme.$text-secondary;
+
+  svg {
+    fill: theme.$support-success;
+  }
+}
+
+// Com texto em duas linhas, o ícone não encolhe e as linhas não colam.
+.alertaOferta {
+  display: inline-flex;
+
+  svg {
+    flex: none;
+  }
+}
+
+.obraParada {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-error;
+}
+
+// ---------- Status ----------
+.etiquetas {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: spacing.$spacing-02 spacing.$spacing-04;
+  align-items: center;
+}
+
+// ---------- Barra do pé ----------
+.barraEspaco {
+  block-size: calc(#{spacing.$spacing-13} - #{spacing.$spacing-08});
+
+  @include breakpoint.breakpoint(lg) {
+    display: none;
+  }
+}
+
+// A barra cobre o pé da tela: âncora e foco de teclado param acima dela. Mesma altura de .barraEspaco.
+:global(html):has(.barra) {
+  @include breakpoint.breakpoint-down(lg) {
+    scroll-padding-block-end: calc(#{spacing.$spacing-13} - #{spacing.$spacing-08});
+  }
+}
+
+.barra {
+  position: fixed;
+  z-index: 100;
+  inset-block-end: 0;
+  inset-inline: 0;
+  background: theme.$layer-01;
+  border-block-start: 1px solid theme.$border-strong-01;
+
+  @include breakpoint.breakpoint(lg) {
+    display: none;
+  }
+}
+
+.barraResumo {
+  @include type.type-style('body-compact-01');
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: spacing.$spacing-02 spacing.$spacing-05;
+  padding: spacing.$spacing-03 spacing.$spacing-05;
+}
+
+.barraAcao > * {
+  inline-size: 100%;
+  max-inline-size: 100%;
+}
+
+// ---------- Progresso ----------
+.progressoGrande {
+  min-inline-size: calc(#{spacing.$spacing-13} * 3);
+
+  @include breakpoint.breakpoint-down(lg) {
+    display: none;
+  }
+}
+
+.progressoPequeno {
+  inline-size: 100%;
+
+  @include breakpoint.breakpoint(lg) {
+    display: none;
+  }
+}
+
+// ---------- Explicação da IA ----------
+.seloConteudo {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+}
+
+.seloRotulo {
+  @include type.type-style('label-01');
+
+  color: theme.$text-secondary;
+}
+
+.seloTitulo {
+  @include type.type-style('heading-compact-01');
+}
+
+.seloTexto {
+  @include type.type-style('body-compact-01');
+}
+
+// ---------- QR ----------
+.qr {
+  display: block;
+  background: theme.$background;
+  color: theme.$text-primary;
+}
+
+.qrFundo {
+  fill: theme.$background;
+}
+
+// ---------- Confirmação ----------
+.confirmar {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+}
+
+.confirmarLinha {
+  @include type.type-style('body-compact-01');
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: spacing.$spacing-02 spacing.$spacing-03;
+}
+
+.confirmarNota {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-secondary;
+}
+
+.botoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: spacing.$spacing-03;
+}
+
+// Colunas iguais: os dois botões têm sempre a mesma largura. Sem caber lado a lado, empilham com as bordas alinhadas.
+.acaoCaminhao {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, #{spacing.$spacing-12}), 1fr));
+  gap: spacing.$spacing-03;
+  max-inline-size: calc(#{spacing.$spacing-12} * 2 + #{spacing.$spacing-03});
+  margin-block-start: spacing.$spacing-03;
+
+  @include breakpoint.breakpoint-down(md) {
+    max-inline-size: none;
+  }
+}
+
+// O botão reserva lugar de ícone à direita. Sem ícone, a sobra desequilibra o texto.
+.botaoCaminhao.botaoCaminhao {
+  justify-content: center;
+  inline-size: 100%;
+  max-inline-size: none;
+  padding-inline: spacing.$spacing-04;
+}
+
+.linkExterno {
+  @include breakpoint.breakpoint-down(md) {
+    display: inline-flex;
+    align-items: center;
+    min-block-size: spacing.$spacing-06;
+  }
+}
+
+// ---------- Barra de andamento ----------
+.barraProgresso {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-02;
+  inline-size: 100%;
+}
+
+.barraProgressoRotulo {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-primary;
+}
+
+.barraProgressoTrilho {
+  overflow: hidden;
+  block-size: spacing.$spacing-02;
+  background: theme.$layer-accent-01;
+}
+
+.barraProgressoValor {
+  block-size: 100%;
+  background: theme.$interactive;
+}
+
+.barraProgressoApoio {
+  @include type.type-style('helper-text-01');
+
+  color: theme.$text-secondary;
+}
+
+.passoSistema {
+  min-inline-size: 0;
+}

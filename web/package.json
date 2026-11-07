@@ -10,9 +10,15 @@
     "tipos": "tsc --noEmit"
   },
   "dependencies": {
+    "@carbon/ai-chat": "1.24.0",
+    "@carbon/charts": "1.27.25",
+    "@carbon/charts-react": "1.27.25",
+    "@carbon/ibm-products": "2.102.0",
     "@carbon/icons-react": "11.92.0",
     "@carbon/react": "1.119.0",
+    "@carbon/web-components": "2.66.0",
     "@google/genai": "^2.32.0",
+    "lit": "3.3.3",
     "next": "16.4.5",
     "qrcode": "^1.5.4",
     "react": "19.3.1",
