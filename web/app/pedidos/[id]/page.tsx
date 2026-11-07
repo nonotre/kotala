@@ -132,6 +132,8 @@ export default async function Pedido({ params }: { params: Promise<{ id: string 
                   {cotacoes.map(({ cotacao: ct, nome: n, origem }) => (
                     <li key={ct.id}>
                       {n} {origem === "simulado" ? <Tag size="sm" type="gray">simulado</Tag> : null} <Tag size="sm" type={ct.situacao === "respondeu" ? "green" : ct.situacao === "aguardando" ? "blue" : "gray"}>{SITUACAO[ct.situacao]}</Tag>
+                      {/* X5: quem não respondeu ao texto pode receber uma ligação por voz. */}
+                      {item.estado === "cotando" && ct.situacao === "aguardando" ? <Link href={`/voz/${ct.id}`}> Ligar por voz</Link> : null}
                     </li>
                   ))}
                 </ul>

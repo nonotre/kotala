@@ -8,6 +8,7 @@ import { eq } from "drizzle-orm";
 import { db } from "./nucleo/db/cliente.ts";
 import { contato, itemPedido, pedido } from "./nucleo/db/schema.ts";
 import { receber } from "./nucleo/mensagens/index.ts";
+import { registrarCotacaoPorVoz, type ArgsRegistrar } from "./agentes/voz/index.ts";
 
 async function corpo(req: IncomingMessage): Promise<Record<string, unknown>> {
   let bruto = "";
@@ -69,6 +70,13 @@ export function iniciarApiInterna(porta: number, token: string, host = "127.0.0.
           botao: b.botao ? String(b.botao) : undefined,
         });
         return responder(200, { ok: true, tipo: r.tipo });
+      }
+      // X5: proposta dita numa ligação por voz (ferramenta registrar_cotacao do agente).
+      if (req.url === "/voz/cotacao") {
+        const cotacaoId = String(b.cotacaoId ?? "");
+        if (!/^[0-9a-f-]{36}$/.test(cotacaoId)) return responder(400, { erro: "cotação inválida" });
+        const r = await registrarCotacaoPorVoz(cotacaoId, (b.args ?? {}) as ArgsRegistrar, String(b.transcricao ?? ""));
+        return responder(200, r);
       }
       return responder(404, { erro: "rota desconhecida" });
     } catch (erro) {

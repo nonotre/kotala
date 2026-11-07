@@ -1,0 +1,41 @@
+@use '@carbon/react/scss/spacing' as s;
+@use '@carbon/react/scss/theme' as t;
+@use '@carbon/react/scss/type';
+
+.ligacao {
+  max-inline-size: 52rem;
+  display: flex;
+  flex-direction: column;
+  gap: s.$spacing-05;
+}
+.topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: s.$spacing-04;
+}
+.conversa {
+  background: t.$layer-02;
+  padding: s.$spacing-05;
+  min-block-size: 16rem;
+  max-block-size: 50vh;
+  overflow-y: auto;
+  p {
+    @include type.type-style('body-01');
+    margin-block-end: s.$spacing-03;
+    overflow-wrap: anywhere;
+  }
+}
+.vazio {
+  color: t.$text-helper;
+}
+.agente strong {
+  color: t.$link-primary;
+}
+.fornecedor strong {
+  color: t.$text-primary;
+}
+.sistema {
+  color: t.$text-secondary;
+  font-style: italic;
+}

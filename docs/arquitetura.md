@@ -195,6 +195,15 @@ Base fictícia feita pela Ester, copiada para `src/dados/` (a pasta de trabalho 
 - Mesmo item: chave igual, ou os termos decisivos idênticos (CP II não é CP III, 50 kg não é 25 kg) e quase todas as outras palavras iguais.
 - O histórico vem das compras confirmadas (`historico_compra`); fornecedor simulado aparece como simulado.
 
+## Voz em tempo real (X5)
+
+Quando um fornecedor não respondeu ao texto, a tela do pedido mostra "Ligar por voz" ao lado dele (`/voz/<cotação>`).
+
+- O navegador conversa direto com o Gemini Live (`VOZ_MODELO`, padrão `gemini-3.8-live`) com uma chave temporária gerada no servidor (`/api/voz/token`); a chave de verdade nunca vai ao navegador.
+- O agente (`src/agentes/voz/`) abre dizendo que é o assistente automatizado da empresa, pergunta preço, frete, prazo, pagamento, validade e entrega um por vez, repete os valores para o fornecedor confirmar e só então chama a ferramenta `registrar_cotacao`. Nunca fecha compra nem cita valor de outro fornecedor.
+- A ferramenta vai para o processo dos bots (`/api/voz/cotacao` → API interna `/voz/cotacao`): os valores são conferidos em código, a proposta entra no mapa com formato "voz" e a transcrição fica no registro. "Não atendo" e "não me ligue mais" também são registrados.
+- Teste com o Live de verdade, falando por texto no papel do fornecedor: `npm run voz:testar` (a conversa vira proposta com os valores certos). Na demonstração, uma pessoa do time faz o fornecedor no notebook, de fone de ouvido.
+
 ## Robustez no chat com fornecedor (Q7)
 
 Situações listadas pela área de compras, tratadas pelo Extrator e respondidas sem sair da cotação (`src/fluxo/fornecedor.ts`):
@@ -279,6 +288,7 @@ O fornecedor não se cadastra: recebe um e-mail com um link pessoal do bot (`t.m
 | `npm run telas:dev` / `npm run telas` | Telas em modo de desenvolvimento ou produção, porta 3300 |
 | `npm run telas:tipos` | Tipos das telas |
 | `npm run seguranca:testar` | Testes de manipulação com a IA real (fornecedor hostil, injeção, pedido de contato) |
+| `npm run voz:testar` | Agente de voz com o Gemini Live, por texto: confere que a ligação vira proposta |
 | `npm run anexo:testar -- audio.ogg` | Leitura de áudio, foto, print ou PDF do comprador, ao vivo com o Gemini |
 | `npm run convidar -- pessoa@exemplo.com "Nome"` | Convite manual por e-mail com o link pessoal do bot do fornecedor (manda e-mail de verdade) |
 
@@ -288,5 +298,6 @@ O fornecedor não se cadastra: recebe um e-mail com um link pessoal do bot (`t.m
 - Ler respostas do fornecedor por e-mail (E2); guardar o e-mail das lojas achadas na busca.
 - API do Portal da Transparência na Busca (`notas-fiscais`).
 - Resposta do comprador à dúvida de um fornecedor.
-- Preço do print do comprador no mapa de cotação; voz (X5). Escolha da variação da base também pela tela (hoje no Telegram e no chat).
+- Preço do print do comprador no mapa de cotação. Escolha da variação da base também pela tela (hoje no Telegram e no chat).
+- Voz: ligação pelo celular (exige HTTPS, por exemplo um túnel) e ligação telefônica de verdade.
 - Memória: bloquear fornecedor que deu problema (lista de bloqueio) e contrato anual com pedido automático.

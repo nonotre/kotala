@@ -25,10 +25,12 @@
     "telas:tipos": "cd web && npx tsc --noEmit",
     "convidar": "node --env-file=.env scripts/convidar.ts",
     "anexo:testar": "node --env-file=.env scripts/testar-anexo.ts",
-    "seguranca:testar": "node --env-file=.env scripts/testar-seguranca.ts"
+    "seguranca:testar": "node --env-file=.env scripts/testar-seguranca.ts",
+    "voz:testar": "node --env-file=.env scripts/testar-voz.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.113",
+    "@google/genai": "^2.32.0",
     "@grammyjs/auto-retry": "^2.0.2",
     "@grammyjs/runner": "^2.0.3",
     "ai": "^7.0.164",

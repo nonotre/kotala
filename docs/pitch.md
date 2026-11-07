@@ -16,6 +16,7 @@ O Kotala é um comprador de obra que trabalha sozinho do pedido à confirmação
 | 1:50 | Busca real: preços da internet com link, hora e frete para o CEP; lojas encontradas com CNPJ conferido na Receita, nas listas de empresas punidas e no TJSP | Pedido → "Preço de referência na internet" e tela Fornecedores |
 | 2:40 | Os fornecedores respondem do jeito deles (texto, áudio, PDF). Um pergunta antes de cotar, um esquece e recebe lembrete, um manda preço 40% abaixo e o sistema pede confirmação | Linha do tempo do pedido |
 | 3:30 | Mapa de cotação: custo total com frete, cortes com motivo, nota com pesos, "obra parada" dobra o peso do prazo e o mais rápido ganha mesmo custando mais | Pedido → Mapa |
+| 3:50 | Um fornecedor não respondeu: "Ligar por voz". O assistente conversa em tempo real, confirma os valores e a ligação vira proposta no mapa | Pedido → Ligar por voz (fone de ouvido; alguém do time faz o fornecedor) |
 | 4:10 | Reprovar por preço alto: o assistente negocia sem revelar valor de outro fornecedor e o preço cai | Pedido → Reprovar → "Preço alto: negociar" |
 | 4:50 | Aprovar em dois toques: pedido de compra ao vencedor, aviso aos outros, confirmação | Pedido → Aprovar → modal |
 | 5:20 | Segunda compra do mesmo item: o sistema propõe repetir com o mesmo fornecedor (menos de 3 meses), com o histórico à vista | Chat ou Telegram |
@@ -30,6 +31,7 @@ O Kotala é um comprador de obra que trabalha sozinho do pedido à confirmação
 - [ ] Um pedido ensaiado do mesmo item antes, para a recompra aparecer.
 - [ ] Celular com Telegram aberto no bot do comprador; QR do convite em outra aba.
 - [ ] Créditos do Serper: conferir que sobra folga (`SERPER_LIMITE`).
+- [ ] Voz: fone de ouvido, microfone liberado no navegador e um ensaio com `npm run voz:testar`.
 
 ## Plano B
 
@@ -39,6 +41,7 @@ O Kotala é um comprador de obra que trabalha sozinho do pedido à confirmação
 | A internet cair | `BUSCA_MODO=snapshot`; o mapa e a negociação funcionam com os simulados |
 | A IA der limite | A troca automática de modelo e de chave já está ligada; o registro mostra quando caiu na reserva |
 | O TJSP estiver fora (estava em manutenção em 07 e 08/11) | A verificação diz "não consultado" e não tira ponto: é dado real |
+| A voz falhar ao vivo | Mostrar a transcrição de um ensaio e o `npm run voz:testar`; o resto do fluxo não depende da voz |
 
 ## Perguntas prováveis da banca
 
