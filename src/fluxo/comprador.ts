@@ -14,6 +14,8 @@ import {
   TransicaoInvalida,
 } from "../nucleo/orquestrador/index.ts";
 import { registrar } from "../nucleo/registro.ts";
+import { aoBotaoDoComprador } from "./decisao.ts";
+import { dias, fmtNumero, quantidade } from "../texto.ts";
 
 export const TEXTO_BOAS_VINDAS =
   "Olá! Sou o assistente de cotações. Mande o que precisa comprar, do seu jeito, por exemplo: " +
@@ -26,19 +28,8 @@ export const AVISO_PRIVACIDADE =
 
 const TEXTO_FALHA_IA = "Não consegui ler seu pedido agora. Pode mandar de novo em instantes?";
 
-const fmtNumero = (n: number | string) => Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
-
-/** Plural só para exibição: "saco" → "sacos"; unidades de medida (m³, kg) não mudam. */
-export function plural(unidade: string, quantidade: number | string): string {
-  const u = unidade.trim();
-  if (Number(quantidade) <= 1 || /[0-9³²]|^(kg|g|m|l|ml|cm|mm|un)$/i.test(u) || /s$/i.test(u)) return u;
-  if (/[rz]$/i.test(u)) return `${u}es`;
-  if (/m$/i.test(u)) return `${u.slice(0, -1)}ns`;
-  if (/[aeiou]$/i.test(u)) return `${u}s`;
-  return u;
-}
-
-const quantidadeTexto = (q: number | string, unidade: string) => `${fmtNumero(q)} ${plural(unidade, q)}`;
+export { plural } from "../texto.ts";
+const quantidadeTexto = quantidade;
 
 const CONFIRMACAO = /^(sim|ok|okay|confirm[oa]|confirmado|pode( seguir| cotar)?|isso|certo|fechado|beleza|blz|manda)[!.\s]*$/i;
 const SAUDACAO = /^(oi+|ol[aá]|opa|e a[ií]|bom dia|boa tarde|boa noite|tudo bem\??|obrigad[oa]|valeu|ok|blz|beleza)[!.\s]*$/i;
@@ -79,7 +70,7 @@ export function textoConfirmacao(p: {
   linhas.push(entrega);
   if (p.janelaRecebimento) linhas.push(`Recebe: ${p.janelaRecebimento}`);
   const prazo = p.prazoTexto
-    ? `${p.prazoTexto}${p.prazoMaxDias !== null ? ` (${p.prazoMaxDias} ${p.prazoMaxDias === 1 ? "dia" : "dias"})` : ""}`
+    ? `${p.prazoTexto}${p.prazoMaxDias !== null ? ` (${dias(p.prazoMaxDias)})` : ""}`
     : "não informado";
   linhas.push(`Prazo: ${prazo}`);
   if (p.urgencia === "obra_parada") linhas.push("Obra parada: o prazo pesa mais que o preço.");
@@ -203,14 +194,10 @@ function ignorarCorrida(erro: unknown) {
 // ---------- Ações do comprador ----------
 
 async function confirmar(pedidoId: number, compradorId: string) {
-  try {
-    await avancarPedido(pedidoId, "comprador_confirmou", { agente: "Comprador", motivo: "Confirmou o pedido." });
-  } catch (erro) {
-    if (erro instanceof TransicaoInvalida) {
-      await enviar(compradorId, `O pedido ${pedidoId} não está esperando confirmação.`, { pedidoId });
-      return;
-    }
-    throw erro;
+  const [p] = await db.select({ estado: pedido.estado }).from(pedido).where(eq(pedido.id, pedidoId));
+  if (p?.estado !== "aguardando_confirmacao") {
+    await enviar(compradorId, `O pedido ${pedidoId} não está esperando confirmação.`, { pedidoId });
+    return;
   }
   const itens = await db
     .select()
@@ -218,11 +205,17 @@ async function confirmar(pedidoId: number, compradorId: string) {
     .where(eq(itemPedido.pedidoId, pedidoId))
     .orderBy(asc(itemPedido.ordem));
   const [primeiro, ...resto] = itens;
+  // A mensagem sai antes da transição: a busca dispara outras mensagens logo em seguida.
   const linhas = [`Pedido ${pedidoId} confirmado.`];
   if (primeiro) linhas.push(`Vou buscar fornecedores para ${quantidadeTexto(primeiro.quantidade, primeiro.unidade)} de ${primeiro.descricao}.`);
   if (resto.length) linhas.push(`${resto.length === 1 ? "O outro item fica" : `Os outros ${resto.length} itens ficam`} na fila.`);
   linhas.push("Aviso você a cada novidade.");
   await enviar(compradorId, linhas.join(" "), { pedidoId });
+  try {
+    await avancarPedido(pedidoId, "comprador_confirmou", { agente: "Comprador", motivo: "Confirmou o pedido." });
+  } catch (erro) {
+    ignorarCorrida(erro);
+  }
 }
 
 async function cancelar(pedidoId: number, compradorId: string) {
@@ -248,6 +241,7 @@ async function pedidoPendente(compradorId: string) {
 
 export async function aoMensagemDoComprador({ contato, entrada }: MensagemRecebida) {
   if (entrada.botao) {
+    if (await aoBotaoDoComprador(contato, entrada.botao)) return;
     const b = lerBotao(entrada.botao);
     if (!b) return;
     const [p] = await db.select({ compradorId: pedido.compradorId }).from(pedido).where(eq(pedido.id, b.pedidoId));

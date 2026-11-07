@@ -56,6 +56,8 @@ export const situacaoEnvioEnum = pgEnum("situacao_envio", ["recebida", "enviada"
 
 export const fornecedor = pgTable("fornecedor", {
   id: uuid("id").primaryKey().defaultRandom(),
+  /** Chave estável dos simulados ("sim-perto"), para o seed não duplicar. */
+  chave: text("chave").unique(),
   nome: text("nome").notNull(),
   cnpj: text("cnpj"),
   origem: origemFornecedorEnum("origem").notNull(),
@@ -324,3 +326,23 @@ export const historicoCompra = pgTable("historico_compra", {
   itemPedidoId: integer("item_pedido_id").references(() => itemPedido.id),
   criadoEm: criadoEm(),
 });
+
+// ---------- Mapa de cotação (Q1): resultado do Comparador, por rodada ----------
+
+export const mapaCotacao = pgTable(
+  "mapa_cotacao",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    itemPedidoId: integer("item_pedido_id")
+      .notNull()
+      .references(() => itemPedido.id),
+    rodada: integer("rodada").notNull(),
+    /** Comparação completa (linhas, portões, notas, pesos, alertas), calculada em código. */
+    dados: jsonb("dados").notNull(),
+    /** Justificativa redigida pela IA (ou template), sem números novos. */
+    recomendacao: text("recomendacao").notNull(),
+    ofertaRecomendadaId: uuid("oferta_recomendada_id"),
+    criadoEm: criadoEm(),
+  },
+  (t) => [index("mapa_item").on(t.itemPedidoId, t.criadoEm)],
+);

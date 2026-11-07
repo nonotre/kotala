@@ -30,17 +30,36 @@ export type MensagemEntrada = {
 };
 
 export type Botao = { rotulo: string; dado: string };
-export type OpcoesEnvio = { botoes?: Botao[]; anexos?: Anexo[]; pedidoId?: number; itemPedidoId?: number };
+/** Para que serve a mensagem de saída; o simulador de fornecedor reage por aqui. */
+export type TipoEnvio = "cotacao" | "lembrete" | "resposta" | "pedido_compra" | "nao_venceu" | "encerrada" | "aviso";
+export type OpcoesEnvio = {
+  botoes?: Botao[];
+  anexos?: Anexo[];
+  pedidoId?: number;
+  itemPedidoId?: number;
+  tipo?: TipoEnvio;
+};
 
 /** Cada canal implementa isto (Telegram, WhatsApp simulado, e-mail, web...). */
 export interface AdaptadorCanal {
   canal: Canal;
   enviar(endereco: string, texto: string, opcoes: OpcoesEnvio): Promise<{ idExterno?: string }>;
+  /** Baixa um anexo recebido (PDF, foto, áudio) pelo id do canal. */
+  baixar?(ref: string): Promise<{ dados: Uint8Array; mediaType?: string }>;
 }
 
 const adaptadores = new Map<Canal, AdaptadorCanal>();
 export function registrarCanal(a: AdaptadorCanal) {
   adaptadores.set(a.canal, a);
+}
+
+/** Até 20 MB, o limite do Telegram para bots. */
+export async function baixarAnexo(canal: Canal, anexo: Anexo) {
+  const a = adaptadores.get(canal);
+  if (!a?.baixar) throw new Error(`O canal ${canal} não baixa anexos.`);
+  if (anexo.tamanho && anexo.tamanho > 20 * 1024 * 1024) throw new Error("Anexo maior que 20 MB.");
+  const r = await a.baixar(anexo.ref);
+  return { dados: r.dados, mediaType: anexo.mediaType || r.mediaType || "application/octet-stream" };
 }
 
 export type Contato = typeof contato.$inferSelect;
@@ -107,6 +126,12 @@ export async function receber(e: MensagemEntrada): Promise<ResultadoRecebimento>
 
   if (roteador) await roteador({ contato: c, mensagemId: gravada.id, entrada: e });
   return { tipo: "recebida", contato: c, mensagemId: gravada.id };
+}
+
+/** PARAR detectado por outro caminho (ex.: o Extrator classificou a resposta como "parar"). */
+export async function marcarParouContato(contatoId: string) {
+  const [c] = await db.select().from(contato).where(eq(contato.id, contatoId));
+  if (c && !c.parouEm) await marcarParou(c);
 }
 
 async function marcarParou(c: Contato) {

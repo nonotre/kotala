@@ -15,6 +15,13 @@
       "when": 1794061740472,
       "tag": "0001_pedido_confirmacao",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794063479992,
+      "tag": "0002_fornecedor_chave_mapa",
+      "breakpoints": true
     }
   ]
 }

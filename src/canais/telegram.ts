@@ -79,10 +79,31 @@ export function adaptadorTelegram(bots: Partial<Record<Papel, Bot>>): AdaptadorC
       let teclado: InlineKeyboard | undefined;
       if (opcoes.botoes?.length) {
         teclado = new InlineKeyboard();
-        for (const b of opcoes.botoes) teclado.text(b.rotulo, b.dado);
+        // Até 3 botões curtos numa linha; senão, um por linha.
+        const umPorLinha = opcoes.botoes.length > 3 || opcoes.botoes.some((b) => b.rotulo.length > 18);
+        for (const b of opcoes.botoes) {
+          teclado.text(b.rotulo.slice(0, 64), b.dado);
+          if (umPorLinha) teclado.row();
+        }
       }
-      const m = await bot.api.sendMessage(chatId, texto, { reply_markup: teclado });
+      const m = await bot.api.sendMessage(chatId, texto.slice(0, 4096), { reply_markup: teclado });
       return { idExterno: String(m.message_id) };
+    },
+    async baixar(ref) {
+      // file_id vale para o bot que recebeu; tenta os dois.
+      for (const bot of Object.values(bots)) {
+        if (!bot) continue;
+        try {
+          const f = await bot.api.getFile(ref);
+          if (!f.file_path) continue;
+          const r = await fetch(`https://api.telegram.org/file/bot${bot.token}/${f.file_path}`);
+          if (!r.ok) continue;
+          return { dados: new Uint8Array(await r.arrayBuffer()), mediaType: r.headers.get("content-type") ?? undefined };
+        } catch {
+          // tenta o próximo bot
+        }
+      }
+      throw new Error("Não consegui baixar o anexo do Telegram.");
     },
   };
 }

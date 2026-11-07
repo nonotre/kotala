@@ -1,19 +1,22 @@
-// Liga a entrada única (N4) aos fluxos de cada papel.
+// Liga a entrada única (N4) aos fluxos de cada papel e os agentes aos estados.
+// A ordem importa: ganchos do mesmo estado rodam na ordem em que foram ligados.
 
+import { ligarBusca } from "../agentes/busca/index.ts";
+import { ligarComparador } from "../agentes/comparador/index.ts";
+import { ligarCotador } from "../agentes/cotador/index.ts";
 import { aoReceber } from "../nucleo/mensagens/index.ts";
-import { registrar } from "../nucleo/registro.ts";
-import { db } from "../nucleo/db/cliente.ts";
 import { aoMensagemDoComprador } from "./comprador.ts";
+import { ligarDecisao } from "./decisao.ts";
+import { aoMensagemDoFornecedor } from "./fornecedor.ts";
+
+let ligado = false;
 
 export function ligarFluxos() {
-  aoReceber(async (m) => {
-    if (m.contato.papel === "comprador") return aoMensagemDoComprador(m);
-    // Fornecedor: cadastro (R5) e extração das respostas (R6) entram aqui.
-    await registrar(db, {
-      agente: "Fornecedor",
-      acao: "Mandou uma mensagem.",
-      motivo: "O tratamento das respostas de fornecedor ainda não está ligado.",
-      fornecedorIds: m.contato.fornecedorId ? [m.contato.fornecedorId] : undefined,
-    });
-  });
+  if (ligado) return;
+  ligado = true;
+  ligarBusca(); // buscando → cotações criadas → cotando
+  ligarCotador(); // cotando → envia; comparando → marca sem resposta (antes do mapa)
+  ligarComparador(); // comparando → mapa → aguardando_decisao
+  ligarDecisao(); // aprovado → pedido de compra
+  aoReceber((m) => (m.contato.papel === "comprador" ? aoMensagemDoComprador(m) : aoMensagemDoFornecedor(m)));
 }

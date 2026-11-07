@@ -34,7 +34,7 @@ export class TransicaoConcorrente extends Error {
   }
 }
 
-export type Motivo = { agente: Agente; motivo: string; acao?: string; dados?: unknown };
+export type Motivo = { agente: Agente; motivo: string; acao?: string; dados?: unknown; fornecedorIds?: string[] };
 
 // ---------- Ganchos: quem reage à entrada em cada estado ----------
 
@@ -101,6 +101,7 @@ export async function avancarPedido(
       deEstado: atual.estado,
       paraEstado: para,
       dados: motivo.dados,
+      fornecedorIds: motivo.fornecedorIds,
     });
     return { pedidoId, de: atual.estado, para, evento };
   });
@@ -137,6 +138,7 @@ export async function avancarItem(
       deEstado: atual.estado,
       paraEstado: para,
       dados: motivo.dados,
+      fornecedorIds: motivo.fornecedorIds,
     });
     return { pedidoId: atual.pedidoId, itemPedidoId, de: atual.estado, para, evento };
   });
@@ -290,13 +292,21 @@ export async function varrerPrazos(agora = new Date()) {
   return vencidos.length;
 }
 
+const tarefasDoVarredor: ((agora: Date) => Promise<unknown>)[] = [];
+/** Outras tarefas periódicas (ex.: lembrete do Cotador) rodam junto do varredor. */
+export function aoVarrer(fn: (agora: Date) => Promise<unknown>) {
+  tarefasDoVarredor.push(fn);
+}
+
 export function iniciarVarredor(intervaloMs = 5_000): () => void {
   let rodando = false;
   const t = setInterval(async () => {
     if (rodando) return;
     rodando = true;
     try {
-      await varrerPrazos();
+      const agora = new Date();
+      for (const t of tarefasDoVarredor) await t(agora).catch((e) => console.error("[varredor]", e));
+      await varrerPrazos(agora);
     } catch (erro) {
       console.error("[varredor]", erro);
     } finally {

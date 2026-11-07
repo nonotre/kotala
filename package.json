@@ -12,7 +12,7 @@
     "db:migrar": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "tipos": "tsc --noEmit",
-    "teste": "node --test --env-file-if-exists=.env \"testes/**/*.test.ts\"",
+    "teste": "node --test --test-concurrency=1 --env-file-if-exists=.env \"testes/**/*.test.ts\"",
     "checar": "npm run tipos && npm run teste",
     "ia:testar": "node --env-file=.env scripts/testar-ia.ts",
     "bots": "node --env-file=.env src/bots.ts",
