@@ -265,14 +265,16 @@ export async function economia() {
   return { linhas, ia: ia!, mensagens: msgs!, cotacoes: cots?.n ?? 0 };
 }
 
-/** E3: conversa do chat web de um navegador. */
+/** E3: conversa do chat web de um navegador: as 300 mensagens mais recentes, em ordem. */
 export async function conversaWeb(endereco: string) {
   const [c] = await db.select().from(contato).where(and(eq(contato.canal, "web"), eq(contato.endereco, endereco)));
   if (!c) return [];
-  return db
+  // Pega do fim para o começo e desvira: numa conversa longa, as mais novas não podem ficar de fora.
+  const recentes = await db
     .select({ id: mensagem.id, direcao: mensagem.direcao, texto: mensagem.texto, botoes: mensagem.botoes, criadoEm: mensagem.criadoEm })
     .from(mensagem)
     .where(eq(mensagem.contatoId, c.id))
-    .orderBy(asc(mensagem.criadoEm))
+    .orderBy(desc(mensagem.criadoEm))
     .limit(300);
+  return recentes.reverse();
 }
