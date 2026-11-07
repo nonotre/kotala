@@ -67,7 +67,7 @@ export async function acharRecompra(item: { itemChave: string | null; descricao:
     .select({ h: historicoCompra, f: fornecedor })
     .from(historicoCompra)
     .innerJoin(fornecedor, eq(fornecedor.id, historicoCompra.fornecedorId))
-    .where(and(gte(historicoCompra.data, desde), isNull(fornecedor.parouEm)))
+    .where(and(gte(historicoCompra.data, desde), isNull(fornecedor.parouEm), isNull(fornecedor.bloqueadoEm)))
     .orderBy(desc(historicoCompra.data))
     .limit(200);
   const linhas = recentes.filter(({ h }) => mesmoItem(chave, h.itemChave));

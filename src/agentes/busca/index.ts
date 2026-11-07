@@ -41,6 +41,8 @@ export async function candidatos(item: { descricao: string; itemChave: string | 
       origem: fornecedor.origem,
       chave: fornecedor.chave,
       parouEm: fornecedor.parouEm,
+      bloqueadoEm: fornecedor.bloqueadoEm,
+      motivoBloqueio: fornecedor.motivoBloqueio,
     })
     .from(fornecedor)
     .innerJoin(contato, and(eq(contato.fornecedorId, fornecedor.id), isNull(contato.parouEm)))
@@ -53,6 +55,7 @@ export async function candidatos(item: { descricao: string; itemChave: string | 
     vistos.add(l.fornecedorId);
     let motivoCorte: string | undefined;
     if (l.parouEm) motivoCorte = "Pediu para não receber mensagens";
+    else if (l.bloqueadoEm) motivoCorte = `Bloqueado pela empresa${l.motivoBloqueio ? `: ${l.motivoBloqueio}` : ""}`;
     else if (l.origem === "simulado" && l.chave && personaPorChave.has(l.chave) && !personaVende(personaPorChave.get(l.chave)!, descricao, categoria)) {
       motivoCorte = "Não vende este item";
     }

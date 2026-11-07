@@ -85,6 +85,13 @@
       "when": 1794077846811,
       "tag": "0011_regras_compras",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794078166993,
+      "tag": "0012_bloqueio",
+      "breakpoints": true
     }
   ]
 }

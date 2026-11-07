@@ -9,6 +9,7 @@ import { db } from "./nucleo/db/cliente.ts";
 import { contato, itemPedido, pedido } from "./nucleo/db/schema.ts";
 import { receber } from "./nucleo/mensagens/index.ts";
 import { registrarCotacaoPorVoz, type ArgsRegistrar } from "./agentes/voz/index.ts";
+import { alterarFornecedor, type AcaoFornecedor } from "./agentes/fornecedores/index.ts";
 
 async function corpo(req: IncomingMessage): Promise<Record<string, unknown>> {
   let bruto = "";
@@ -70,6 +71,13 @@ export function iniciarApiInterna(porta: number, token: string, host = "127.0.0.
           botao: b.botao ? String(b.botao) : undefined,
         });
         return responder(200, { ok: true, tipo: r.tipo });
+      }
+      // Lista de bloqueio e homologação, pela tela de fornecedores.
+      if (req.url === "/acoes/fornecedor") {
+        const id = String(b.fornecedorId ?? "");
+        const acao = String(b.acao ?? "");
+        if (!/^[0-9a-f-]{36}$/.test(id) || !["bloquear", "desbloquear", "homologar", "desomologar"].includes(acao)) return responder(400, { erro: "pedido inválido" });
+        return responder(200, await alterarFornecedor(id, acao as AcaoFornecedor, String(b.motivo ?? "")));
       }
       // X5: proposta dita numa ligação por voz (ferramenta registrar_cotacao do agente).
       if (req.url === "/voz/cotacao") {

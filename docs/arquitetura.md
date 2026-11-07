@@ -226,7 +226,7 @@ Veio preço, é proposta: a regra está em código (`limpar` no Extrator), entã
 | Quadro (R10) | `/` | As 4 colunas (Solicitado, Cotando, Comparando, Decidido), um cartão por item, com etiquetas de estado (aguardando você, 3/6 respostas, fecha às, com alerta, pedido enviado, confirmado, obra parada). Atualiza a cada 3 s |
 | Pedidos | `/pedidos` | Lista de pedidos |
 | Pedido | `/pedidos/[id]` | O que foi pedido e o que o assistente considerou; por item: fornecedores consultados e situação, mapa de cotação (Q1) com custo total, frete com a origem, prazo, pagamento, confiança e nota, motivos de corte, recomendação e pesos; aprovar (com confirmação), cotar de novo, buscar mais; referência pública com link; linha do tempo (N5) com filtros e prompt e resposta de cada chamada de IA |
-| Fornecedores | `/fornecedores` | Confiança de cada fornecedor (Q8) com os motivos e alertas |
+| Fornecedores | `/fornecedores` | Confiança de cada fornecedor (Q8) com os motivos e alertas; homologar e bloquear (lista de bloqueio, com motivo obrigatório): bloqueado não entra em busca nem recompra |
 | Economia (X4) | `/economia` | Compras confirmadas, comparação com a referência pública e com a proposta mais cara, tempo até a confirmação e trabalho feito (cotações, mensagens, chamadas de IA), sempre dizendo contra o que compara |
 | Conversar (E3) | `/chat` | Chat web com o mesmo assistente do Telegram |
 | Convite (Q5) | `/convite` | QR para a banca virar fornecedor pelo celular (link do bot do fornecedor, perguntado ao Telegram no servidor) |
@@ -297,7 +297,7 @@ O fornecedor não se cadastra: recebe um e-mail com um link pessoal do bot (`t.m
 - Telas: tema escuro, filtro e busca no quadro, tela de configurações (pesos, prazo das respostas), convite do fornecedor pela tela.
 - Ler respostas do fornecedor por e-mail (E2); guardar o e-mail das lojas achadas na busca.
 - API do Portal da Transparência na Busca (`notas-fiscais`).
-- Entregas parciais; cadastro automático de item novo na base; lista de bloqueio de fornecedor.
+- Entregas parciais; cadastro automático de item novo na base.
 - Preço do print do comprador no mapa de cotação. Escolha da variação da base também pela tela (hoje no Telegram e no chat).
 - Voz: ligação pelo celular (exige HTTPS, por exemplo um túnel) e ligação telefônica de verdade.
-- Memória: bloquear fornecedor que deu problema (lista de bloqueio) e contrato anual com pedido automático.
+- Memória: contrato anual com pedido automático.

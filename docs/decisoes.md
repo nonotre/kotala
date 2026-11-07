@@ -15,7 +15,9 @@ Feito:
 - **Quadro:** as 4 colunas do site continuam fixas (requisito); as etapas sugeridas viram etiquetas ("Captando fornecedores", "Em negociação") e as canceladas ficam ocultas, com opção de mostrar.
 - **Códigos e confirmação de ambiguidades:** a base de itens dá código ao item e pergunta a variação quando há mais de uma.
 
-Para depois: entregas parciais (uma parte em 20 dias, outra em 30), cadastro automático de item novo na base, campos extras do fornecedor (filial ou sede, atendente) e lista de bloqueio de fornecedor com problema.
+- **Lista de bloqueio e homologação:** na tela de fornecedores; bloquear exige motivo e tira o fornecedor da busca e da recompra; homologar soma pontos na confiança.
+
+Para depois: entregas parciais (uma parte em 20 dias, outra em 30), cadastro automático de item novo na base e campos extras do fornecedor (filial ou sede, atendente).
 
 ## 07/11/2026 · Negociação sem citar valor de outro fornecedor
 

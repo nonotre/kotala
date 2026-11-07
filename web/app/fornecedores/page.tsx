@@ -1,5 +1,6 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Tag } from "@/components/carbon";
 import { listaFornecedores } from "@/lib/dados";
+import { AcoesFornecedor } from "@/components/AcoesFornecedor";
 import { dataHora } from "@/lib/formato";
 import estilos from "../comum.module.scss";
 
@@ -26,6 +27,7 @@ export default async function Fornecedores() {
               <TableHeader>Canal</TableHeader>
               <TableHeader>Propostas</TableHeader>
               <TableHeader>Compras</TableHeader>
+              <TableHeader>Empresa</TableHeader>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -36,6 +38,8 @@ export default async function Fornecedores() {
                   <TableCell>
                     {f.nome} {f.origem === "simulado" ? <Tag size="sm" type="gray">simulado</Tag> : null}
                     {f.cnpj ? <div className={estilos.ajuda}>CNPJ {f.cnpj}</div> : null}
+                    {f.homologado ? <Tag size="sm" type="green">Homologado</Tag> : null}
+                    {f.bloqueadoEm ? <div className={estilos.alerta}>Bloqueado: {f.motivoBloqueio}</div> : null}
                     {f.fonte?.startsWith("http") ? (
                       <div className={estilos.ajuda}>
                         <a href={f.fonte} target="_blank" rel="noreferrer">
@@ -62,6 +66,9 @@ export default async function Fornecedores() {
                   <TableCell>{f.canais.length ? f.canais.join(", ") : "Sem canal (só referência)"}</TableCell>
                   <TableCell>{f.propostas}</TableCell>
                   <TableCell>{f.compras}</TableCell>
+                  <TableCell>
+                    <AcoesFornecedor id={f.id} nome={f.nome} homologado={f.homologado} bloqueado={!!f.bloqueadoEm} />
+                  </TableCell>
                 </TableRow>
               );
             })}

@@ -35,3 +35,10 @@ export async function tocarBotao(dado: string): Promise<Resultado> {
 export async function enviarChat(endereco: string, texto: string, botao?: string): Promise<Resultado> {
   return chamar("/chat", { endereco, texto, botao });
 }
+
+/** Lista de bloqueio e homologação do fornecedor. */
+export async function alterarFornecedor(fornecedorId: string, acao: "bloquear" | "desbloquear" | "homologar" | "desomologar", motivo = ""): Promise<Resultado> {
+  const r = await chamar("/acoes/fornecedor", { fornecedorId, acao, motivo });
+  revalidatePath("/fornecedores");
+  return r;
+}

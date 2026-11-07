@@ -78,6 +78,9 @@ export const fornecedor = pgTable("fornecedor", {
   codigoConvite: text("codigo_convite").unique(),
   /** PARAR vale para o fornecedor em todos os canais. */
   parouEm: timestamp("parou_em", { withTimezone: true }),
+  /** Lista de bloqueio: fornecedor que deu problema não entra em busca nem recompra. */
+  bloqueadoEm: timestamp("bloqueado_em", { withTimezone: true }),
+  motivoBloqueio: text("motivo_bloqueio"),
   criadoEm: criadoEm(),
 });
 
