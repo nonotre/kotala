@@ -11,6 +11,8 @@ COPY src ./src
 COPY web ./web
 # O build carrega os módulos, mas não conecta ao banco (páginas dinâmicas): a URL é só de preenchimento.
 RUN cd web && DATABASE_URL=postgres://build@127.0.0.1:1/build npm run build
+# O build roda como root, mas o Next grava o cache em .next em tempo de execução, como node.
+RUN chown -R node:node web/.next
 USER node
 WORKDIR /app/web
 # Dentro do container escuta em todas as interfaces; o compose publica só em 127.0.0.1.
