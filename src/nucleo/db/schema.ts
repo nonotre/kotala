@@ -50,7 +50,7 @@ export const situacaoCotacaoEnum = pgEnum("situacao_cotacao", [
 ]);
 export const classificacaoEnum = pgEnum("classificacao_resposta", ["proposta", "duvida", "parar", "outro"]);
 export const origemFreteEnum = pgEnum("origem_frete", ["informado", "estimado", "nao_se_aplica"]);
-export const formatoOfertaEnum = pgEnum("formato_oferta", ["texto", "pdf", "foto", "voz", "busca"]);
+export const formatoOfertaEnum = pgEnum("formato_oferta", ["texto", "pdf", "foto", "voz", "busca", "historico"]);
 export const direcaoEnum = pgEnum("direcao_mensagem", ["entrada", "saida"]);
 export const situacaoEnvioEnum = pgEnum("situacao_envio", ["recebida", "enviada", "bloqueada_parar", "falhou"]);
 

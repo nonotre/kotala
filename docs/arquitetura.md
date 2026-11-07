@@ -177,6 +177,15 @@ O que não entra no rastro: o raciocínio interno do modelo (a tela mostra o mot
 
 Estados novos do item: `negociar` (aguardando_decisao → cotando) e `reavaliar` (aguardando_decisao → comparando).
 
+## Memória e recompra (X2)
+
+`src/agentes/memoria/`. Compra repetida em menos de 3 meses quase não muda de preço (regra da área de compras): antes de buscar, o sistema procura no histórico uma compra confirmada do mesmo item nos últimos 90 dias, com fornecedor que ainda tem canal e sem atraso registrado.
+
+- Achou: o item vai para `aguardando_recompra` e o comprador vê a última compra (fornecedor, data, preço, frete, prazo combinado e se foi cumprido, quantas vezes comprou) com "Repetir" ou "Cotar de novo". Repetir leva dois toques (confirmação no Telegram, modal na tela).
+- Repetir: o pedido de compra vai direto ao fornecedor, citando o preço da última compra. Se ele não mantiver, o item volta à busca (`recompra_recusada`) e é cotado.
+- Mesmo item: chave igual, ou os termos decisivos idênticos (CP II não é CP III, 50 kg não é 25 kg) e quase todas as outras palavras iguais.
+- O histórico vem das compras confirmadas (`historico_compra`); fornecedor simulado aparece como simulado.
+
 ## Robustez no chat com fornecedor (Q7)
 
 Situações listadas pela área de compras, tratadas pelo Extrator e respondidas sem sair da cotação (`src/fluxo/fornecedor.ts`):
@@ -270,3 +279,4 @@ O fornecedor não se cadastra: recebe um e-mail com um link pessoal do bot (`t.m
 - API do Portal da Transparência na Busca (`notas-fiscais`).
 - Resposta do comprador à dúvida de um fornecedor.
 - Preço do print do comprador no mapa de cotação; base de itens (E6), voz (X5).
+- Memória: bloquear fornecedor que deu problema (lista de bloqueio) e contrato anual com pedido automático.

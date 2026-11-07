@@ -19,6 +19,7 @@ import {
 } from "../../src/nucleo/db/schema.ts";
 import { colunaDoItem, COLUNAS, type Coluna, type EstadoItem, type EstadoPedido } from "../../src/nucleo/orquestrador/estados.ts";
 import { linhaDoTempo } from "../../src/nucleo/rastreio.ts";
+import { acharRecompra } from "../../src/agentes/memoria/index.ts";
 import type { Comparacao, Linha } from "../../src/agentes/comparador/calculo.ts";
 
 export { COLUNAS, type Coluna };
@@ -58,6 +59,9 @@ function etiquetasDo(
         break;
       case "buscando":
         e.push({ texto: "Buscando fornecedores", tipo: "info" });
+        break;
+      case "aguardando_recompra":
+        e.push({ texto: "Repetir compra?", tipo: "atencao" });
         break;
       case "cotando":
         e.push({ texto: `${extra.respostas}/${extra.consultados} respostas`, tipo: "info" });
@@ -180,6 +184,7 @@ export async function detalhePedido(id: number) {
         : [];
       return {
         item,
+        recompra: item.estado === "aguardando_recompra" ? await acharRecompra(item) : null,
         mapa: m ? { ...m, comparacao: m.dados as Comparacao } : null,
         cotacoes: cots,
         referencias: refs.map((x) => ({ ...x.r, cnpjAtivo: x.verificado === true })),

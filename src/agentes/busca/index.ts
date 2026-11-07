@@ -5,11 +5,13 @@
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { MAX_FORNECEDORES, PRAZO_RESPOSTAS_SEG, FRACAO_LEMBRETE } from "../../config.ts";
 import { db } from "../../nucleo/db/cliente.ts";
-import { contato, cotacao, fornecedor, itemPedido } from "../../nucleo/db/schema.ts";
+import { contato, cotacao, fornecedor, itemPedido, pedido } from "../../nucleo/db/schema.ts";
 import { aoEntrarItem, avancarItem, type MudancaItem } from "../../nucleo/orquestrador/index.ts";
 import { registrar } from "../../nucleo/registro.ts";
 import { PERSONAS, vendeItem } from "../../simulador/personas.ts";
 import { buscarNaInternet } from "./internet.ts";
+import { acharRecompra, textoRecompra } from "../memoria/index.ts";
+import { enviar } from "../../nucleo/mensagens/index.ts";
 
 export { buscarNaInternet, referenciasDoItem } from "./internet.ts";
 
@@ -54,6 +56,33 @@ async function buscar(m: MudancaItem) {
   }
   const [item] = await db.select().from(itemPedido).where(eq(itemPedido.id, m.itemPedidoId));
   if (!item) return;
+
+  // X2: compra repetida em menos de 3 meses? Propõe repetir antes de buscar e cotar.
+  if (m.evento === "iniciar_busca") {
+    const r = await acharRecompra(item);
+    if (r) {
+      const [p] = await db.select({ compradorId: pedido.compradorId }).from(pedido).where(eq(pedido.id, item.pedidoId));
+      await avancarItem(m.itemPedidoId, "propor_recompra", {
+        agente: "Busca",
+        acao: `Achou compra recente do mesmo item com ${r.fornecedorNome}.`,
+        motivo: "Compra repetida em menos de 3 meses: propõe repetir antes de cotar de novo.",
+        fornecedorIds: [r.fornecedorId],
+        dados: r,
+      });
+      if (p) {
+        await enviar(p.compradorId, textoRecompra(item.pedidoId, item, r), {
+          pedidoId: item.pedidoId,
+          itemPedidoId: item.id,
+          tipo: "aviso",
+          botoes: [
+            { rotulo: `Repetir com ${r.fornecedorNome}`, dado: `item:${item.id}:repetir` },
+            { rotulo: "Cotar de novo", dado: `item:${item.id}:cotar_novo` },
+          ],
+        });
+      }
+      return;
+    }
+  }
 
   // Busca real na internet: preço de referência com fonte. Falha aqui não trava o pedido.
   try {

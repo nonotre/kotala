@@ -154,7 +154,7 @@ export async function avancarItem(
  * ou chega a um estado final. Assim o comprador decide um item enquanto o
  * seguinte já está sendo cotado.
  */
-const LIBERA_FILA: readonly EstadoItem[] = ["aguardando_decisao", ...FINAIS_ITEM];
+const LIBERA_FILA: readonly EstadoItem[] = ["aguardando_decisao", "aguardando_recompra", ...FINAIS_ITEM];
 const OCUPA_FILA: readonly EstadoItem[] = ["buscando", "cotando", "comparando"];
 
 async function iniciarProximoDaFila(pedidoId: number) {

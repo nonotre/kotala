@@ -26,6 +26,7 @@ export type EventoPedido = (typeof EVENTOS_PEDIDO)[number];
 export const ESTADOS_ITEM = [
   "na_fila", // espera o item anterior terminar
   "buscando", // R3
+  "aguardando_recompra", // X2: compra repetida recente; o comprador escolhe repetir ou cotar de novo
   "cotando", // R4 enviou; esperando respostas até o prazo (Q4)
   "comparando", // R7, R8, R9 montando o mapa
   "aguardando_decisao", // mapa pronto; o comprador decide (a IA nunca fecha a compra)
@@ -49,6 +50,10 @@ export const EVENTOS_ITEM = [
   "voltar_busca", // N6: volta para buscar mais fornecedores
   "negociar", // X3: nova rodada só com os fornecedores escolhidos para negociar
   "reavaliar", // refaz o mapa (preço confirmado, fornecedor tirado do mapa)
+  "propor_recompra", // X2: achou compra recente do mesmo item
+  "repetir_compra", // X2: o comprador quer repetir com o mesmo fornecedor
+  "cotar_de_novo", // X2: o comprador prefere cotar
+  "recompra_recusada", // X2: o fornecedor não mantém o preço; volta à busca
   "pedido_enviado",
   "fornecedor_confirmou",
   "fornecedor_desistiu", // volta ao mapa, sem o desistente
@@ -83,6 +88,10 @@ export const TRANSICOES_ITEM: readonly Transicao<EstadoItem, EventoItem>[] = [
   { de: ["aguardando_decisao", "comparando"], evento: "voltar_busca", para: "buscando" },
   { de: ["aguardando_decisao"], evento: "negociar", para: "cotando" },
   { de: ["aguardando_decisao"], evento: "reavaliar", para: "comparando" },
+  { de: ["buscando"], evento: "propor_recompra", para: "aguardando_recompra" },
+  { de: ["aguardando_recompra"], evento: "repetir_compra", para: "aprovado" },
+  { de: ["aguardando_recompra"], evento: "cotar_de_novo", para: "buscando" },
+  { de: ["pedido_enviado"], evento: "recompra_recusada", para: "buscando" },
   { de: ["aprovado"], evento: "pedido_enviado", para: "pedido_enviado" },
   { de: ["pedido_enviado"], evento: "fornecedor_confirmou", para: "confirmado" },
   { de: ["pedido_enviado"], evento: "fornecedor_desistiu", para: "comparando" },
@@ -111,6 +120,7 @@ export type Coluna = (typeof COLUNAS)[number];
 export const COLUNA_DO_ITEM: Record<EstadoItem, Coluna> = {
   na_fila: "Solicitado",
   buscando: "Cotando",
+  aguardando_recompra: "Comparando",
   cotando: "Cotando",
   comparando: "Comparando",
   aguardando_decisao: "Comparando",

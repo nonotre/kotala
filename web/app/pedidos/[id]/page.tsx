@@ -14,6 +14,7 @@ export const dynamic = "force-dynamic";
 const ESTADO_ITEM: Record<string, string> = {
   na_fila: "Na fila",
   buscando: "Buscando fornecedores",
+  aguardando_recompra: "Compra repetida: repetir ou cotar de novo?",
   cotando: "Esperando propostas",
   comparando: "Montando o mapa",
   aguardando_decisao: "Aguardando sua decisão",
@@ -78,7 +79,7 @@ export default async function Pedido({ params }: { params: Promise<{ id: string 
         ) : null}
       </Tile>
 
-      {d.itens.map(({ item, mapa, cotacoes, referencias, verificacoes }) => {
+      {d.itens.map(({ item, recompra, mapa, cotacoes, referencias, verificacoes }) => {
         const c = mapa?.comparacao;
         const aguardando = item.estado === "aguardando_decisao";
         return (
@@ -92,6 +93,36 @@ export default async function Pedido({ params }: { params: Promise<{ id: string 
               {item.prazoRespostasEm && item.estado === "cotando" ? ` · respostas até ${hora(item.prazoRespostasEm)}` : ""}
               {item.aceitaSimilar ? " · aceita equivalente" : ""}
             </p>
+
+            {recompra ? (
+              <Tile className={estilos.bloco}>
+                <h3>Você comprou este item há pouco tempo</h3>
+                <p>
+                  Última compra: <strong>{recompra.fornecedorNome}</strong> {recompra.simulado ? <Tag size="sm" type="gray">simulado</Tag> : null}, em {dataHora(recompra.data)}, a {brl(recompra.precoUnitario)} por {item.unidade}
+                  {recompra.frete !== null ? `, frete ${brl(recompra.frete)}` : ""}.
+                </p>
+                {recompra.prazoPrometidoDias !== null ? (
+                  <p className={estilos.ajuda}>
+                    Prazo combinado: {dias(recompra.prazoPrometidoDias)}
+                    {recompra.prazoCumprido === true ? ", cumprido" : ""}. {recompra.comprasNoPeriodo > 1 ? `Comprou ${recompra.comprasNoPeriodo} vezes com ele nos últimos 90 dias.` : ""}
+                  </p>
+                ) : null}
+                <p className={estilos.ajuda}>Compras repetidas em menos de 3 meses quase não mudam de preço. A decisão é sua.</p>
+                <div className={estilos.acoes}>
+                  <BotaoAcao
+                    dado={`item:${item.id}:repetir_ok`}
+                    rotulo={`Repetir com ${recompra.fornecedorNome}`}
+                    kind="primary"
+                    confirmar={{
+                      titulo: "Repetir a compra?",
+                      texto: `${quantidade(item.quantidade, item.unidade)} de ${item.descricao} com ${recompra.fornecedorNome}${recompra.simulado ? " (simulado)" : ""}, a ${brl(recompra.precoUnitario)} por ${item.unidade}. O pedido de compra vai para o fornecedor, que confirma se mantém o preço.`,
+                      botao: "Sim, repetir",
+                    }}
+                  />
+                  <BotaoAcao dado={`item:${item.id}:cotar_novo`} rotulo="Cotar de novo" kind="tertiary" />
+                </div>
+              </Tile>
+            ) : null}
 
             {cotacoes.length ? (
               <Tile className={estilos.bloco}>

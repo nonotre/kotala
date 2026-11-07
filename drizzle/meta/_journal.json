@@ -71,6 +71,13 @@
       "when": 1794074234357,
       "tag": "0009_negociacao",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794076420646,
+      "tag": "0010_recompra",
+      "breakpoints": true
     }
   ]
 }

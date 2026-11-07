@@ -2,6 +2,7 @@
 // aprovar sem querer), o pedido de compra vai ao vencedor, os demais são
 // avisados e a confirmação do fornecedor fecha o item. A IA não fecha compra.
 
+import { acharRecompra } from "../agentes/memoria/index.ts";
 import { MAX_RODADAS, planejarNegociacao } from "../agentes/negociador/index.ts";
 import { dias, quantidade } from "../texto.ts";
 import { and, eq, ne } from "drizzle-orm";
@@ -41,7 +42,7 @@ const nomeComSelo = (l: Linha) => `${l.oferta.fornecedorNome}${l.oferta.simulado
 // ---------- Botões do comprador: item:<id>:<acao>[:<ofertaId>] ----------
 
 export async function aoBotaoDoComprador(contato: Contato, dado: string): Promise<boolean> {
-  const m = /^item:(\d+):(aprovar|confirmar|outras|reprovar|buscar|voltar|motivos|negociar|excluir|cancelar)(?::([0-9a-f-]{36}))?$/.exec(dado);
+  const m = /^item:(\d+):(aprovar|confirmar|outras|reprovar|buscar|voltar|motivos|negociar|excluir|cancelar|repetir|repetir_ok|cotar_novo)(?::([0-9a-f-]{36}))?$/.exec(dado);
   if (!m) return false;
   const itemPedidoId = Number(m[1]);
   const acao = m[2]!;
@@ -49,6 +50,57 @@ export async function aoBotaoDoComprador(contato: Contato, dado: string): Promis
   const d = await dados(itemPedidoId);
   if (!d || d.pedido.compradorId !== contato.id) return true;
   const ctx = { pedidoId: d.pedido.id, itemPedidoId };
+  // X2: repetir ou cotar de novo só valem quando o item espera essa escolha.
+  if (acao === "repetir" || acao === "repetir_ok" || acao === "cotar_novo") {
+    if (d.item.estado !== "aguardando_recompra") {
+      await enviar(contato.id, `Pedido ${d.pedido.id}: este item não está esperando essa escolha agora.`, ctx);
+      return true;
+    }
+    if (acao === "cotar_novo") {
+      await avancarItem(itemPedidoId, "cotar_de_novo", { agente: "Comprador", acao: "Preferiu cotar de novo.", motivo: "Decisão do comprador." }).catch(ignorarCorrida);
+      return true;
+    }
+    const r = await acharRecompra(d.item);
+    // Dois toques também na recompra: o primeiro pede confirmação.
+    if (r && acao === "repetir") {
+      await enviar(
+        contato.id,
+        `Confirma repetir a compra de ${quantidade(d.item.quantidade, d.item.unidade)} de ${d.item.descricao} com ${r.fornecedorNome}${r.simulado ? " (simulado)" : ""}, a ${formatarBRL(r.precoUnitario)} por ${d.item.unidade}? O fornecedor confirma se mantém o preço.`,
+        { ...ctx, botoes: [{ rotulo: "Sim, repetir", dado: `item:${itemPedidoId}:repetir_ok` }, { rotulo: "Cotar de novo", dado: `item:${itemPedidoId}:cotar_novo` }] },
+      );
+      return true;
+    }
+    if (!r) {
+      await enviar(contato.id, `Pedido ${d.pedido.id}: o fornecedor da última compra não está mais disponível. Vou cotar de novo.`, ctx);
+      await avancarItem(itemPedidoId, "cotar_de_novo", { agente: "Acompanhamento do pedido", motivo: "Fornecedor da recompra indisponível." }).catch(ignorarCorrida);
+      return true;
+    }
+    const [o] = await db
+      .insert(oferta)
+      .values({
+        itemPedidoId,
+        fornecedorId: r.fornecedorId,
+        rodada: d.item.rodada,
+        itemOferecido: d.item.descricao,
+        itemExato: true,
+        precoUnitario: r.precoUnitario.toFixed(2),
+        totalProduto: (r.precoUnitario * Number(d.item.quantidade)).toFixed(2),
+        frete: r.frete?.toFixed(2) ?? null,
+        origemFrete: r.frete !== null ? "informado" : null,
+        prazoDias: r.prazoPrometidoDias,
+        formato: "historico",
+        extraido: { recompraDe: r.historicoId },
+      })
+      .returning();
+    await avancarItem(
+      itemPedidoId,
+      "repetir_compra",
+      { agente: "Comprador", acao: `Repetiu a compra com ${r.fornecedorNome}.`, motivo: "Compra repetida em menos de 3 meses, pelo preço da última.", fornecedorIds: [r.fornecedorId] },
+      { fornecedorEscolhidoId: r.fornecedorId, ofertaEscolhidaId: o!.id },
+    ).catch(ignorarCorrida);
+    return true;
+  }
+
   const aguardando = d.item.estado === "aguardando_decisao";
 
   if (!aguardando && acao !== "voltar") {
@@ -179,6 +231,7 @@ async function enviarPedidoDeCompra(m: MudancaItem) {
     `Pedido de compra da ${EMPRESA.nome} (CNPJ ${EMPRESA.cnpj}), referente à cotação ${d.item.id}:`,
     `${quantidade(d.item.quantidade, d.item.unidade)} de ${o.itemOferecido}`,
     l ? `Total ${formatarBRL(l.custo!)}, como na sua proposta.` : "",
+    o.formato === "historico" && o.precoUnitario ? `Mesmo preço da última compra: ${formatarBRL(Number(o.precoUnitario))} por ${d.item.unidade}${o.frete ? `, frete ${formatarBRL(Number(o.frete))}` : ""}.` : "",
     d.pedido.modoEntrega === "retirada" ? "Retirada na loja." : `Entrega: ${d.pedido.destino ?? "a combinar"}${d.pedido.janelaRecebimento ? ` (${d.pedido.janelaRecebimento})` : ""}.`,
     o.prazoDias !== null ? `Prazo: ${dias(o.prazoDias)}.` : "",
     "Pode confirmar o fornecimento?",
@@ -257,8 +310,15 @@ export async function aoRespostaDoVencedor(contato: Contato, itemPedidoId: numbe
       .set({ situacao: "desistiu" })
       .where(and(eq(cotacao.itemPedidoId, itemPedidoId), eq(cotacao.fornecedorId, contato.fornecedorId), eq(cotacao.rodada, d.item.rodada)));
     await enviar(contato.id, "Entendido, obrigado por avisar.", ctx);
-    await enviar(d.pedido.compradorId, `Pedido ${d.pedido.id}: ${nome} não consegue atender. Refaço o mapa sem ele.`, { ...ctx, tipo: "aviso" });
-    await avancarItem(itemPedidoId, "fornecedor_desistiu", { agente: "Fornecedor", motivo: "Não consegue atender o pedido.", fornecedorIds: [contato.fornecedorId] }).catch(ignorarCorrida);
+    const [escolhida] = d.item.ofertaEscolhidaId ? await db.select({ formato: oferta.formato }).from(oferta).where(eq(oferta.id, d.item.ofertaEscolhidaId)) : [];
+    if (escolhida?.formato === "historico") {
+      // Recompra recusada: não há mapa a refazer, então volta à busca e cota de novo.
+      await enviar(d.pedido.compradorId, `Pedido ${d.pedido.id}: ${nome} não mantém o preço da última compra. Vou cotar de novo.`, { ...ctx, tipo: "aviso" });
+      await avancarItem(itemPedidoId, "recompra_recusada", { agente: "Fornecedor", motivo: "Não mantém o preço da última compra.", fornecedorIds: [contato.fornecedorId] }, { fornecedorEscolhidoId: null, ofertaEscolhidaId: null }).catch(ignorarCorrida);
+    } else {
+      await enviar(d.pedido.compradorId, `Pedido ${d.pedido.id}: ${nome} não consegue atender. Refaço o mapa sem ele.`, { ...ctx, tipo: "aviso" });
+      await avancarItem(itemPedidoId, "fornecedor_desistiu", { agente: "Fornecedor", motivo: "Não consegue atender o pedido.", fornecedorIds: [contato.fornecedorId] }).catch(ignorarCorrida);
+    }
   }
   return true;
 }
