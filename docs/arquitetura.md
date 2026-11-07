@@ -220,6 +220,7 @@ Veio preço, é proposta: a regra está em código (`limpar` no Extrator), entã
 | Fornecedores | `/fornecedores` | Confiança de cada fornecedor (Q8) com os motivos e alertas |
 | Economia (X4) | `/economia` | Compras confirmadas, comparação com a referência pública e com a proposta mais cara, tempo até a confirmação e trabalho feito (cotações, mensagens, chamadas de IA), sempre dizendo contra o que compara |
 | Conversar (E3) | `/chat` | Chat web com o mesmo assistente do Telegram |
+| Convite (Q5) | `/convite` | QR para a banca virar fornecedor pelo celular (link do bot do fornecedor, perguntado ao Telegram no servidor) |
 
 Como as telas conversam com o resto:
 

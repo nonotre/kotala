@@ -1,0 +1,27 @@
+@use '@carbon/react/scss/spacing' as s;
+@use '@carbon/react/scss/theme' as t;
+@use '@carbon/react/scss/type';
+
+.cartao {
+  max-inline-size: 28rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: s.$spacing-04;
+  padding: s.$spacing-07;
+}
+.codigo {
+  inline-size: min(20rem, 80vw);
+  background: #fff; // o QR precisa de fundo branco para a câmera ler, também no tema escuro
+  padding: s.$spacing-03;
+  svg {
+    display: block;
+    inline-size: 100%;
+    block-size: auto;
+  }
+}
+.link {
+  @include type.type-style('heading-03');
+  overflow-wrap: anywhere;
+  text-align: center;
+}

@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/fornecedores", rotulo: "Fornecedores" },
   { href: "/economia", rotulo: "Economia" },
   { href: "/chat", rotulo: "Conversar" },
+  { href: "/convite", rotulo: "Convite" },
 ];
 
 export function Casca() {
