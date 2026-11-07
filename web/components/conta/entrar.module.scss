@@ -1,0 +1,143 @@
+// Tela de entrada: formulário curto de um lado, zona escura com a promessa do outro. Só tokens do Carbon.
+@use '@carbon/react/scss/theme';
+@use '@carbon/react/scss/spacing';
+@use '@carbon/react/scss/type';
+@use '@carbon/react/scss/breakpoint';
+
+.tela {
+  display: flex;
+  flex-direction: column;
+}
+
+.formulario {
+  display: flex;
+  justify-content: center;
+  padding: spacing.$spacing-07 spacing.$spacing-05 spacing.$spacing-09;
+
+  @include breakpoint.breakpoint(lg) {
+    align-items: center;
+    margin-inline-start: 50%;
+    min-block-size: calc(100vh - #{spacing.$spacing-10}); /* stylelint-disable-line carbon/layout-use */
+    padding-block: spacing.$spacing-05 spacing.$spacing-10;
+  }
+}
+
+.miolo {
+  inline-size: 100%;
+  max-inline-size: calc(#{spacing.$spacing-13} * 2 + #{spacing.$spacing-11}); /* stylelint-disable-line carbon/layout-use */
+}
+
+.topo {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+}
+
+.titulo {
+  @include type.type-style('heading-05');
+
+  color: theme.$text-primary;
+}
+
+.frase {
+  @include type.type-style('body-01');
+
+  color: theme.$text-secondary;
+}
+
+.aviso.aviso {
+  max-inline-size: none;
+}
+
+.acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: spacing.$spacing-03;
+}
+
+// Mesma altura do botão, para nada pular quando ele sai.
+.entrando {
+  display: flex;
+  align-items: center;
+  min-block-size: spacing.$spacing-09;
+  min-inline-size: spacing.$spacing-12;
+}
+
+// ---------- Painel ----------
+.painel {
+  padding: spacing.$spacing-07 spacing.$spacing-05 spacing.$spacing-09;
+  // Um degrau acima do fundo: no tema escuro, o formulário também é escuro e os dois lados precisam se separar.
+  background: theme.$layer-01;
+  color: theme.$text-primary;
+
+  @include breakpoint.breakpoint(lg) {
+    position: fixed;
+    inset-block: 0;
+    inset-inline-start: 0;
+    display: flex;
+    align-items: center;
+    inline-size: 50%;
+    padding: spacing.$spacing-10;
+    overflow-y: auto;
+  }
+}
+
+.painelMiolo {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-05;
+  max-inline-size: calc(#{spacing.$spacing-13} * 4); /* stylelint-disable-line carbon/layout-use */
+}
+
+.logo {
+  display: block;
+  align-self: flex-start;
+  block-size: spacing.$spacing-08;
+  inline-size: auto;
+}
+
+.promessa {
+  @include type.type-style('heading-04');
+
+  color: theme.$text-primary;
+
+  @include breakpoint.breakpoint(lg) {
+    @include type.type-style('heading-06');
+  }
+}
+
+.passos {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-05;
+  margin-block-start: spacing.$spacing-05;
+
+  @include breakpoint.breakpoint(lg) {
+    gap: spacing.$spacing-06;
+    margin-block-start: spacing.$spacing-07;
+  }
+}
+
+.passo {
+  display: flex;
+  gap: spacing.$spacing-05;
+}
+
+.passoIcone {
+  flex: none;
+  fill: theme.$icon-secondary;
+}
+
+.passoTitulo {
+  @include type.type-style('heading-compact-02');
+
+  color: theme.$text-primary;
+}
+
+.passoTexto {
+  @include type.type-style('body-compact-01');
+
+  margin-block-start: spacing.$spacing-02;
+  color: theme.$text-secondary;
+}

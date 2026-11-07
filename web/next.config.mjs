@@ -23,6 +23,8 @@ const config = {
   turbopack: { root: raiz },
   outputFileTracingRoot: raiz,
   serverExternalPackages: ["postgres"],
+  // O chat registra custom elements e mexe em window: estes pacotes precisam passar pelo compilador do Next.
+  transpilePackages: ["@carbon/ai-chat", "@carbon/ai-chat-components"],
   sassOptions: { quietDeps: true },
 };
 

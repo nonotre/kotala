@@ -1,0 +1,289 @@
+// Configurações: visão geral, endereços e empresas. Só tokens do Carbon.
+@use '@carbon/react/scss/theme';
+@use '@carbon/react/scss/spacing';
+@use '@carbon/react/scss/type';
+@use '@carbon/react/scss/breakpoint';
+
+// ---------- Texto ----------
+.apoioLinha {
+  @include type.type-style('label-01');
+
+  display: block;
+  color: theme.$text-secondary;
+}
+
+// ---------- Campos: rótulo em cima, valor embaixo ----------
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-02;
+  min-inline-size: 0;
+}
+
+.campoRotulo {
+  @include type.type-style('label-01');
+
+  color: theme.$text-secondary;
+}
+
+.campoValor {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-primary;
+}
+
+.campos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: spacing.$spacing-05;
+}
+
+.campoLargo {
+  grid-column: 1 / -1;
+}
+
+// Quatro colunas alinhadas de ponta a ponta. No celular, uma embaixo da outra.
+.camposQuatro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: spacing.$spacing-05;
+
+  @include breakpoint.breakpoint(md) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @include breakpoint.breakpoint(lg) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+// Faturamento numa linha só: o endereço é o campo mais longo.
+.camposFatura {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: spacing.$spacing-05;
+
+  @include breakpoint.breakpoint(md) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @include breakpoint.breakpoint(lg) {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 4fr) minmax(0, 2fr) minmax(0, 3fr);
+  }
+}
+
+// ---------- Visão geral ----------
+.destaque {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: spacing.$spacing-03 spacing.$spacing-05;
+}
+
+.destaqueNome {
+  @include type.type-style('heading-compact-02');
+
+  color: theme.$text-primary;
+  scroll-margin-block: spacing.$spacing-11; // o foco não para atrás do cabeçalho
+}
+
+// Dois blocos lado a lado, com a mesma altura.
+.gradeIgual > * > section {
+  block-size: 100%;
+}
+
+// ---------- Locais ----------
+.avisoLargo.avisoLargo {
+  max-inline-size: none;
+  overflow-wrap: anywhere; // nome longo, sem espaço, não estica a página
+}
+
+.locais {
+  display: flex;
+  flex-direction: column;
+}
+
+.local {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: spacing.$spacing-05;
+  padding-block: spacing.$spacing-05;
+  border-block-start: 1px solid theme.$border-subtle;
+
+  @include breakpoint.breakpoint(md) {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  // Colunas fixas: todas as linhas alinham, com ou sem ação.
+  @include breakpoint.breakpoint(xlg) {
+    grid-template-columns: minmax(0, 4fr) minmax(0, 10fr) minmax(0, 3fr);
+    align-items: start;
+  }
+
+  &:last-child {
+    padding-block-end: 0;
+  }
+}
+
+.localNome {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-02;
+  min-inline-size: 0;
+}
+
+.localTitulo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: spacing.$spacing-02 spacing.$spacing-04;
+  margin-block-end: spacing.$spacing-02;
+}
+
+.localApelido {
+  @include type.type-style('heading-compact-02');
+
+  color: theme.$text-primary;
+  scroll-margin-block: spacing.$spacing-11; // o foco não para atrás do cabeçalho nem da barra do pé
+}
+
+.localEndereco {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-secondary;
+}
+
+.camposLocal {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr);
+  gap: spacing.$spacing-05;
+
+  @include breakpoint.breakpoint(md) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @include breakpoint.breakpoint(xlg) {
+    grid-row: 1;
+    grid-column: 2;
+  }
+}
+
+// No celular, desce e ocupa a linha, para o nome e o endereço não apertarem.
+.localAcoes {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: spacing.$spacing-02;
+  margin-inline-start: calc(-1 * #{spacing.$spacing-05});
+  min-block-size: spacing.$spacing-07;
+
+  @include breakpoint.breakpoint(md) {
+    grid-row: 1;
+    grid-column: 2;
+    align-self: start;
+    margin-inline-start: 0;
+  }
+
+  @include breakpoint.breakpoint(xlg) {
+    grid-column: 3;
+  }
+}
+
+// No celular, o texto do botão alinha com o resto da linha, e o menu fica na outra ponta.
+.tornarPadrao {
+  margin-inline-end: auto;
+
+  @include breakpoint.breakpoint(md) {
+    margin-inline-end: 0;
+  }
+}
+
+// Mesma largura do menu de três pontos: "Tornar padrão" fica na mesma vertical em todas as linhas.
+.marcaPadrao {
+  display: inline-flex;
+  margin-inline-end: auto;
+  padding-inline-start: spacing.$spacing-05;
+
+  @include breakpoint.breakpoint(md) {
+    margin-inline-end: 0;
+    padding-inline-start: 0;
+  }
+}
+
+// A partir de lg, a ação mora no cabeçalho; abaixo, na barra do pé.
+.acaoTopo {
+  display: inline-flex;
+
+  @include breakpoint.breakpoint-down(lg) {
+    display: none;
+  }
+}
+
+// ---------- Empresas ----------
+.empresas > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: spacing.$spacing-03;
+
+  @include breakpoint.breakpoint(md) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.empresa {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-02;
+}
+
+.empresaNome {
+  @include type.type-style('heading-compact-02');
+
+  color: theme.$text-primary;
+}
+
+.empresaContagem {
+  @include type.type-style('body-compact-01');
+
+  margin-block-start: spacing.$spacing-03;
+  color: theme.$text-primary;
+}
+
+.tabelaUsuarios td {
+  padding-block: spacing.$spacing-03;
+}
+
+.pessoa {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: spacing.$spacing-01;
+}
+
+.pessoaNome {
+  @include type.type-style('heading-compact-01');
+
+  color: theme.$text-primary;
+  overflow-wrap: anywhere;
+}
+
+.voce {
+  @include type.type-style('body-compact-01');
+
+  margin-inline-start: spacing.$spacing-03;
+  color: theme.$text-secondary;
+}
+
+// ---------- Demonstração ----------
+.lado {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: spacing.$spacing-03 spacing.$spacing-05;
+}
+
+.recomecar {
+  display: flex;
+  justify-content: flex-end;
+}
