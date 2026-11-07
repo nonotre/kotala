@@ -1,0 +1,382 @@
+// Abas do pedido: cabeçalho, faixa do que falta agora, seções por item e mapa. Só tokens do Carbon.
+@use '@carbon/react/scss/theme';
+@use '@carbon/react/scss/spacing';
+@use '@carbon/react/scss/type';
+@use '@carbon/react/scss/breakpoint';
+
+// ---------- Cabeçalho ----------
+// A partir de xlg, cada etapa cabe com o texto de apoio em uma linha.
+.progresso {
+  inline-size: 100%;
+
+  @include breakpoint.breakpoint(xlg) {
+    inline-size: calc(#{spacing.$spacing-13} * 3 + #{spacing.$spacing-12}); /* stylelint-disable-line carbon/layout-use */
+  }
+}
+
+.urgencia {
+  color: theme.$text-error;
+}
+
+// ---------- Faixa do que falta agora ----------
+// Presa abaixo do Header a partir de lg. Abaixo, fica no fluxo e o botão vai para a barra do pé.
+.faixa {
+  display: flex;
+  align-items: center;
+  gap: spacing.$spacing-03 spacing.$spacing-05;
+  min-block-size: spacing.$spacing-09;
+  padding: spacing.$spacing-02 spacing.$spacing-05;
+  background: theme.$layer-accent-01;
+  color: theme.$text-primary;
+  border-block-end: 1px solid theme.$border-subtle-01;
+
+  @include breakpoint.breakpoint(lg) {
+    position: sticky;
+    z-index: 150;
+    inset-block-start: spacing.$spacing-09;
+  }
+}
+
+// Âncora (#item-N) e foco de teclado param abaixo da faixa presa.
+:global(html):has(.faixa) {
+  @include breakpoint.breakpoint(lg) {
+    scroll-padding-block-start: calc(#{spacing.$spacing-09} * 2 + #{spacing.$spacing-05}); /* stylelint-disable-line carbon/layout-use */
+  }
+}
+
+.faixaIcone {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: spacing.$spacing-06;
+}
+
+.faixaTexto {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
+}
+
+.faixaRotulo {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-secondary;
+}
+
+.faixaFrase {
+  @include type.type-style('heading-compact-01');
+}
+
+.faixaBotao {
+  flex: none;
+
+  @include breakpoint.breakpoint-down(lg) {
+    display: none;
+  }
+}
+
+// ---------- Item ----------
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-05;
+}
+
+.itemTopo {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-02;
+  padding-inline: spacing.$spacing-05;
+}
+
+.itemTitulo {
+  @include type.type-style('heading-03');
+
+  color: theme.$text-primary;
+}
+
+.itemContexto {
+  @include type.type-style('body-compact-01');
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: spacing.$spacing-02 spacing.$spacing-05;
+  color: theme.$text-secondary;
+}
+
+.indice {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+  padding: spacing.$spacing-05;
+  background: theme.$layer-01;
+}
+
+.indiceRotulo {
+  @include type.type-style('label-01');
+
+  color: theme.$text-secondary;
+}
+
+.indiceLista {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+}
+
+.indiceItem {
+  @include type.type-style('body-compact-01');
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: spacing.$spacing-02 spacing.$spacing-05;
+}
+
+// Duas colunas a partir de lg: conteúdo em 11 e painel em 5, como na grade.
+.divisao {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: spacing.$spacing-05;
+  align-items: start;
+
+  @include breakpoint.breakpoint(lg) {
+    grid-template-columns: minmax(0, 11fr) minmax(0, 5fr);
+  }
+}
+
+.inteira {
+  grid-column: 1 / -1;
+
+  &:empty {
+    display: none;
+  }
+}
+
+// Painel lateral preso ao rolar, abaixo do Header e da faixa.
+.painelPreso {
+  @include breakpoint.breakpoint(lg) {
+    position: sticky;
+    inset-block-start: calc(#{spacing.$spacing-09} * 2 + #{spacing.$spacing-05}); /* stylelint-disable-line carbon/layout-use */
+  }
+}
+
+.pilha {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-05;
+}
+
+// ---------- Texto ----------
+.original {
+  @include type.type-style('body-02');
+
+  margin: 0;
+  padding-inline-start: spacing.$spacing-04;
+  border-inline-start: spacing.$spacing-02 solid theme.$border-subtle-01;
+  color: theme.$text-primary;
+  white-space: pre-wrap;
+}
+
+.texto {
+  @include type.type-style('body-01');
+
+  color: theme.$text-primary;
+}
+
+.ajuda {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-secondary;
+}
+
+.ajudaCelula {
+  @include type.type-style('label-01');
+
+  display: block;
+  color: theme.$text-secondary;
+}
+
+.grupo {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+}
+
+.grupoTopo {
+  display: flex;
+  align-items: center;
+  gap: spacing.$spacing-03;
+}
+
+.grupoTitulo {
+  @include type.type-style('heading-compact-01');
+
+  color: theme.$text-primary;
+}
+
+.lista {
+  @include type.type-style('body-compact-01');
+
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-02;
+  padding-inline-start: spacing.$spacing-05;
+  list-style: disc;
+  color: theme.$text-primary;
+}
+
+.campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(#{spacing.$spacing-12} + #{spacing.$spacing-09}), 1fr));
+  gap: spacing.$spacing-05;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-02;
+  min-inline-size: 0;
+}
+
+.campoRotulo {
+  @include type.type-style('label-01');
+
+  color: theme.$text-secondary;
+}
+
+.campoValor {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-primary;
+}
+
+.acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: spacing.$spacing-03;
+}
+
+.acoesPilha {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: spacing.$spacing-03;
+}
+
+.marcas {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: spacing.$spacing-02 spacing.$spacing-04;
+}
+
+.celulaPilha {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: spacing.$spacing-02;
+}
+
+.numero {
+  font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
+}
+
+// Com texto em duas linhas, o ícone não encolhe.
+.alerta {
+  display: inline-flex;
+
+  svg {
+    flex: none;
+  }
+}
+
+.melhor {
+  @include type.type-style('label-01');
+
+  display: flex;
+  align-items: center;
+  gap: spacing.$spacing-02;
+  color: theme.$text-secondary;
+
+  svg {
+    fill: theme.$support-success;
+  }
+}
+
+.somenteLeitor {
+  position: absolute;
+  overflow: hidden;
+  clip-path: inset(50%);
+  inline-size: 1px;
+  block-size: 1px;
+  white-space: nowrap;
+}
+
+// ---------- Mapa ----------
+.mapaRolagem {
+  max-inline-size: 100%;
+  overflow-x: auto;
+}
+
+.mapa {
+  min-inline-size: calc(#{spacing.$spacing-13} * 3);
+}
+
+.criterio {
+  @include type.type-style('heading-compact-01');
+
+  white-space: nowrap;
+}
+
+.custo {
+  @include type.type-style('heading-03');
+
+  display: block;
+  font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
+}
+
+// A coluna recomendada: fundo um degrau abaixo e filete neutro. Azul é só para o que se clica.
+.colunaRecomendada.colunaRecomendada {
+  background: theme.$layer-02;
+  border-inline-start: spacing.$spacing-01 solid theme.$border-strong-01;
+}
+
+.rotuloRecomendada {
+  @include type.type-style('label-01');
+
+  display: block;
+  color: theme.$text-secondary;
+}
+
+// ---------- Recomendação ----------
+.recomendacao {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+}
+
+.recomendacaoRotulo {
+  @include type.type-style('label-01');
+
+  color: theme.$text-secondary;
+}
+
+.recomendacaoFrase {
+  @include type.type-style('heading-02');
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: spacing.$spacing-02 spacing.$spacing-03;
+  color: theme.$text-primary;
+}
+
+.custoGrande {
+  @include type.type-style('heading-05');
+
+  color: theme.$text-primary;
+  font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
+}
