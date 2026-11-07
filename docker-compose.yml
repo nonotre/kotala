@@ -1,0 +1,19 @@
+# Postgres com pgvector (para RAG, se entrar). Credenciais vêm do .env.
+services:
+  banco:
+    image: pgvector/pgvector:0.8.7-pg18-trixie
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?defina no .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina no .env}
+      POSTGRES_DB: ${POSTGRES_DB:-kotala}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORTA:-5433}:5432"
+    volumes:
+      - banco:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      retries: 10
+volumes:
+  banco:

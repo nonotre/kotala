@@ -1,0 +1,31 @@
+{
+  "name": "kotala",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "db:subir": "docker compose up -d banco",
+    "db:gerar": "drizzle-kit generate",
+    "db:migrar": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "tipos": "tsc --noEmit",
+    "teste": "node --test --env-file-if-exists=.env \"testes/**/*.test.ts\"",
+    "checar": "npm run tipos && npm run teste",
+    "ia:testar": "node --env-file=.env scripts/testar-ia.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/google": "^4.0.113",
+    "ai": "^7.0.164",
+    "drizzle-orm": "^0.45.4",
+    "postgres": "^4.1.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "drizzle-kit": "^0.31.11",
+    "typescript": "^7.0.2"
+  }
+}
