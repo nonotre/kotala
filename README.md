@@ -2,7 +2,7 @@
 
 Agentes de IA para cotação de compras de material de obra.
 
-Como tudo funciona, passo a passo: [docs/arquitetura.md](docs/arquitetura.md). Decisões: [docs/decisoes.md](docs/decisoes.md). Trabalho em paralelo com worktrees: [docs/frentes.md](docs/frentes.md). Pitch e demonstração: [docs/pitch.md](docs/pitch.md).
+Como tudo funciona, passo a passo: [docs/arquitetura.md](docs/arquitetura.md). Decisões: [docs/decisoes.md](docs/decisoes.md). Trabalho em paralelo com worktrees: [docs/frentes.md](docs/frentes.md). Pitch e demonstração: [docs/pitch.md](docs/pitch.md). Estado dos módulos e erros conhecidos: [docs/status.md](docs/status.md).
 
 ## Rodar
 
