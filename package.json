@@ -24,7 +24,8 @@
     "telas": "cd web && npm run build && npm start",
     "telas:tipos": "cd web && npx tsc --noEmit",
     "convidar": "node --env-file=.env scripts/convidar.ts",
-    "anexo:testar": "node --env-file=.env scripts/testar-anexo.ts"
+    "anexo:testar": "node --env-file=.env scripts/testar-anexo.ts",
+    "seguranca:testar": "node --env-file=.env scripts/testar-seguranca.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.113",

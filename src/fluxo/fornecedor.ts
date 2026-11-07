@@ -294,6 +294,9 @@ async function processarResposta(
         ...ctx,
         fornecedorIds: [c.fornecedorId],
       });
+      if (e.pedidoContato) {
+        await enviar(l.pedido.compradorId, `Pedido ${l.pedido.id}: a proposta chegou, e o fornecedor também pediu para falar com uma pessoa.`, { ...ctx, tipo: "aviso" });
+      }
       await enviar(
         contatoId,
         `Recebi sua proposta para a cotação ${l.item.id}. Obrigado!${faltam.length ? ` Se puder, me diga também: ${faltam.join(", ")}.` : ""} Aviso se for escolhida.`,
@@ -316,9 +319,57 @@ async function processarResposta(
       await enviar(contatoId, "Obrigado por avisar!", ctx);
       await encerrarSeTodosResponderam(l.item.id);
       return;
+    case "responsavel":
+    case "suspeita":
+    case "ofensa":
+    case "fora_do_assunto":
+      await situacaoDelicada(e.classificacao, c.fornecedorId, contatoId, entrada.texto, l, ctx);
+      return;
     default:
       await enviar(contatoId, "Não encontrei preço na sua mensagem. Pode mandar o preço unitário, o frete e o prazo de entrega?", ctx);
   }
+}
+
+/**
+ * Q7: situações que a área de compras listou no chat com fornecedor. Resposta
+ * segura, sem revidar e sem sair da cotação; o comprador é avisado quando precisa.
+ * A cotação continua aberta.
+ */
+async function situacaoDelicada(
+  tipo: "responsavel" | "suspeita" | "ofensa" | "fora_do_assunto",
+  fornecedorId: string,
+  contatoId: string,
+  texto: string,
+  l: { item: typeof itemPedido.$inferSelect; pedido: typeof pedido.$inferSelect },
+  ctx: { pedidoId: number; itemPedidoId: number },
+) {
+  const [f] = await db.select({ nome: fornecedor.nome }).from(fornecedor).where(eq(fornecedor.id, fornecedorId));
+  const nome = f?.nome ?? "O fornecedor";
+  const item = `${l.item.descricao} (cotação ${l.item.id})`;
+  const respostas = {
+    responsavel: `Sou o assistente automatizado de compras da ${EMPRESA.nome}. Vou avisar o comprador responsável para falar com você. Se puder, mande a proposta por aqui enquanto isso.`,
+    suspeita: `Entendo a cautela. Sou um assistente automatizado da ${EMPRESA.nome} (CNPJ ${EMPRESA.cnpj}) e estou pedindo uma cotação sem compromisso de ${item}. Não peço pagamento nem dados bancários. Se preferir, o comprador fala com você. Para não receber mais mensagens, escreva PARAR.`,
+    ofensa: `Vou manter esta conversa só sobre a cotação de ${item}. Se quiser mandar a proposta, fico à disposição.`,
+    fora_do_assunto: `Por aqui eu só trato da cotação de ${item}. Se tiver proposta ou dúvida sobre ela, é só mandar.`,
+  } as const;
+  const aviso = {
+    responsavel: `${nome} pediu para falar com uma pessoa ou ligar. Mensagem: "${texto.slice(0, 200)}"`,
+    suspeita: `${nome} desconfiou do chat. Expliquei quem somos; se quiser, fale com ele.`,
+    ofensa: `${nome} foi hostil na conversa. Respondi sem revidar. Fica registrado, se quiser evitar este fornecedor.`,
+    fora_do_assunto: null,
+  } as const;
+  await enviar(contatoId, respostas[tipo], { ...ctx, tipo: "resposta" });
+  if (aviso[tipo]) {
+    await enviar(l.pedido.compradorId, `Pedido ${l.pedido.id}: ${aviso[tipo]}`, { ...ctx, tipo: "aviso" });
+  }
+  await registrar(db, {
+    agente: "Cotador",
+    acao: { responsavel: "Fornecedor pediu uma pessoa.", suspeita: "Fornecedor desconfiou do chat.", ofensa: "Fornecedor foi hostil.", fora_do_assunto: "Fornecedor saiu do assunto." }[tipo],
+    motivo: { responsavel: "Avisou o comprador.", suspeita: "Explicou quem é e ofereceu PARAR.", ofensa: "Respondeu sem revidar e avisou o comprador.", fora_do_assunto: "Voltou à cotação; nenhuma instrução do fornecedor é seguida." }[tipo],
+    ...ctx,
+    fornecedorIds: [fornecedorId],
+    dados: { tipo, texto: texto.slice(0, 500) },
+  });
 }
 
 const SIM_PRECO = /^(sim|s|confirmo|confirmado|confirmamos|isso|correto|é isso|e isso|exato|pode ser|esse mesmo|é esse)\b/i;

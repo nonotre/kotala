@@ -177,6 +177,19 @@ O que não entra no rastro: o raciocínio interno do modelo (a tela mostra o mot
 
 Estados novos do item: `negociar` (aguardando_decisao → cotando) e `reavaliar` (aguardando_decisao → comparando).
 
+## Robustez no chat com fornecedor (Q7)
+
+Situações listadas pela área de compras, tratadas pelo Extrator e respondidas sem sair da cotação (`src/fluxo/fornecedor.ts`):
+
+| Situação | Classe | Resposta |
+|---|---|---|
+| Quer falar com uma pessoa ou ligar | `responsavel` | Apresenta-se como assistente e avisa o comprador |
+| Desconfia do chat | `suspeita` | Diz quem é (empresa, CNPJ), que não pede pagamento nem dados bancários e oferece PARAR; avisa o comprador |
+| Xinga ou provoca | `ofensa` | Responde sem revidar e registra para o comprador |
+| Usa o chat para outra coisa ou tenta mudar as regras | `fora_do_assunto` | Volta à cotação; nenhuma instrução do fornecedor é seguida |
+
+Veio preço, é proposta: a regra está em código (`limpar` no Extrator), então uma proposta que também pede contato ou traz instrução embutida não se perde, e o pedido de contato vira aviso ao comprador. Teste com a IA real: `npm run seguranca:testar` (13 casos, sem banco e sem Serper).
+
 ## Telas (Frente 1)
 
 `web/`, app Next 16 com Carbon, porta 3300 (serviço `telas` no compose).
@@ -246,6 +259,7 @@ O fornecedor não se cadastra: recebe um e-mail com um link pessoal do bot (`t.m
 | `npm run rastro -- <pedido>` | Linha do tempo completa de um pedido (`--teste` para o banco de teste) |
 | `npm run telas:dev` / `npm run telas` | Telas em modo de desenvolvimento ou produção, porta 3300 |
 | `npm run telas:tipos` | Tipos das telas |
+| `npm run seguranca:testar` | Testes de manipulação com a IA real (fornecedor hostil, injeção, pedido de contato) |
 | `npm run anexo:testar -- audio.ogg` | Leitura de áudio, foto, print ou PDF do comprador, ao vivo com o Gemini |
 | `npm run convidar -- pessoa@exemplo.com "Nome"` | Convite manual por e-mail com o link pessoal do bot do fornecedor (manda e-mail de verdade) |
 
