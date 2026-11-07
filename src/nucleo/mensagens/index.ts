@@ -32,7 +32,7 @@ export type MensagemEntrada = {
 
 export type Botao = { rotulo: string; dado: string };
 /** Para que serve a mensagem de saída; o simulador de fornecedor reage por aqui. */
-export type TipoEnvio = "cotacao" | "lembrete" | "resposta" | "pedido_compra" | "nao_venceu" | "encerrada" | "aviso";
+export type TipoEnvio = "cotacao" | "lembrete" | "resposta" | "pedido_compra" | "nao_venceu" | "encerrada" | "aviso" | "convite";
 export type OpcoesEnvio = {
   botoes?: Botao[];
   anexos?: Anexo[];

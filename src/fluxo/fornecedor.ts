@@ -1,13 +1,25 @@
-// Conversa com o fornecedor: cadastro pelo bot (R5), respostas de cotação
-// (Extrator, R6), dúvidas (Cotador) e confirmação do pedido de compra (R11).
+// Conversa com o fornecedor: convite por e-mail com link pessoal (E1), cadastro
+// pelo bot (R5, reserva para o QR), respostas de cotação (Extrator, R6), dúvidas
+// (Cotador) e confirmação do pedido de compra (R11).
 
+import { randomBytes } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { cotacaoAbertaDo, encerrarSeTodosResponderam, responderDuvida } from "../agentes/cotador/index.ts";
+import { cotacaoAbertaDo, encerrarSeTodosResponderam, reenviarCotacaoAberta, responderDuvida } from "../agentes/cotador/index.ts";
+import { emailValido, FONTE_CONVITE_MANUAL, linkConvite, normalizarEmail } from "../canais/email.ts";
+import { EMPRESA } from "../config.ts";
 import { extrair, type Extracao } from "../agentes/extrator/index.ts";
 import { db } from "../nucleo/db/cliente.ts";
 import { contato as tContato, cotacao, fornecedor, itemPedido, oferta, pedido } from "../nucleo/db/schema.ts";
 import type { AnexoIa } from "../nucleo/ia/index.ts";
-import { baixarAnexo, enviar, marcarParouContato, vincularMensagem, type MensagemRecebida } from "../nucleo/mensagens/index.ts";
+import {
+  baixarAnexo,
+  enviar,
+  marcarParouContato,
+  vincularMensagem,
+  type Contato,
+  type MensagemRecebida,
+  type ResultadoEnvio,
+} from "../nucleo/mensagens/index.ts";
 import { registrar } from "../nucleo/registro.ts";
 import { aoRespostaDoVencedor, pedidoEnviadoPara } from "./decisao.ts";
 import { cnpjValido, formatarCnpj, verificarFornecedor } from "../agentes/verificacao/index.ts";
@@ -31,6 +43,15 @@ export async function aoMensagemDoFornecedor({ contato, mensagemId, entrada }: M
       await aoRespostaDoVencedor(contato, Number(m[1]), m[2] === "confirmo");
     }
     return;
+  }
+
+  // E1: link pessoal do convite. Liga a conversa ao fornecedor já conhecido, sem perguntar o nome.
+  if (!contato.fornecedorId && entrada.convite) {
+    const [f] = await db.select().from(fornecedor).where(eq(fornecedor.codigoConvite, entrada.convite));
+    if (f) {
+      await ligarPeloConvite(contato, f);
+      return;
+    }
   }
 
   // R5: cadastro. Quem chega ao bot do fornecedor sem cadastro informa o nome da empresa.
@@ -79,6 +100,89 @@ export async function aoMensagemDoFornecedor({ contato, mensagemId, entrada }: M
     return;
   }
   await processarResposta(c, contato.id, mensagemId, entrada);
+}
+
+// ---------- E1: convite por e-mail com link pessoal ----------
+
+/** Código do link pessoal: só [A-Za-z0-9_-], como o Telegram exige no /start. */
+const novoCodigo = () => `f${randomBytes(9).toString("base64url")}`;
+
+export function textoConvite(nome: string, link: string): string {
+  return [
+    `Olá, ${nome}!`,
+    "",
+    `Sou o assistente automatizado de compras da ${EMPRESA.nome} (CNPJ ${EMPRESA.cnpj}). Queremos convidar vocês a receber nossos pedidos de cotação de material de construção, sem compromisso de compra.`,
+    "",
+    "As cotações chegam e são respondidas pelo Telegram, do seu jeito: texto, PDF ou foto. Para começar, abra o link abaixo e toque em Iniciar:",
+    "",
+    link,
+    "",
+    "O link é pessoal: liga a conversa à sua empresa, sem cadastro.",
+    "Guardamos só o nome da empresa, este e-mail e as mensagens das cotações. Se não tiver interesse, basta ignorar este e-mail. Para parar depois, escreva PARAR no Telegram.",
+  ].join("\n");
+}
+
+export type Convite = { fornecedorId: string; codigo: string; link: string; envio: ResultadoEnvio };
+
+/**
+ * Convite manual: alguém digita o e-mail (a banca, o time) e a pessoa recebe o
+ * link pessoal do bot. É o único jeito de liberar um endereço que não está em
+ * EMAIL_PERMITIDOS (ver a trava em canais/email.ts).
+ */
+export async function convidarPorEmail(dados: { email: string; nome?: string; usuarioBot: string }): Promise<Convite> {
+  if (!emailValido(dados.email)) throw new Error(`E-mail inválido: ${dados.email}`);
+  const email = normalizarEmail(dados.email);
+  const nome = (dados.nome?.trim() || email.split("@")[0]!).slice(0, 120);
+
+  let [f] = await db.select().from(fornecedor).where(eq(fornecedor.email, email)).limit(1);
+  if (f && f.fonte !== FONTE_CONVITE_MANUAL) {
+    throw new Error(`${email} já é de um fornecedor achado na busca (${f.nome}). Para mandar e-mail a ele, ponha o endereço em EMAIL_PERMITIDOS.`);
+  }
+  if (!f) {
+    [f] = await db.insert(fornecedor).values({ nome, origem: "real", fonte: FONTE_CONVITE_MANUAL, email, codigoConvite: novoCodigo() }).returning();
+  } else if (!f.codigoConvite) {
+    [f] = await db.update(fornecedor).set({ codigoConvite: novoCodigo() }).where(eq(fornecedor.id, f.id)).returning();
+  }
+  const forn = f!;
+  const codigo = forn.codigoConvite!;
+
+  await db
+    .insert(tContato)
+    .values({ canal: "email", endereco: email, papel: "fornecedor", fornecedorId: forn.id, nome: forn.nome })
+    .onConflictDoNothing();
+  const [ct] = await db.select().from(tContato).where(and(eq(tContato.canal, "email"), eq(tContato.endereco, email)));
+
+  const link = linkConvite(dados.usuarioBot, codigo);
+  const envio = await enviar(ct!.id, textoConvite(forn.nome, link), { tipo: "convite" });
+  await registrar(db, {
+    agente: "Fornecedor",
+    acao: envio.situacao === "enviada" ? `Convidou ${forn.nome} por e-mail.` : `Não conseguiu convidar ${forn.nome} por e-mail.`,
+    motivo: envio.situacao === "enviada" ? "Convite manual com link pessoal do bot." : envio.erro ?? envio.situacao,
+    fornecedorIds: [forn.id],
+  });
+  return { fornecedorId: forn.id, codigo, link, envio };
+}
+
+async function ligarPeloConvite(contato: Contato, f: typeof fornecedor.$inferSelect) {
+  await db
+    .update(tContato)
+    .set({ fornecedorId: f.id, papel: "fornecedor", nome: f.nome, avisoPrivacidadeEm: contato.avisoPrivacidadeEm ?? new Date() })
+    .where(eq(tContato.id, contato.id));
+  await registrar(db, {
+    agente: "Fornecedor",
+    acao: `${f.nome} abriu o link do convite.`,
+    motivo: "Link pessoal do convite: a conversa foi ligada ao fornecedor sem perguntar o nome.",
+    fornecedorIds: [f.id],
+  });
+  await enviar(
+    contato.id,
+    `Olá, ${f.nome}! Sou o assistente automatizado de cotações da ${EMPRESA.nome}. Esta conversa ficou ligada à sua empresa pelo link do convite. ` +
+      "Guardo o nome da empresa e as mensagens desta conversa só para as cotações, sem compromisso de compra. Para sair, escreva PARAR.",
+  );
+  // Cotação que já tinha ido por e-mail chega também aqui, onde dá para responder.
+  if (!(await reenviarCotacaoAberta(f.id, contato.id))) {
+    await enviar(contato.id, "Quando houver pedido de cotação, mando por aqui. Pode responder do seu jeito, em texto, PDF ou foto.");
+  }
 }
 
 async function processarResposta(

@@ -1,7 +1,8 @@
 // Processo dos bots: Telegram por long polling, fluxos e varredor de prazos.
 // Rode só um por token: dois processos com o mesmo bot dão erro 409.
 
-import { adaptadorTelegram, criarBot, iniciarBots, type Papel } from "./canais/telegram.ts";
+import { adaptadorEmail } from "./canais/email.ts";
+import { adaptadorTelegram, criarBot, iniciarBots, usuarioDoBot, type Papel } from "./canais/telegram.ts";
 import { ligarFluxos } from "./fluxo/index.ts";
 import { conexao } from "./nucleo/index.ts";
 import { registrarCanal } from "./nucleo/mensagens/index.ts";
@@ -21,6 +22,9 @@ if (!bots.comprador) {
 
 registrarCanal(adaptadorTelegram(bots));
 registrarCanal(adaptadorSimulado());
+// E1: e-mail só para EMAIL_PERMITIDOS e convites manuais (trava em canais/email.ts).
+const tokenFornecedor = process.env.TELEGRAM_TOKEN_FORNECEDOR;
+registrarCanal(adaptadorEmail({ usuarioBot: tokenFornecedor ? await usuarioDoBot(tokenFornecedor).catch(() => undefined) : undefined }));
 await semearSimulados();
 ligarFluxos();
 const pararVarredor = iniciarVarredor();

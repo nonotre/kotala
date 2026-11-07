@@ -57,6 +57,13 @@
       "when": 1794069887316,
       "tag": "0007_auditoria_gatilhos",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794072211322,
+      "tag": "0008_convite_fornecedor",
+      "breakpoints": true
     }
   ]
 }

@@ -154,6 +154,15 @@ npm run rastro -- 12 --em "2026-11-07T13:05:00-03:00"   # estado exato naquele i
 
 O que não entra no rastro: o raciocínio interno do modelo (a tela mostra o motivo declarado por cada agente e os números do Comparador) e os bytes dos anexos dentro do `uso_ia` (estão na tabela `arquivo`).
 
+## Convite do fornecedor por e-mail (E1)
+
+O fornecedor não se cadastra: recebe um e-mail com um link pessoal do bot (`t.me/<bot_fornecedor>?start=<código>`). Ao abrir, o bot liga a conversa ao fornecedor já conhecido, sem perguntar o nome, e reenvia no Telegram a cotação que ele ainda deve. O link genérico com pergunta do nome (`?start=cadastro`) continua como reserva para o QR do pitch.
+
+- **Trava:** o canal `email` (`src/canais/email.ts`) só envia para endereços em `EMAIL_PERMITIDOS` ou digitados num convite manual (fornecedor com fonte "Convite manual por e-mail"). Qualquer outro envio falha e fica gravado em `mensagem` com o motivo. A busca ainda não guarda e-mail de loja, então nenhum fornecedor real é contatado.
+- **Convite manual:** `npm run convidar -- pessoa@exemplo.com "Nome da empresa"` cria o fornecedor, o contato de e-mail e o código, e manda o convite pelo `enviar()` (rastreio e PARAR valem). Usa o banco principal e manda e-mail de verdade. Na tela, a mesma função (`convidarPorEmail` em `src/fluxo/fornecedor.ts`) entra depois.
+- **Depois do convite:** o contato de e-mail conta como canal ativo, então o convidado entra nas próximas cotações. Sem Telegram ligado, a cotação vai por e-mail com o link no rodapé; respostas por e-mail ainda não são lidas (E2).
+- **Configuração:** `SMTP_USER` e `SMTP_PASS` (Gmail com senha de app), `EMAIL_PERMITIDOS`, `EMAIL_REMETENTE_NOME`.
+
 ## Segurança
 
 - Texto de fornecedor, página da web e resposta de API são dados, entre delimitadores, nunca instrução. O Extrator não tem ferramentas, só saída estruturada validada com zod.
@@ -173,11 +182,12 @@ O que não entra no rastro: o raciocínio interno do modelo (a tela mostra o mot
 | `npm run verificacao:testar -- https://www.telhanorte.com.br` | Verificação de um fornecedor |
 | `npm run ia:testar` | Uma chamada real ao Gemini |
 | `npm run rastro -- <pedido>` | Linha do tempo completa de um pedido (`--teste` para o banco de teste) |
+| `npm run convidar -- pessoa@exemplo.com "Nome"` | Convite manual por e-mail com o link pessoal do bot do fornecedor (manda e-mail de verdade) |
 
 ## O que falta
 
 - Quadro (R10) e as telas do mapa (Q1) e do raciocínio (N5): os dados já estão no banco.
-- Fornecedor convidado por e-mail com link pessoal (decidido, adiado).
+- Ler respostas do fornecedor por e-mail (E2); guardar o e-mail das lojas achadas na busca.
 - API do Portal da Transparência na Busca (`notas-fiscais`).
 - Confirmação do preço retido com o fornecedor; resposta do comprador à dúvida de um fornecedor.
 - Áudio (R1b), base de itens (E6), negociação (X3), economia (X4), voz (X5).

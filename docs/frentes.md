@@ -73,7 +73,8 @@ Cada frente só edita os arquivos dela. Precisou mexer num arquivo da outra ou n
 
 Anote aqui o que uma frente precisa que a outra faça (campo novo, função exportada).
 
-- (vazio. O pedido de prompt e resposta em `uso_ia` já entrou na base, junto com a auditoria por gatilho.)
+- (O pedido de prompt e resposta em `uso_ia` já entrou na base, junto com a auditoria por gatilho.)
+- Frente 3, E1: migração `0008` (`fornecedor.email` e `fornecedor.codigo_convite`); `TipoEnvio` ganhou `"convite"` em `src/nucleo/mensagens/index.ts` (só acréscimo); `src/bots.ts` registra o canal de e-mail (duas linhas, na junção manter as da Frente 1 também); `usuarioDoBot` exportado de `src/canais/telegram.ts`. Para a tela de convite da Frente 1: chamar `convidarPorEmail({ email, nome, usuarioBot })` de `src/fluxo/fornecedor.ts`.
 
 ## Como juntar
 

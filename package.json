@@ -19,7 +19,8 @@
     "simular": "node --env-file=.env scripts/simular-comprador.ts",
     "busca:testar": "node --env-file=.env scripts/testar-busca.ts",
     "verificacao:testar": "node --env-file=.env scripts/testar-verificacao.ts",
-    "rastro": "node --env-file=.env scripts/rastro.ts"
+    "rastro": "node --env-file=.env scripts/rastro.ts",
+    "convidar": "node --env-file=.env scripts/convidar.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.113",
@@ -28,11 +29,13 @@
     "ai": "^7.0.164",
     "drizzle-orm": "^0.45.4",
     "grammy": "^1.46.0",
+    "nodemailer": "^10.3.1",
     "postgres": "^4.1.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
+    "@types/nodemailer": "^8.0.2",
     "drizzle-kit": "^0.31.11",
     "typescript": "^7.0.2"
   }
