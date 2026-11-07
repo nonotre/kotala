@@ -157,6 +157,22 @@ export async function cotacaoAbertaDo(fornecedorId: string) {
   return l?.cotacao ?? null;
 }
 
+/**
+ * E1: o fornecedor convidado por e-mail abriu o link do bot. A cotação que ele
+ * ainda deve chega também no Telegram, e o lembrete passa a ir para lá.
+ */
+export async function reenviarCotacaoAberta(fornecedorId: string, contatoId: string): Promise<boolean> {
+  const c = await cotacaoAbertaDo(fornecedorId);
+  if (!c || c.situacao !== "aguardando") return false;
+  const d = await dadosDoItem(c.itemPedidoId);
+  if (!d) return false;
+  const [f] = await db.select({ nome: fornecedor.nome }).from(fornecedor).where(eq(fornecedor.id, fornecedorId));
+  const r = await enviar(contatoId, textoCotacao(d, f?.nome ?? ""), { pedidoId: d.pedido.id, itemPedidoId: d.item.id, tipo: "cotacao" });
+  if (r.situacao !== "enviada") return false;
+  await db.update(cotacao).set({ contatoId, enviadaEm: c.enviadaEm ?? new Date() }).where(eq(cotacao.id, c.id));
+  return true;
+}
+
 /** Fecha a cotação assim que ninguém mais está devendo resposta. */
 export async function encerrarSeTodosResponderam(itemPedidoId: number) {
   const [item] = await db.select().from(itemPedido).where(eq(itemPedido.id, itemPedidoId));

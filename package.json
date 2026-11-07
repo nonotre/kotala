@@ -22,7 +22,9 @@
     "rastro": "node --env-file=.env scripts/rastro.ts",
     "telas:dev": "cd web && npm run dev",
     "telas": "cd web && npm run build && npm start",
-    "telas:tipos": "cd web && npx tsc --noEmit"
+    "telas:tipos": "cd web && npx tsc --noEmit",
+    "convidar": "node --env-file=.env scripts/convidar.ts",
+    "anexo:testar": "node --env-file=.env scripts/testar-anexo.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.113",
@@ -31,11 +33,13 @@
     "ai": "^7.0.164",
     "drizzle-orm": "^0.45.4",
     "grammy": "^1.46.0",
+    "nodemailer": "^10.3.1",
     "postgres": "^4.1.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
+    "@types/nodemailer": "^8.0.2",
     "drizzle-kit": "^0.31.11",
     "typescript": "^7.0.2"
   }

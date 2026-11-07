@@ -7,7 +7,7 @@ Divisão do trabalho a partir do commit do rastreio completo (07/11/2026, logo d
 | Frente | Módulos | Branch | Quem |
 |---|---|---|---|
 | **1 · Telas** | R10 Quadro, Q1 Mapa de cotação em tela, N5 Raciocínio visível, X4 Painel de economia, E3 Chat web | `frente-1-telas` | Claude, na worktree principal |
-| **3 · Entradas e contato** | R1b Pedido por áudio, E6 Base de itens com botões, E1 Convite do fornecedor por e-mail com link pessoal (substitui o cadastro com pergunta do nome, ver [decisoes.md](decisoes.md)) | `frente-3-entradas` | Dono do repo, com outro agente, em outra worktree |
+| **3 · Entradas e contato** | R1b Pedido por áudio, foto, print de loja ou PDF (comprador) e áudio do fornecedor, E6 Base de itens com botões, E1 Convite do fornecedor por e-mail com link pessoal (substitui o cadastro com pergunta do nome, ver [decisoes.md](decisoes.md)) | `frente-3-entradas` | Dono do repo, com outro agente, em outra worktree |
 
 Frentes 2 (negociação e reprovação com motivo), 4 (voz) e 5 (pitch e testes de manipulação) ficam para depois.
 
@@ -73,7 +73,20 @@ Cada frente só edita os arquivos dela. Precisou mexer num arquivo da outra ou n
 
 Anote aqui o que uma frente precisa que a outra faça (campo novo, função exportada).
 
-- (vazio. O pedido de prompt e resposta em `uso_ia` já entrou na base, junto com a auditoria por gatilho.)
+- (O pedido de prompt e resposta em `uso_ia` já entrou na base, junto com a auditoria por gatilho.)
+- Frente 3, E1: migração `0008` (`fornecedor.email` e `fornecedor.codigo_convite`); `TipoEnvio` ganhou `"convite"` em `src/nucleo/mensagens/index.ts` (só acréscimo); `src/bots.ts` registra o canal de e-mail (duas linhas, na junção manter as da Frente 1 também); `usuarioDoBot` exportado de `src/canais/telegram.ts`. Para a tela de convite da Frente 1: chamar `convidarPorEmail({ email, nome, usuarioBot })` de `src/fluxo/fornecedor.ts`.
+
+## Estado da Frente 3 para a junção
+
+Pronto no branch `frente-3-entradas`: E1 (convite por e-mail) e R1b (áudio, foto, print e PDF do comprador; áudio do fornecedor). O E6 (base de itens) e o preço do print no mapa de cotação ficam para depois da junção.
+
+Na junção:
+
+- **Migração `0008`:** depois do merge, `npm run db:migrar` (ou `docker compose up -d --build`, que aplica ao subir). Só acrescenta colunas no fornecedor.
+- **`src/bots.ts`:** as duas frentes mexeram. Manter as linhas das duas; da Frente 3 são o import de `adaptadorEmail`/`usuarioDoBot` e o `registrarCanal(adaptadorEmail(...))`.
+- **`.env.exemplo`, `package.json`, `package-lock.json`, `README.md`, `docs/arquitetura.md`:** manter os blocos das duas frentes; o lock se refaz com `npm install`. Dependência nova da Frente 3: `nodemailer`.
+- **`.env` da pasta principal:** precisa de `SMTP_USER`, `SMTP_PASS` e, se quiser envio automático a endereços do time, `EMAIL_PERMITIDOS`. O container dos bots lê o mesmo `.env`.
+- **Depois de subir:** testar o convite com `npm run convidar -- <e-mail> "Nome"` e abrir o link; mandar um áudio e um print ao bot do comprador.
 
 ## Avisos da Frente 1 para a junção
 

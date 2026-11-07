@@ -55,6 +55,12 @@ Para testar a verificação de um fornecedor: `npm run verificacao:testar -- htt
 
 Para ver tudo o que aconteceu num pedido (agentes, dados, IA e mensagens, em ordem): `npm run rastro -- <pedido>`; com `--em "<data e hora>"`, o estado exato naquele instante. Detalhes em [docs/arquitetura.md](docs/arquitetura.md#rastreio-nada-se-perde).
 
+### E-mail e anexos
+
+Convite manual por e-mail (para a banca ou o time), com o link pessoal do bot do fornecedor: `npm run convidar -- pessoa@exemplo.com "Nome da empresa"`. Precisa de `SMTP_USER` e `SMTP_PASS` (Gmail com senha de app) e de `TELEGRAM_TOKEN_FORNECEDOR`. Nenhum outro endereço recebe e-mail, a não ser os de `EMAIL_PERMITIDOS`. Detalhes em [docs/arquitetura.md](docs/arquitetura.md#convite-do-fornecedor-por-e-mail-e1).
+
+Para testar a leitura de áudio, foto, print ou PDF do comprador sem o bot: `npm run anexo:testar -- audio.ogg` ou `-- print.png "quero 40 desse"`.
+
 Para os testes de integração, crie o banco de teste uma vez:
 `docker compose exec banco psql -U kotala -c "create database kotala_teste"`.
 
@@ -74,12 +80,14 @@ Pedido → Interpretador → confirmação → Busca → Cotador → respostas �
 
 | Módulo | Onde | O que faz |
 |---|---|---|
-| R1 Telegram | `src/canais/telegram.ts`, `src/bots.ts` | Um bot do comprador e um do fornecedor, por long polling. Baixa PDF e foto para o Extrator. |
+| R1 Telegram | `src/canais/telegram.ts`, `src/bots.ts` | Um bot do comprador e um do fornecedor, por long polling. Baixa PDF, foto e áudio. |
+| R1b Áudio, foto e print | `src/agentes/interpretador/anexos.ts` | O comprador manda áudio, foto do material, print de anúncio ou PDF; o anexo vira texto de pedido antes do Interpretador. Do print saem loja, vendedor e preço. O fornecedor também pode responder por áudio. |
 | R2 Interpretador | `src/agentes/interpretador/` | Lê o pedido solto, entende o jargão, separa os itens e devolve destino, prazo em dias, urgência, suposições e o que falta. |
 | R3 Busca | `src/agentes/busca/` | Busca real em etapas: entende (IA monta as consultas e os termos), coleta (lojas VTEX com estoque e frete para o CEP, Serper shopping e web, leitura de página por JSON-LD ou IA com trecho conferido), filtra (item certo, tamanho, kit, unidade), confere (fonte, data) e ordena. Grava como referência pública com link e hora, usada no mapa, na retenção de preço e para ancorar os simulados. Também usa os fornecedores da base. |
 | Q8 Verificação | `src/agentes/verificacao/` | Julga se o fornecedor real é confiável: CNPJ (achado no site ou informado na proposta) consultado na Receita pela BrasilAPI, com Minha Receita de reserva; sanções no CEIS e no CNEP (dados abertos do Portal da Transparência, atualizados por dia); processos no TJSP (e-SAJ), em que só falência e recuperação judicial pesam; idade da empresa, atividade, presença verificável, histórico e homologação. Gera pontos (0 a 100), nível e motivos, usados na nota de confiança do mapa e nos alertas. Sócios, e-mail e telefone da Receita são descartados. |
 | R4 Cotador e Q4 | `src/agentes/cotador/` | Pedido de cotação por template, lembrete na metade do prazo, dúvidas respondidas com os dados do pedido (ou levadas ao comprador), encerramento quando todos respondem ou o prazo vence. |
-| R5 Cadastro | `src/fluxo/fornecedor.ts` | O fornecedor abre o bot pelo link de convite (o log mostra o link), recebe o aviso de privacidade e informa o nome da empresa. |
+| R5 Cadastro | `src/fluxo/fornecedor.ts` | Reserva para o QR do pitch: o fornecedor abre o bot pelo link genérico (o log mostra o link), recebe o aviso de privacidade e informa o nome da empresa. |
+| E1 Convite por e-mail | `src/canais/email.ts`, `src/fluxo/fornecedor.ts` | O fornecedor recebe um e-mail com o link pessoal do bot; ao abrir, a conversa fica ligada a ele sem perguntar o nome e a cotação pendente chega no Telegram. O e-mail só sai para `EMAIL_PERMITIDOS` ou para quem recebeu convite manual. |
 | R6 Extrator | `src/agentes/extrator/` | Separa proposta, dúvida, recusa e PARAR, e extrai preço, frete, prazo, pagamento, impostos e validade, de texto, PDF ou foto. |
 | R7, R8 e R9 | `src/agentes/comparador/` | Custo total (produto, frete informado ou estimado, impostos), regras de corte, retenção de preço 30% abaixo da referência, nota com pesos (prazo dobra na urgência). A IA só redige a justificativa, com checagem dos valores citados. |
 | R11 Decisão | `src/fluxo/decisao.ts` | Aprovar em dois toques, escolher outra proposta, cotar de novo ou buscar mais. O vencedor recebe o pedido de compra e confirma; os demais são avisados. |

@@ -72,6 +72,10 @@ export const fornecedor = pgTable("fornecedor", {
   fonte: text("fonte"),
   regiao: text("regiao"),
   cep: text("cep"),
+  /** E1: e-mail comercial para o convite (achado na busca ou digitado no convite manual). */
+  email: text("email"),
+  /** E1: código do link pessoal do bot (t.me/<bot>?start=<código>); liga a conversa sem perguntar o nome. */
+  codigoConvite: text("codigo_convite").unique(),
   /** PARAR vale para o fornecedor em todos os canais. */
   parouEm: timestamp("parou_em", { withTimezone: true }),
   criadoEm: criadoEm(),

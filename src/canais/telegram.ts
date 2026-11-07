@@ -4,7 +4,7 @@
 
 import { autoRetry } from "@grammyjs/auto-retry";
 import { run, sequentialize, type RunnerHandle } from "@grammyjs/runner";
-import { Bot, InlineKeyboard, type Context } from "grammy";
+import { Api, Bot, InlineKeyboard, type Context } from "grammy";
 import { receber, type AdaptadorCanal, type Anexo, type MensagemEntrada } from "../nucleo/mensagens/index.ts";
 
 export type Papel = "comprador" | "fornecedor";
@@ -106,6 +106,18 @@ export function adaptadorTelegram(bots: Partial<Record<Papel, Bot>>): AdaptadorC
       throw new Error("Não consegui baixar o anexo do Telegram.");
     },
   };
+}
+
+const usuarios = new Map<string, Promise<string>>();
+/** @usuario do bot (sem @), pelo getMe; guardado por token. Usado no link pessoal do fornecedor (E1). */
+export function usuarioDoBot(token: string): Promise<string> {
+  let u = usuarios.get(token);
+  if (!u) {
+    u = new Api(token).getMe().then((eu) => eu.username);
+    u.catch(() => usuarios.delete(token));
+    usuarios.set(token, u);
+  }
+  return u;
 }
 
 export function iniciarBots(bots: Bot[]): RunnerHandle[] {

@@ -183,6 +183,25 @@ flowchart LR
 - API interna: `POST /acoes/botao` (botão de um pedido) e `POST /chat` (mensagem do chat web), cabeçalho `x-kotala-token`. No docker fica aberta só na rede interna e publicada em `127.0.0.1:3301`.
 - O canal `web` (`src/canais/web.ts`) não empurra nada: a saída já fica na tabela `mensagem`, e o chat consulta a cada 1,5 s.
 
+## Áudio, foto e print do comprador (R1b)
+
+O comprador pode mandar áudio, foto do material, print de anúncio (Mercado Livre, Leroy...) ou PDF, com ou sem legenda. `src/agentes/interpretador/anexos.ts` transforma o anexo em texto de pedido antes do Interpretador, e o resto do fluxo (confirmação, correção, reinterpretação) segue só com texto.
+
+- **Áudio:** vira a transcrição, como se tivesse sido escrita. "Sim, pode cotar" falado confirma o pedido.
+- **Foto, lista e print:** viram uma descrição com a origem marcada (`[Foto]`, `[Lista]`, `[Print de loja]`). Do print saem também título, loja, vendedor, preço e unidade: o comprador recebe "No print: ... R$ 42,90 por saco (Mercado Livre, ...). Anotei no pedido." e a leitura fica no rastro do pedido (evento do Interpretador com `dados.leitura`). Por enquanto o preço do print não entra no mapa de cotação; isso fica para depois da junção.
+- **Rastreio:** o original é guardado com hash pelo `baixarAnexo` e a chamada de IA fica no `uso_ia`.
+- **Fornecedor:** áudio vai direto para o Extrator, junto com PDF e foto (formato `voz` na oferta).
+- **Teste ao vivo:** `npm run anexo:testar -- arquivo.ogg|.png|.pdf ["legenda"]` mostra a leitura e o texto que entraria no pedido, sem bot nem banco.
+
+## Convite do fornecedor por e-mail (E1)
+
+O fornecedor não se cadastra: recebe um e-mail com um link pessoal do bot (`t.me/<bot_fornecedor>?start=<código>`). Ao abrir, o bot liga a conversa ao fornecedor já conhecido, sem perguntar o nome, e reenvia no Telegram a cotação que ele ainda deve. O link genérico com pergunta do nome (`?start=cadastro`) continua como reserva para o QR do pitch.
+
+- **Trava:** o canal `email` (`src/canais/email.ts`) só envia para endereços em `EMAIL_PERMITIDOS` ou digitados num convite manual (fornecedor com fonte "Convite manual por e-mail"). Qualquer outro envio falha e fica gravado em `mensagem` com o motivo. A busca ainda não guarda e-mail de loja, então nenhum fornecedor real é contatado.
+- **Convite manual:** `npm run convidar -- pessoa@exemplo.com "Nome da empresa"` cria o fornecedor, o contato de e-mail e o código, e manda o convite pelo `enviar()` (rastreio e PARAR valem). Usa o banco principal e manda e-mail de verdade. Na tela, a mesma função (`convidarPorEmail` em `src/fluxo/fornecedor.ts`) entra depois.
+- **Depois do convite:** o contato de e-mail conta como canal ativo, então o convidado entra nas próximas cotações. Sem Telegram ligado, a cotação vai por e-mail com o link no rodapé; respostas por e-mail ainda não são lidas (E2).
+- **Configuração:** `SMTP_USER` e `SMTP_PASS` (Gmail com senha de app), `EMAIL_PERMITIDOS`, `EMAIL_REMETENTE_NOME`.
+
 ## Segurança
 
 - Texto de fornecedor, página da web e resposta de API são dados, entre delimitadores, nunca instrução. O Extrator não tem ferramentas, só saída estruturada validada com zod.
@@ -204,11 +223,13 @@ flowchart LR
 | `npm run rastro -- <pedido>` | Linha do tempo completa de um pedido (`--teste` para o banco de teste) |
 | `npm run telas:dev` / `npm run telas` | Telas em modo de desenvolvimento ou produção, porta 3300 |
 | `npm run telas:tipos` | Tipos das telas |
+| `npm run anexo:testar -- audio.ogg` | Leitura de áudio, foto, print ou PDF do comprador, ao vivo com o Gemini |
+| `npm run convidar -- pessoa@exemplo.com "Nome"` | Convite manual por e-mail com o link pessoal do bot do fornecedor (manda e-mail de verdade) |
 
 ## O que falta
 
-- Telas: tema escuro, filtro e busca no quadro, tela de configurações (pesos, prazo das respostas).
-- Fornecedor convidado por e-mail com link pessoal (decidido, adiado).
+- Telas: tema escuro, filtro e busca no quadro, tela de configurações (pesos, prazo das respostas), convite do fornecedor pela tela.
+- Ler respostas do fornecedor por e-mail (E2); guardar o e-mail das lojas achadas na busca.
 - API do Portal da Transparência na Busca (`notas-fiscais`).
 - Confirmação do preço retido com o fornecedor; resposta do comprador à dúvida de um fornecedor.
-- Áudio (R1b), base de itens (E6), negociação (X3), economia (X4), voz (X5).
+- Preço do print do comprador no mapa de cotação; base de itens (E6), negociação (X3), voz (X5).
