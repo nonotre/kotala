@@ -7,6 +7,7 @@
 // Cada argumento é uma mensagem do comprador, ou:
 //   clicar:<início do rótulo>  toca no botão da última mensagem que o tiver
 //   esperar:<estado>           espera o item mais recente chegar ao estado (até 5 min)
+//   dormir:<segundos>          só espera (para o fornecedor simulado responder)
 
 if (process.env.DATABASE_URL_TESTE) process.env.DATABASE_URL = process.env.DATABASE_URL_TESTE;
 process.env.PRAZO_RESPOSTAS_SEG ??= "40";
@@ -56,6 +57,11 @@ function mostrarNovas() {
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 for (const arg of process.argv.slice(2)) {
+  if (arg.startsWith("dormir:")) {
+    await esperar(Number(arg.slice(7)) * 1000);
+    mostrarNovas();
+    continue;
+  }
   if (arg.startsWith("esperar:")) {
     const alvo = arg.slice(8);
     console.log(`\n… esperando o item chegar a ${alvo}`);

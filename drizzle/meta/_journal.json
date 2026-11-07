@@ -78,6 +78,13 @@
       "when": 1794076420646,
       "tag": "0010_recompra",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794077846811,
+      "tag": "0011_regras_compras",
+      "breakpoints": true
     }
   ]
 }

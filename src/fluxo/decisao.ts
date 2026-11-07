@@ -4,7 +4,7 @@
 
 import { acharRecompra } from "../agentes/memoria/index.ts";
 import { MAX_RODADAS, planejarNegociacao } from "../agentes/negociador/index.ts";
-import { dias, quantidade } from "../texto.ts";
+import { dias, MOTIVOS_CANCELAMENTO, quantidade, type MotivoCancelamento } from "../texto.ts";
 import { and, eq, ne } from "drizzle-orm";
 import { formatarBRL, ultimoMapa, type Linha } from "../agentes/comparador/index.ts";
 import { contatoAtivo } from "../agentes/cotador/index.ts";
@@ -42,7 +42,7 @@ const nomeComSelo = (l: Linha) => `${l.oferta.fornecedorNome}${l.oferta.simulado
 // ---------- Botões do comprador: item:<id>:<acao>[:<ofertaId>] ----------
 
 export async function aoBotaoDoComprador(contato: Contato, dado: string): Promise<boolean> {
-  const m = /^item:(\d+):(aprovar|confirmar|outras|reprovar|buscar|voltar|motivos|negociar|excluir|cancelar|repetir|repetir_ok|cotar_novo)(?::([0-9a-f-]{36}))?$/.exec(dado);
+  const m = /^item:(\d+):(aprovar|confirmar|outras|reprovar|buscar|voltar|motivos|negociar|excluir|cancelar|repetir|repetir_ok|cotar_novo)(?::([0-9a-f-]{36}|[a-z_]+))?$/.exec(dado);
   if (!m) return false;
   const itemPedidoId = Number(m[1]);
   const acao = m[2]!;
@@ -171,7 +171,7 @@ export async function aoBotaoDoComprador(contato: Contato, dado: string): Promis
       break;
     }
     case "excluir": {
-      if (!ofertaId) break;
+      if (!ofertaId || !/^[0-9a-f-]{36}$/.test(ofertaId)) break;
       const [f] = await db.select({ nome: fornecedor.nome }).from(fornecedor).where(eq(fornecedor.id, ofertaId));
       await avancarItem(
         itemPedidoId,
@@ -181,10 +181,20 @@ export async function aoBotaoDoComprador(contato: Contato, dado: string): Promis
       ).catch(ignorarCorrida);
       break;
     }
-    case "cancelar":
-      await avancarItem(itemPedidoId, "cancelar", { agente: "Comprador", acao: "Desistiu deste item.", motivo: "Motivo: não quer mais comprar." }).catch(ignorarCorrida);
-      await enviar(contato.id, `Pedido ${d.pedido.id}: ${d.item.descricao} cancelado. Nada foi comprado.`, ctx);
+    case "cancelar": {
+      // Todo cancelamento tem justificativa: sem motivo, pergunta antes.
+      const motivo = ofertaId && ofertaId in MOTIVOS_CANCELAMENTO ? (ofertaId as MotivoCancelamento) : null;
+      if (!motivo) {
+        await enviar(contato.id, `Por que desistir de ${d.item.descricao}?`, {
+          ...ctx,
+          botoes: (Object.keys(MOTIVOS_CANCELAMENTO) as MotivoCancelamento[]).map((k) => ({ rotulo: MOTIVOS_CANCELAMENTO[k], dado: `item:${itemPedidoId}:cancelar:${k}` })),
+        });
+        break;
+      }
+      await avancarItem(itemPedidoId, "cancelar", { agente: "Comprador", acao: "Desistiu deste item.", motivo: `Motivo: ${MOTIVOS_CANCELAMENTO[motivo]}.` }).catch(ignorarCorrida);
+      await enviar(contato.id, `Pedido ${d.pedido.id}: ${d.item.descricao} cancelado (${MOTIVOS_CANCELAMENTO[motivo].toLowerCase()}). Nada foi comprado.`, ctx);
       break;
+    }
     case "reprovar":
       await avancarItem(
         itemPedidoId,

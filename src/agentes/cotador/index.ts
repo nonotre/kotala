@@ -4,7 +4,7 @@
 
 import { textoNegociacao } from "../negociador/index.ts";
 import { quantidade, quantidadeDe } from "../../texto.ts";
-import { and, asc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { EMPRESA, FRACAO_LEMBRETE, PRAZO_RESPOSTAS_SEG } from "../../config.ts";
 import { db } from "../../nucleo/db/cliente.ts";
@@ -345,7 +345,14 @@ export async function responderDuvida(cotacaoId: string, contatoId: string, duvi
   await enviar(contatoId, resposta, { itemPedidoId: d.item.id, tipo: "resposta" });
   if (precisaDoComprador) {
     const [f] = await db.select({ nome: fornecedor.nome }).from(fornecedor).where(eq(fornecedor.id, c.fornecedorId));
-    await avisarComprador(d, `${f?.nome ?? "Um fornecedor"} perguntou: "${duvida}". Se quiser responder, me diga aqui.`);
+    const nome = f?.nome ?? "Um fornecedor";
+    // A próxima mensagem do comprador é repassada a este fornecedor (regra da área de compras:
+    // o que o fornecedor pergunta e o pedido não responde, o agente pergunta ao solicitante).
+    await db
+      .update(itemPedido)
+      .set({ duvidaPendente: { cotacaoId: c.id, fornecedorId: c.fornecedorId, contatoId, fornecedor: nome, pergunta: duvida.slice(0, 500), em: new Date().toISOString() } })
+      .where(eq(itemPedido.id, d.item.id));
+    await avisarComprador(d, `${nome} perguntou: "${duvida}". Responda aqui que eu repasso a ele.`);
   }
   await registrar(db, {
     agente: "Cotador",
@@ -362,4 +369,38 @@ export function ligarCotador() {
   aoEntrarItem("cotando", enviarCotacoes);
   aoEntrarItem("comparando", marcarSemResposta);
   aoVarrer(enviarLembretes);
+}
+
+/** Validade da dúvida pendente: depois disso, a mensagem do comprador volta a ser tratada como pedido. */
+const VALIDADE_DUVIDA_MS = 30 * 60_000;
+
+/**
+ * Se o comprador tem uma dúvida de fornecedor pendente, repassa a mensagem dele como resposta.
+ * Devolve true quando repassou.
+ */
+export async function repassarRespostaDoComprador(compradorId: string, texto: string): Promise<boolean> {
+  const [l] = await db
+    .select({ item: itemPedido, pedidoId: pedido.id })
+    .from(itemPedido)
+    .innerJoin(pedido, eq(pedido.id, itemPedido.pedidoId))
+    .where(and(eq(pedido.compradorId, compradorId), isNotNull(itemPedido.duvidaPendente), inArray(itemPedido.estado, ["cotando", "buscando"])))
+    .orderBy(sql`${itemPedido.atualizadoEm} desc`)
+    .limit(1);
+  const pend = l?.item.duvidaPendente;
+  if (!l || !pend) return false;
+  // Limpa sempre: uma resposta por dúvida, e dúvida velha não captura mensagem nova.
+  await db.update(itemPedido).set({ duvidaPendente: null }).where(eq(itemPedido.id, l.item.id));
+  if (Date.now() - new Date(pend.em).getTime() > VALIDADE_DUVIDA_MS) return false;
+  const ctx = { pedidoId: l.pedidoId, itemPedidoId: l.item.id };
+  await enviar(pend.contatoId, `Resposta do comprador sobre a cotação ${l.item.id}: ${texto}`, { ...ctx, tipo: "resposta" });
+  await enviar(compradorId, `Repassei a ${pend.fornecedor}. Se era um pedido novo, mande de novo.`, { ...ctx, tipo: "aviso" });
+  await registrar(db, {
+    agente: "Cotador",
+    acao: `Repassou a resposta do comprador a ${pend.fornecedor}.`,
+    motivo: `Dúvida do fornecedor: "${pend.pergunta}".`,
+    ...ctx,
+    fornecedorIds: [pend.fornecedorId],
+    dados: { pergunta: pend.pergunta, resposta: texto.slice(0, 1000) },
+  });
+  return true;
 }

@@ -2,6 +2,7 @@
 // "Entendi assim, confirma?" e trata confirmação, correção e cancelamento.
 // Áudio, foto, print de loja e PDF viram texto antes (R1b), em lerAnexos.
 
+import { repassarRespostaDoComprador } from "../agentes/cotador/index.ts";
 import { casarComBase, especificacaoEmTexto, itemDaBase, rotuloOpcao } from "../agentes/interpretador/base-itens.ts";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { lerAnexoDoComprador, textoDoPedidoComAnexo, type LeituraAnexo } from "../agentes/interpretador/anexos.ts";
@@ -20,7 +21,7 @@ import {
 import { registrar } from "../nucleo/registro.ts";
 import { EMPRESA } from "../config.ts";
 import { aoBotaoDoComprador } from "./decisao.ts";
-import { dias, fmtNumero, quantidade, quantidadeDe } from "../texto.ts";
+import { dias, fmtNumero, MOTIVOS_CANCELAMENTO, quantidade, quantidadeDe, type MotivoCancelamento } from "../texto.ts";
 
 export const TEXTO_BOAS_VINDAS =
   "Olá! Sou o assistente de cotações. Mande o que precisa comprar, do seu jeito, por exemplo: " +
@@ -44,9 +45,11 @@ const SAUDACAO = /^(oi+|ol[aá]|opa|e a[ií]|bom dia|boa tarde|boa noite|tudo be
 type Acao = "confirmar" | "corrigir" | "cancelar";
 const dadoBotao = (pedidoId: number, acao: Acao) => `pedido:${pedidoId}:${acao}`;
 
-function lerBotao(dado: string): { pedidoId: number; acao: Acao } | null {
-  const m = /^pedido:(\d+):(confirmar|corrigir|cancelar)$/.exec(dado);
-  return m ? { pedidoId: Number(m[1]), acao: m[2] as Acao } : null;
+function lerBotao(dado: string): { pedidoId: number; acao: Acao; motivo?: MotivoCancelamento } | null {
+  const m = /^pedido:(\d+):(confirmar|corrigir|cancelar)(?:_([a-z_]+))?$/.exec(dado);
+  if (!m) return null;
+  const motivo = m[3] && m[3] in MOTIVOS_CANCELAMENTO ? (m[3] as MotivoCancelamento) : undefined;
+  return { pedidoId: Number(m[1]), acao: m[2] as Acao, motivo };
 }
 
 // ---------- Texto da confirmação ----------
@@ -55,6 +58,7 @@ type ItemResumo = { descricao: string; quantidade: string | number; unidade: str
 
 export function textoConfirmacao(p: {
   id: number;
+  setor?: string | null;
   itens: ItemResumo[];
   destino: string | null;
   cep?: string | null;
@@ -77,6 +81,7 @@ export function textoConfirmacao(p: {
   const entrega = p.modoEntrega === "retirada" ? "Retirada na loja" : `Entrega: ${p.destino ?? "não informado"}${p.cep ? `, CEP ${p.cep}` : ""}`;
   linhas.push(entrega);
   if (p.janelaRecebimento) linhas.push(`Recebe: ${p.janelaRecebimento}`);
+  linhas.push(`Setor: ${p.setor ?? "não informado"}`);
   const prazo = p.prazoTexto
     ? `${p.prazoTexto}${p.prazoMaxDias !== null ? ` (${dias(p.prazoMaxDias)})` : ""}`
     : "não informado";
@@ -143,6 +148,10 @@ export async function interpretarEResponder(pedidoId: number) {
     return;
   }
 
+  // Regra da área de compras: toda solicitação discriminada por setor, perguntado logo no pedido.
+  if (i.ehPedido && !i.setor && !p.setor && !i.faltando.some((f) => /setor/i.test(f))) {
+    i.faltando = ["Para qual setor é este pedido?", ...i.faltando];
+  }
   const perguntar = i.faltando.length > 0 && p.perguntasFeitas === 0;
   // E6: casa cada item com a base; com uma correspondência, ganha código e especificação técnica.
   const daBase: string[] = [];
@@ -173,6 +182,7 @@ export async function interpretarEResponder(pedidoId: number) {
     prazoTexto: i.prazoTexto,
     prazoMaxDias: i.prazoDias,
     urgencia: i.urgencia,
+    setor: i.setor ?? p.setor,
     faltando: i.faltando,
     suposicoes: i.suposicoes,
     perguntasFeitas: p.perguntasFeitas + (perguntar ? 1 : 0),
@@ -199,6 +209,7 @@ export async function interpretarEResponder(pedidoId: number) {
     itens: itens.map((it) => ({ ...it })),
     destino: i.destino,
     cep: i.cep,
+    setor: i.setor ?? p.setor,
     prazoTexto: i.prazoTexto,
     prazoMaxDias: i.prazoDias,
     urgencia: i.urgencia,
@@ -248,6 +259,7 @@ async function escolherDaBase(pedidoId: number, ordem: number, idBase: string, c
     itens: itens.map((x) => ({ ...x })),
     destino: p.destino,
     cep: p.cep,
+    setor: p.setor,
     prazoTexto: p.prazoTexto,
     prazoMaxDias: p.prazoMaxDias,
     urgencia: p.urgencia,
@@ -292,10 +304,23 @@ async function confirmar(pedidoId: number, compradorId: string) {
   }
 }
 
-async function cancelar(pedidoId: number, compradorId: string) {
+async function cancelar(pedidoId: number, compradorId: string, motivo?: MotivoCancelamento) {
+  // Todo cancelamento tem justificativa: sem motivo, pergunta antes.
+  if (!motivo) {
+    await enviar(compradorId, `Por que cancelar o pedido ${pedidoId}?`, {
+      pedidoId,
+      botoes: (Object.keys(MOTIVOS_CANCELAMENTO) as MotivoCancelamento[]).map((k) => ({ rotulo: MOTIVOS_CANCELAMENTO[k], dado: `pedido:${pedidoId}:cancelar_${k}` })),
+    });
+    return;
+  }
   try {
-    await avancarPedido(pedidoId, "cancelar", { agente: "Comprador", motivo: "Cancelou o pedido." });
-    await enviar(compradorId, `Pedido ${pedidoId} cancelado.`, { pedidoId });
+    await avancarPedido(
+      pedidoId,
+      "cancelar",
+      { agente: "Comprador", acao: "Cancelou o pedido.", motivo: `Motivo: ${MOTIVOS_CANCELAMENTO[motivo]}.` },
+      { motivoCancelamento: MOTIVOS_CANCELAMENTO[motivo] },
+    );
+    await enviar(compradorId, `Pedido ${pedidoId} cancelado (${MOTIVOS_CANCELAMENTO[motivo].toLowerCase()}).`, { pedidoId });
   } catch (erro) {
     if (!(erro instanceof TransicaoInvalida)) throw erro;
     await enviar(compradorId, `O pedido ${pedidoId} já terminou e não pode mais ser cancelado.`, { pedidoId });
@@ -328,7 +353,7 @@ export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: Me
     const [p] = await db.select({ compradorId: pedido.compradorId }).from(pedido).where(eq(pedido.id, b.pedidoId));
     if (!p || p.compradorId !== contato.id) return; // botão de pedido de outra pessoa: ignora
     if (b.acao === "confirmar") return confirmar(b.pedidoId, contato.id);
-    if (b.acao === "cancelar") return cancelar(b.pedidoId, contato.id);
+    if (b.acao === "cancelar") return cancelar(b.pedidoId, contato.id, b.motivo);
     return void (await enviar(contato.id, "O que devo mudar? Escreva do seu jeito.", { pedidoId: b.pedidoId }));
   }
 
@@ -358,6 +383,9 @@ export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: Me
     await db.update(tContato).set({ avisoPrivacidadeEm: new Date() }).where(eq(tContato.id, contato.id));
     await enviar(contato.id, AVISO_PRIVACIDADE);
   }
+
+  // Dúvida de fornecedor esperando o comprador: esta mensagem é a resposta.
+  if (await repassarRespostaDoComprador(contato.id, texto)) return;
 
   const pendente = await pedidoPendente(contato.id);
   if (!pendente && SAUDACAO.test(texto)) {

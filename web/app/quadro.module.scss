@@ -72,3 +72,7 @@
 .descricao {
   @include type.type-style('heading-compact-01');
 }
+
+.link {
+  color: t.$link-primary;
+}

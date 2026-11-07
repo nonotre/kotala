@@ -7,6 +7,7 @@ import { LinhaDoTempo, type EntradaSerial } from "@/components/LinhaDoTempo";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Tag, Tile } from "@/components/carbon";
 import { detalhePedido, type Linha } from "@/lib/dados";
 import { brl, dataHora, dias, hora, nota, quantidade } from "@/lib/formato";
+import { MOTIVOS_CANCELAMENTO } from "../../../../src/texto.ts";
 import estilos from "./pedido.module.scss";
 
 export const dynamic = "force-dynamic";
@@ -62,6 +63,7 @@ export default async function Pedido({ params }: { params: Promise<{ id: string 
       <h1 className={estilos.titulo}>Pedido {p.id}</h1>
       <p className={estilos.contexto}>
         {ESTADO_PEDIDO[p.estado]} · {p.modoEntrega === "retirada" ? "Retirada na loja" : `Entrega: ${p.destino ?? "não informado"}${p.cep ? `, CEP ${p.cep}` : ""}`}
+        {p.setor ? ` · Setor: ${p.setor}` : ""}
         {p.prazoTexto ? ` · Prazo: ${p.prazoTexto}${p.prazoMaxDias !== null ? ` (${dias(p.prazoMaxDias)})` : ""}` : ""}
         {p.urgencia !== "normal" ? " · " : ""}
         {p.urgencia === "obra_parada" ? <Tag type="red" size="sm">Obra parada</Tag> : p.urgencia === "urgente" ? <Tag type="red" size="sm">Urgente</Tag> : null}
@@ -70,11 +72,22 @@ export default async function Pedido({ params }: { params: Promise<{ id: string 
         <h2>O que você pediu</h2>
         <blockquote className={estilos.original}>{p.textoOriginal}</blockquote>
         {p.correcoes.length ? <p className={estilos.ajuda}>Correções: {p.correcoes.join(" · ")}</p> : null}
+        {p.motivoCancelamento ? <p className={estilos.alerta}>Cancelado: {p.motivoCancelamento}</p> : null}
         {p.suposicoes.length ? <p className={estilos.ajuda}>O assistente considerou: {p.suposicoes.join("; ")}</p> : null}
         {p.estado === "aguardando_confirmacao" ? (
           <div className={estilos.acoes}>
             <BotaoAcao dado={`pedido:${p.id}:confirmar`} rotulo="Confirmar pedido" kind="primary" />
-            <BotaoAcao dado={`pedido:${p.id}:cancelar`} rotulo="Cancelar" kind="ghost" confirmar={{ titulo: `Cancelar o pedido ${p.id}?`, texto: "Nada será cotado.", botao: "Cancelar pedido" }} />
+            <BotaoAcao
+              dado={`pedido:${p.id}:cancelar`}
+              rotulo="Cancelar"
+              kind="ghost"
+              confirmar={{
+                titulo: `Cancelar o pedido ${p.id}?`,
+                texto: "Nada será cotado. Por que cancelar?",
+                botao: "Cancelar pedido",
+                opcoes: Object.entries(MOTIVOS_CANCELAMENTO).map(([k, rotulo]) => ({ rotulo, dado: `pedido:${p.id}:cancelar_${k}` })),
+              }}
+            />
           </div>
         ) : null}
       </Tile>
@@ -247,7 +260,12 @@ export default async function Pedido({ params }: { params: Promise<{ id: string 
                         dado={`item:${item.id}:cancelar`}
                         rotulo="Desistir deste item"
                         kind="ghost"
-                        confirmar={{ titulo: "Desistir deste item?", texto: `${item.descricao} será cancelado. Nada será comprado.`, botao: "Desistir" }}
+                        confirmar={{
+                          titulo: "Desistir deste item?",
+                          texto: `${item.descricao} será cancelado. Nada será comprado. Por que desistir?`,
+                          botao: "Desistir",
+                          opcoes: Object.entries(MOTIVOS_CANCELAMENTO).map(([k, rotulo]) => ({ rotulo, dado: `item:${item.id}:cancelar:${k}` })),
+                        }}
                       />
                     </div>
                     {item.rodada >= 3 ? <p className={estilos.ajuda}>Já foram 3 rodadas: é o limite de negociação para não cansar os fornecedores.</p> : null}

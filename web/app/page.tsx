@@ -14,15 +14,19 @@ const AJUDA: Record<string, string> = {
   Decidido: "Aprovados, enviados, confirmados ou sem proposta.",
 };
 
-export default async function Quadro() {
-  const colunas = await quadro();
+export default async function Quadro({ searchParams }: { searchParams: Promise<{ canceladas?: string }> }) {
+  const mostrarCanceladas = (await searchParams).canceladas === "1";
+  const colunas = await quadro(mostrarCanceladas);
   const total = COLUNAS.reduce((t, c) => t + colunas[c].length, 0);
   return (
     <>
       <AtualizaSozinho segundos={3} />
       <h1 className={estilos.titulo}>Quadro de compras</h1>
       <p className={estilos.sub}>
-        {total ? `${total} ${total === 1 ? "item" : "itens"}. O card anda sozinho a cada etapa.` : "Nenhum pedido ainda. Mande um pedido pelo Telegram ou pela aba Conversar."}
+        {total ? `${total} ${total === 1 ? "item" : "itens"}. O card anda sozinho a cada etapa.` : "Nenhum pedido ainda. Mande um pedido pelo Telegram ou pela aba Conversar."}{" "}
+        <Link href={mostrarCanceladas ? "/" : "/?canceladas=1"} className={estilos.link}>
+          {mostrarCanceladas ? "Ocultar canceladas" : "Mostrar canceladas"}
+        </Link>
       </p>
       <div className={estilos.quadro}>
         {COLUNAS.map((coluna) => (

@@ -45,7 +45,7 @@ export type Cartao = {
 function etiquetasDo(
   i: { estado: EstadoItem; prazoRespostasEm: Date | null; rodada: number },
   p: { estado: EstadoPedido; urgencia: string },
-  extra: { respostas: number; consultados: number; alertas: number; escolhido: string | null },
+  extra: { respostas: number; consultados: number; alertas: number; escolhido: string | null; negociando: boolean },
 ): Etiqueta[] {
   const e: Etiqueta[] = [];
   if (p.urgencia === "obra_parada") e.push({ texto: "Obra parada", tipo: "urgente" });
@@ -58,12 +58,13 @@ function etiquetasDo(
         e.push({ texto: "Na fila", tipo: "info" });
         break;
       case "buscando":
-        e.push({ texto: "Buscando fornecedores", tipo: "info" });
+        e.push({ texto: "Captando fornecedores", tipo: "info" });
         break;
       case "aguardando_recompra":
         e.push({ texto: "Repetir compra?", tipo: "atencao" });
         break;
       case "cotando":
+        if (extra.negociando) e.push({ texto: "Em negociação", tipo: "atencao" });
         e.push({ texto: `${extra.respostas}/${extra.consultados} respostas`, tipo: "info" });
         if (i.prazoRespostasEm) e.push({ texto: `Fecha às ${hora(i.prazoRespostasEm)}`, tipo: "info" });
         break;
@@ -94,14 +95,14 @@ function etiquetasDo(
   return e;
 }
 
-/** R10: todos os itens, em 4 colunas. Cancelados só aparecem por 1 dia. */
-export async function quadro(): Promise<Record<Coluna, Cartao[]>> {
+/** R10: todos os itens, em 4 colunas. Cancelados ficam ocultos, a não ser que peça para ver. */
+export async function quadro(mostrarCanceladas = false): Promise<Record<Coluna, Cartao[]>> {
   const linhas = await db
     .select({ item: itemPedido, pedido, escolhido: fornecedor.nome })
     .from(itemPedido)
     .innerJoin(pedido, eq(pedido.id, itemPedido.pedidoId))
     .leftJoin(fornecedor, eq(fornecedor.id, itemPedido.fornecedorEscolhidoId))
-    .where(sql`not (${itemPedido.estado} = 'cancelado' and ${itemPedido.atualizadoEm} < now() - interval '1 day')`)
+    .where(mostrarCanceladas ? sql`true` : sql`${itemPedido.estado} <> 'cancelado'`)
     .orderBy(desc(itemPedido.atualizadoEm))
     .limit(200);
 
@@ -141,7 +142,13 @@ export async function quadro(): Promise<Record<Coluna, Cartao[]>> {
       estado: item.estado,
       estadoPedido: p.estado,
       coluna,
-      etiquetas: etiquetasDo(item, p, { respostas: c?.respostas ?? 0, consultados: c?.consultados ?? 0, alertas, escolhido }),
+      etiquetas: etiquetasDo(item, p, {
+        respostas: c?.respostas ?? 0,
+        consultados: c?.consultados ?? 0,
+        alertas,
+        escolhido,
+        negociando: !!item.negociacao && item.negociacao.rodada === item.rodada,
+      }),
       atualizadoEm: item.atualizadoEm,
     });
   }

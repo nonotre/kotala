@@ -116,6 +116,10 @@ export const pedido = pgTable("pedido", {
   cep: text("cep"),
   modoEntrega: modoEntregaEnum("modo_entrega"),
   janelaRecebimento: text("janela_recebimento"),
+  /** Setor ou área que pediu (regra da área de compras: toda solicitação discriminada por setor). */
+  setor: text("setor"),
+  /** Motivo do cancelamento, quando cancelado. */
+  motivoCancelamento: text("motivo_cancelamento"),
   /** Prazo como o comprador falou e em dias, para o portão "dentro do prazo". */
   prazoTexto: text("prazo_texto"),
   prazoMaxDias: integer("prazo_max_dias"),
@@ -154,6 +158,8 @@ export const itemPedido = pgTable(
     prazoRespostasEm: timestamp("prazo_respostas_em", { withTimezone: true }),
     lembreteEm: timestamp("lembrete_em", { withTimezone: true }),
     rodada: integer("rodada").notNull().default(1),
+    /** Dúvida de fornecedor que só o comprador sabe responder; a próxima mensagem dele é repassada. */
+    duvidaPendente: jsonb("duvida_pendente").$type<{ cotacaoId: string; fornecedorId: string; contatoId: string; fornecedor: string; pergunta: string; em: string }>(),
     /** N6: fornecedores que o comprador tirou do mapa deste item. */
     excluidos: jsonb("excluidos").$type<string[]>().notNull().default([]),
     /** X3: rodada de negociação em curso (alvos e números reais citados). */

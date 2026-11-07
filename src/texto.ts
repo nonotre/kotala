@@ -26,3 +26,13 @@ export function quantidadeDe(q: number | string, unidade: string, descricao: str
   const nome = repete ? resto.join(" ").replace(/^(de|da|do)\s+/i, "") : descricao;
   return `${quantidade(q, unidade)} de ${nome}`;
 }
+
+/** Motivos de cancelamento (regra da área de compras: todo cancelamento tem justificativa). */
+export const MOTIVOS_CANCELAMENTO = {
+  nao_preciso: "Não preciso mais",
+  comprei: "Já comprei por outro meio",
+  errado: "Pedido errado",
+  preco: "Preço acima do esperado",
+  outro: "Outro motivo",
+} as const;
+export type MotivoCancelamento = keyof typeof MOTIVOS_CANCELAMENTO;

@@ -2,6 +2,21 @@
 
 Registro curto das decisões que mudam o escopo ou o desenho. A mais nova fica no topo.
 
+## 07/11/2026 · Regras da área de compras (anotações da Ester)
+
+**Situação:** implementado em parte.
+
+Feito:
+
+- **Setor:** toda solicitação é discriminada por setor; se o comprador não disser, a confirmação pergunta.
+- **Dúvida do fornecedor que o pedido não responde:** vai ao comprador, e a próxima mensagem dele (até 30 minutos) é repassada ao fornecedor.
+- **Cancelamento com justificativa:** cancelar pedido ou item pergunta o motivo, que fica gravado.
+- **Unidades de agregados:** areia, brita e pedra em m³, t, kg, saco ou L; carrada ou caminhão geram pergunta pelo volume, para não haver dúvida sobre o que comprar.
+- **Quadro:** as 4 colunas do site continuam fixas (requisito); as etapas sugeridas viram etiquetas ("Captando fornecedores", "Em negociação") e as canceladas ficam ocultas, com opção de mostrar.
+- **Códigos e confirmação de ambiguidades:** a base de itens dá código ao item e pergunta a variação quando há mais de uma.
+
+Para depois: entregas parciais (uma parte em 20 dias, outra em 30), cadastro automático de item novo na base, campos extras do fornecedor (filial ou sede, atendente) e lista de bloqueio de fornecedor com problema.
+
 ## 07/11/2026 · Negociação sem citar valor de outro fornecedor
 
 **Situação:** implementado.

@@ -297,7 +297,7 @@ O fornecedor não se cadastra: recebe um e-mail com um link pessoal do bot (`t.m
 - Telas: tema escuro, filtro e busca no quadro, tela de configurações (pesos, prazo das respostas), convite do fornecedor pela tela.
 - Ler respostas do fornecedor por e-mail (E2); guardar o e-mail das lojas achadas na busca.
 - API do Portal da Transparência na Busca (`notas-fiscais`).
-- Resposta do comprador à dúvida de um fornecedor.
+- Entregas parciais; cadastro automático de item novo na base; lista de bloqueio de fornecedor.
 - Preço do print do comprador no mapa de cotação. Escolha da variação da base também pela tela (hoje no Telegram e no chat).
 - Voz: ligação pelo celular (exige HTTPS, por exemplo um túnel) e ligação telefônica de verdade.
 - Memória: bloquear fornecedor que deu problema (lista de bloqueio) e contrato anual com pedido automático.

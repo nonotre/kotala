@@ -26,6 +26,7 @@ export const Interpretacao = z.object({
   prazoTexto: z.string().nullable().describe("Prazo como o comprador falou"),
   prazoDias: z.number().int().nullable().describe("Dias corridos a partir de hoje até o prazo"),
   urgencia: z.enum(["normal", "urgente", "obra_parada"]),
+  setor: z.string().nullable().describe("Setor ou área que pede (ex.: estrutura, elétrica, manutenção, escritório); null se não disse"),
   faltando: z.array(z.string()).describe("Perguntas curtas sobre o que falta e é essencial para cotar"),
   suposicoes: z.array(z.string()).describe("O que você assumiu sem o comprador dizer"),
 });
@@ -49,6 +50,8 @@ Regras:
 - "faltando": no máximo 3 perguntas, só sobre o que impede a cotação: quantidade ausente ou item ambíguo demais. Não pergunte o que já foi dito.
 - Se o comprador não disser o destino, deixe destino e cep null e não pergunte: o sistema usa o endereço padrão da empresa.
 - "cep": só se o comprador escrever o CEP. Nunca invente CEP.
+- "setor": o setor ou área que está pedindo, se o comprador disser. Não pergunte em "faltando": o sistema pergunta.
+- Agregados (areia, brita, pedra, pó de pedra) usam m³, t, kg, saco ou L. Se o comprador disser carrada ou caminhão, mantenha a unidade dita e o sistema pergunta o volume.
 - Se a mensagem não for um pedido de material (saudação, assunto alheio), responda ehPedido=false e itens vazios.
 - Nunca invente quantidade: se não foi dita, use 0 e pergunte em "faltando".
 
@@ -87,6 +90,13 @@ function limpar(i: Interpretacao): Interpretacao {
       it.quantidade = 0;
       const pergunta = `Quantos ${it.unidade} de ${it.descricao}?`;
       if (!faltando.some((f) => f.includes(it.descricao))) faltando.push(pergunta);
+    }
+  }
+  // Regra da área de compras: agregados em m³, t, kg, saco ou L. Outra unidade gera pergunta.
+  for (const it of itens) {
+    if (/areia|brita|pedra|pedrisco|cascalho|p[oó] de pedra/i.test(it.descricao) && !/^(m³|m3|metro c[uú]bico|t|ton|tonelada|kg|quilo|saco|l|litro)s?$/i.test(it.unidade.trim())) {
+      const pergunta = `${it.descricao}: quantos m³ (ou toneladas) são ${it.quantidade > 0 ? `as ${it.quantidade} ${it.unidade}` : "o pedido"}?`;
+      if (!faltando.some((f) => f.startsWith(it.descricao))) faltando.push(pergunta);
     }
   }
   return {
