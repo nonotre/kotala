@@ -36,6 +36,17 @@ npm run simular -- "40 cp2 pra obra alfa, rua das flores 100 campinas, até quin
   "clicar:Confirmar" "esperar:aguardando_decisao" "clicar:Aprovar" "clicar:Sim" "esperar:confirmado"
 ```
 
+### Telas
+
+Quadro de compras, detalhe do pedido com mapa de cotação e linha do tempo, fornecedores com a confiança, economia e chat web, em `web/` (Next 16 e Carbon).
+
+```bash
+docker compose up -d --build            # banco + bots + telas em http://127.0.0.1:3300
+npm run telas:dev                        # ou fora do docker, com recarga automática (porta 3300)
+```
+
+As telas leem o banco direto; as ações (aprovar, cotar de novo, chat web) vão para a API interna do processo dos bots (`API_INTERNA_TOKEN` no `.env`) e passam pelo mesmo caminho do Telegram. Sem o token, as telas ficam só de leitura. Na demo, use o container ou `npm run telas` (produção), não o modo dev.
+
 ### Busca real e créditos do Serper
 
 O Serper tem 2.500 consultas, uma vez só. Cada item gasta no máximo 2 (`BUSCA_MAX_CONSULTAS_ITEM`), a mesma consulta é reaproveitada por 24 h (`BUSCA_CACHE_HORAS`), o app para em `SERPER_LIMITE` (contado por banco) e os testes automáticos nunca gastam. Para testar uma busca: `npm run busca:testar -- "Cimento CP II 50 kg" saco 40 01310-100`. Na demo sem rede, `BUSCA_MODO=snapshot` usa só as buscas guardadas.

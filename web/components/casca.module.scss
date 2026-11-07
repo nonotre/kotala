@@ -1,0 +1,6 @@
+@use '@carbon/react/scss/spacing' as s;
+.selo {
+  display: flex;
+  align-items: center;
+  padding-inline-end: s.$spacing-05;
+}

@@ -1,0 +1,51 @@
+@use '@carbon/react/scss/spacing' as s;
+@use '@carbon/react/scss/theme' as t;
+@use '@carbon/react/scss/type';
+
+.chat {
+  max-inline-size: 48rem;
+  display: flex;
+  flex-direction: column;
+  gap: s.$spacing-04;
+}
+.mensagens {
+  background: t.$layer-01;
+  padding: s.$spacing-05;
+  min-block-size: 24rem;
+  max-block-size: 60vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: s.$spacing-04;
+}
+.vazio {
+  @include type.type-style('body-01');
+  color: t.$text-helper;
+}
+.balao {
+  @include type.type-style('body-01');
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: s.$spacing-04;
+  max-inline-size: 36rem;
+}
+.eu {
+  align-self: flex-end;
+  .balao { background: t.$layer-selected-01; }
+}
+.assistente {
+  align-self: flex-start;
+  .balao { background: t.$layer-02; }
+}
+.botoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: s.$spacing-03;
+  margin-block-start: s.$spacing-03;
+}
+.envio {
+  display: flex;
+  gap: s.$spacing-03;
+  align-items: flex-end;
+  > :first-child { flex: 1; }
+}

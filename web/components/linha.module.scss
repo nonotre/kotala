@@ -1,0 +1,72 @@
+@use '@carbon/react/scss/spacing' as s;
+@use '@carbon/react/scss/theme' as t;
+@use '@carbon/react/scss/type';
+
+.filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: s.$spacing-05;
+  margin-block-end: s.$spacing-05;
+}
+.filtro {
+  @include type.type-style('body-compact-01');
+  display: flex;
+  gap: s.$spacing-02;
+  align-items: center;
+}
+.lista {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  li {
+    display: grid;
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+    gap: s.$spacing-03;
+    padding-block: s.$spacing-03;
+    border-block-end: 1px solid t.$border-subtle-01;
+    @include type.type-style('body-compact-01');
+  }
+}
+.hora {
+  @include type.type-style('code-01');
+  color: t.$text-secondary;
+}
+.evento {
+  border-inline-start: 3px solid t.$border-interactive;
+  padding-inline-start: s.$spacing-03;
+}
+.ia {
+  margin-block-start: s.$spacing-03;
+  h4 {
+    @include type.type-style('label-02');
+    margin-block: s.$spacing-03 s.$spacing-02;
+  }
+  pre {
+    @include type.type-style('code-01');
+    white-space: pre-wrap;
+    background: t.$layer-02;
+    padding: s.$spacing-03;
+    max-block-size: 20rem;
+    overflow: auto;
+  }
+}
+.abrir {
+  all: unset;
+  cursor: pointer;
+  color: t.$link-primary;
+  &:focus {
+    outline: 2px solid t.$focus;
+  }
+}
+.motivo,
+.texto {
+  // Links longos (referência pública) quebram em qualquer ponto.
+  overflow-wrap: anywhere;
+  color: t.$text-secondary;
+  white-space: pre-wrap;
+  margin-block-start: s.$spacing-01;
+}
+.mensagem,
+.dado {
+  padding-inline-start: calc(#{s.$spacing-03} + 3px);
+}

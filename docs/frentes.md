@@ -75,6 +75,15 @@ Anote aqui o que uma frente precisa que a outra faça (campo novo, função expo
 
 - (vazio. O pedido de prompt e resposta em `uso_ia` já entrou na base, junto com a auditoria por gatilho.)
 
+## Avisos da Frente 1 para a junção
+
+Arquivos fora da lista da Frente 1 que precisaram mudar (nenhum deles está na lista da Frente 3):
+
+- `src/bots.ts`: registra o canal `web` e sobe a API interna das telas (`src/api-interna.ts`, novo).
+- `src/agentes/busca/internet.ts`: loja do Google Shopping vira fornecedor pela chave `loja:<nome>`, sem site (antes todas caíam no mesmo `web:google.com`).
+- `src/agentes/verificacao/index.ts`: presença do fornecedor também conta quando a busca já leu a loja pela API ou pela página do produto (sites que bloqueiam robôs na página inicial).
+- `docker-compose.yml`, `.dockerignore`: serviço `telas` e publicação da API interna em `127.0.0.1:3301`. `.env.exemplo`: bloco das telas no fim.
+
 ## Como juntar
 
 1. Cada frente faz commits no seu branch e roda `npm run checar` antes de cada um.

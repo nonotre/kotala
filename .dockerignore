@@ -6,3 +6,6 @@
 !drizzle/
 !src/
 !scripts/
+!web/
+web/node_modules
+web/.next

@@ -19,7 +19,10 @@
     "simular": "node --env-file=.env scripts/simular-comprador.ts",
     "busca:testar": "node --env-file=.env scripts/testar-busca.ts",
     "verificacao:testar": "node --env-file=.env scripts/testar-verificacao.ts",
-    "rastro": "node --env-file=.env scripts/rastro.ts"
+    "rastro": "node --env-file=.env scripts/rastro.ts",
+    "telas:dev": "cd web && npm run dev",
+    "telas": "cd web && npm run build && npm start",
+    "telas:tipos": "cd web && npx tsc --noEmit"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.113",

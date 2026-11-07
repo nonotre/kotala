@@ -21,8 +21,27 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@banco:5432/${POSTGRES_DB:-kotala}
+      # API interna das telas: aberta dentro do docker e publicada só nesta máquina.
+      API_INTERNA_HOST: 0.0.0.0
+    ports:
+      - "127.0.0.1:${API_INTERNA_PORTA:-3301}:3301"
     volumes:
       - arquivos:/app/dados
+    depends_on:
+      banco:
+        condition: service_healthy
+
+  telas:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@banco:5432/${POSTGRES_DB:-kotala}
+      API_INTERNA_URL: http://bots:3301
+    ports:
+      - "127.0.0.1:3300:3300"
     depends_on:
       banco:
         condition: service_healthy

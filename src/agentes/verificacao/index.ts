@@ -2,9 +2,9 @@
 // junta o histórico e grava o julgamento no fornecedor. Roda quando a busca
 // encontra uma loja, quando um fornecedor real responde e antes do mapa.
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../../nucleo/db/cliente.ts";
-import { fornecedor, historicoCompra } from "../../nucleo/db/schema.ts";
+import { fornecedor, historicoCompra, referenciaPreco } from "../../nucleo/db/schema.ts";
 import { registrar } from "../../nucleo/registro.ts";
 import { baixarPagina } from "../busca/pagina.ts";
 import { acharCnpjs, consultarCnpj, formatarCnpj, limparCnpj, type DadosCnpj } from "./cnpj.ts";
@@ -71,6 +71,16 @@ export async function verificarFornecedor(fornecedorId: string, opcoes: { forcar
     }
     tjsp = await consultarTjsp(cnpj);
     portal = await consultarPortal(cnpj);
+  }
+
+  // Presença também vale quando a busca já leu a loja pela API ou pela página do produto
+  // (sites com bloqueio de robôs recusam a página inicial, mas a API responde).
+  if (f.origem === "real" && !presencaVerificavel) {
+    const [lida] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(referenciaPreco)
+      .where(and(eq(referenciaPreco.fornecedorId, fornecedorId), inArray(referenciaPreco.metodo, ["vtex_api", "jsonld", "ia_trecho"])));
+    presencaVerificavel = (lida?.n ?? 0) > 0;
   }
 
   let dados: DadosCnpj | null = null;
