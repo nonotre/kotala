@@ -80,6 +80,7 @@ Relatados pela Ester ao testar o chat (anotações dela, 07/11/2026). Ainda não
 ## Para quem vai mexer nas telas
 
 - Código em `web/` (Next 16 e Carbon). Telas em `web/app/`, componentes em `web/components/`, leitura do banco em `web/lib/dados.ts`, ações em `web/lib/acoes.ts` (vão para a API interna dos bots).
+- Casca (cabeçalho, menu lateral, sino, tema) em `web/components/Casca.tsx`; peças comuns de página em `Pagina.tsx`, `Bloco.tsx` e `Tabela.tsx`. Cada área tem suas consultas e componentes: `lib/dados-pedido.ts` e `components/pedido/`, `lib/dados-operacao.ts` e `components/operacao/` (início, quadro, lista, avisos), `lib/dados-consulta.ts` e `components/consulta/` (fornecedores, itens, convite, voz), `components/chat/` e `components/conta/` (demonstração). Avisos do sino em `lib/avisos.ts`, tirados do estado dos pedidos.
 - Rodar com recarga automática: `npm run telas:dev` (porta 3300; pare o container `telas` antes, porque usa a mesma porta). Conferir tipos: `npm run telas:tipos`.
 - Depois de mudar: `docker compose up -d --build telas`.
 - A tela fala a língua do comprador de obra: "assistente" (nunca "bot"), sem siglas de módulo, fornecedor simulado sempre com a marca "simulado", aprovação sempre em dois toques.

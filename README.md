@@ -38,7 +38,7 @@ npm run simular -- "40 cp2 pra obra alfa, rua das flores 100 campinas, até quin
 
 ### Telas
 
-Quadro de compras, detalhe do pedido com mapa de cotação e linha do tempo, fornecedores com a confiança, economia e chat web, em `web/` (Next 16 e Carbon).
+Início com o que espera o comprador, quadro e lista de pedidos, avisos, pedido em abas (resumo, busca, cotações, comparação, negociação, decisão e histórico), fornecedores com ficha, itens, convite, ligação por voz e chat web, em `web/` (Next 16 e Carbon, tema claro e escuro). Entrar e Configurações são só demonstração: não salvam nada no servidor.
 
 ```bash
 docker compose up -d --build            # banco + bots + telas em http://127.0.0.1:3300
