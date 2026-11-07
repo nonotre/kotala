@@ -1,0 +1,8 @@
+# Lista de permitidos: só o que a imagem usa entra no contexto do build.
+*
+!package.json
+!package-lock.json
+!tsconfig.json
+!drizzle/
+!src/
+!scripts/

@@ -14,12 +14,17 @@
     "tipos": "tsc --noEmit",
     "teste": "node --test --env-file-if-exists=.env \"testes/**/*.test.ts\"",
     "checar": "npm run tipos && npm run teste",
-    "ia:testar": "node --env-file=.env scripts/testar-ia.ts"
+    "ia:testar": "node --env-file=.env scripts/testar-ia.ts",
+    "bots": "node --env-file=.env src/bots.ts",
+    "simular": "node --env-file=.env scripts/simular-comprador.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.113",
+    "@grammyjs/auto-retry": "^2.0.2",
+    "@grammyjs/runner": "^2.0.3",
     "ai": "^7.0.164",
     "drizzle-orm": "^0.45.4",
+    "grammy": "^1.46.0",
     "postgres": "^4.1.0",
     "zod": "^4.6.7"
   },

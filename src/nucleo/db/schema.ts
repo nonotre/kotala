@@ -111,8 +111,14 @@ export const pedido = pgTable("pedido", {
   prazoTexto: text("prazo_texto"),
   prazoMaxDias: integer("prazo_max_dias"),
   urgencia: urgenciaEnum("urgencia").notNull().default("normal"),
-  /** Campos que o R2 não conseguiu tirar e precisa perguntar. */
+  /** Perguntas sobre o que o R2 não conseguiu tirar do texto. */
   faltando: jsonb("faltando").$type<string[]>().notNull().default([]),
+  /** O que o R2 assumiu sem o comprador dizer ("saco de 50 kg"), mostrado na confirmação. */
+  suposicoes: jsonb("suposicoes").$type<string[]>().notNull().default([]),
+  /** Respostas e correções do comprador antes de confirmar, em ordem. */
+  correcoes: jsonb("correcoes").$type<string[]>().notNull().default([]),
+  /** Rodadas de pergunta já feitas: no máximo uma (R2). */
+  perguntasFeitas: integer("perguntas_feitas").notNull().default(0),
   criadoEm: criadoEm(),
   atualizadoEm: atualizadoEm(),
 });

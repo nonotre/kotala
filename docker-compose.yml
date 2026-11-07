@@ -15,5 +15,15 @@ services:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       retries: 10
+  bots:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@banco:5432/${POSTGRES_DB:-kotala}
+    depends_on:
+      banco:
+        condition: service_healthy
+
 volumes:
   banco:

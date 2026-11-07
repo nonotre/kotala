@@ -23,6 +23,8 @@ export type MensagemEntrada = {
   botao?: string;
   /** Nome que o canal mostra; não é obrigatório nem confiável. */
   nome?: string;
+  /** Papel definido pelo canal (ex.: bot do comprador ou do fornecedor). Sem ele, contato novo é comprador. */
+  papel?: "comprador" | "fornecedor";
   /** Deep link de cadastro do fornecedor (R5): token do /start. */
   convite?: string;
 };
@@ -61,10 +63,10 @@ async function contatoDe(e: MensagemEntrada): Promise<Contato> {
     .from(contato)
     .where(and(eq(contato.canal, e.canal), eq(contato.endereco, e.endereco)));
   if (existente) return existente;
-  // Sem convite, quem chega é tratado como comprador; o cadastro de fornecedor (R5) troca o papel.
+  // Sem papel definido pelo canal, quem chega é comprador; o cadastro de fornecedor (R5) troca o papel.
   const [novo] = await db
     .insert(contato)
-    .values({ canal: e.canal, endereco: e.endereco, papel: "comprador", nome: e.nome })
+    .values({ canal: e.canal, endereco: e.endereco, papel: e.papel ?? "comprador", nome: e.nome })
     .onConflictDoUpdate({ target: [contato.canal, contato.endereco], set: { endereco: e.endereco } })
     .returning();
   return novo!;
