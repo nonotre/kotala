@@ -62,20 +62,25 @@ export function vendeItem(descricao: string): boolean {
 const brl = (v: number) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /** Preço unitário na unidade pedida pelo comprador. */
-export function precoUnitario(p: Persona, descricao: string, unidade: string): number | null {
+/**
+ * Preço unitário na unidade pedida pelo comprador.
+ * @param referencia preço real de mercado (mediana da busca), quando houver: os simulados ficam ancorados nele.
+ */
+export function precoUnitario(p: Persona, descricao: string, unidade: string, referencia?: number | null): number | null {
   const c = precoDoCatalogo(descricao);
   if (!c) return null;
   let base = c.preco;
   if (/carrad|caçamba|caminh/i.test(unidade) && c.unidade === "m³") base *= M3_POR_CARRADA;
   if (/milheiro/i.test(unidade) && c.unidade === "unidade") base *= 1000;
+  if (referencia && referencia > 0) base = referencia;
   return Math.round(base * p.fatorPreco * 100) / 100;
 }
 
 export type ItemPedido = { descricao: string; quantidade: number; unidade: string; destino: string | null };
 
 /** Texto livre da proposta, do jeito que cada persona escreveria. */
-export function textoProposta(p: Persona, item: ItemPedido, rodada: number): string | null {
-  let unit = precoUnitario(p, item.descricao, item.unidade);
+export function textoProposta(p: Persona, item: ItemPedido, rodada: number, referencia?: number | null): string | null {
+  let unit = precoUnitario(p, item.descricao, item.unidade, referencia);
   if (unit === null) return null;
   if (rodada > 1) unit = Math.round(unit * (p.comportamento === "infla" ? 0.88 : 0.97) * 100) / 100;
   const qtd = `${item.quantidade} ${item.unidade}`;

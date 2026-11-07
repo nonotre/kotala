@@ -22,6 +22,27 @@
       "when": 1794063479992,
       "tag": "0002_fornecedor_chave_mapa",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794066468462,
+      "tag": "0003_busca_real",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794066909090,
+      "tag": "0004_mensagem_id_por_contato",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794067349608,
+      "tag": "0005_sancoes",
+      "breakpoints": true
     }
   ]
 }

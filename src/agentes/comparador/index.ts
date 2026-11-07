@@ -3,6 +3,8 @@
 // manda ao comprador com os botões de decisão. A IA nunca aprova nada.
 
 import { dias, quantidade } from "../../texto.ts";
+import { referenciasDoItem } from "../busca/internet.ts";
+import { verificarVarios, type Verificacao } from "../verificacao/index.ts";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../../nucleo/db/cliente.ts";
 import { cotacao, fornecedor, historicoCompra, itemPedido, mapaCotacao, oferta, pedido } from "../../nucleo/db/schema.ts";
@@ -39,6 +41,9 @@ async function carregar(itemPedidoId: number) {
       : [],
   );
 
+  // Q8: confere os fornecedores reais antes de comparar.
+  const verificacoes = await verificarVarios(validasParaComparar.filter((x) => x.fornecedor.origem === "real").map((x) => x.fornecedor.id));
+
   const ofertas: OfertaComparavel[] = validasParaComparar.map(({ oferta: o, fornecedor: f }) => ({
     id: o.id,
     fornecedorId: f.id,
@@ -47,6 +52,8 @@ async function carregar(itemPedidoId: number) {
     verificado: f.verificado,
     homologado: f.homologado,
     conhecido: conhecidos.has(f.id),
+    confiancaFornecedor: verificacoes.get(f.id)?.pontos ?? null,
+    alertasFornecedor: verificacoes.get(f.id)?.alertas ?? [],
     itemOferecido: o.itemOferecido,
     itemExato: o.itemExato,
     precoUnitario: num(o.precoUnitario),
@@ -66,12 +73,12 @@ async function carregar(itemPedidoId: number) {
     .select({ n: sql<number>`count(*)::int` })
     .from(cotacao)
     .where(and(eq(cotacao.itemPedidoId, itemPedidoId), eq(cotacao.rodada, l.item.rodada)));
-  return { ...l, ofertas, consultados: respostas?.n ?? 0 };
+  return { ...l, ofertas, verificacoes, consultados: respostas?.n ?? 0 };
 }
 
 const nomeComSelo = (o: OfertaComparavel) => `${o.fornecedorNome}${o.simulado ? " (simulado)" : ""}`;
 
-function linhaMapa(l: Linha, i: number): string {
+function linhaMapa(l: Linha, i: number, verificacoes: Map<string, Verificacao>): string {
   const o = l.oferta;
   const frete = l.origemFrete === "nao_se_aplica" ? "retirada" : `frete ${formatarBRL(l.frete)} (${l.origemFrete})`;
   const partes = [
@@ -79,6 +86,8 @@ function linhaMapa(l: Linha, i: number): string {
     `   Total ${formatarBRL(l.custo!)}: produto ${formatarBRL(l.produto!)} + ${frete}${l.impostos ? ` + impostos ${formatarBRL(l.impostos)}` : ""}`,
     `   Entrega em ${dias(o.prazoDias!)} · ${o.pagamento ?? "pagamento não informado"} · nota ${formatarNota(l.nota!)}`,
   ];
+  const v = verificacoes.get(o.fornecedorId);
+  if (v && !o.simulado) partes.push(`   ${v.resumo}`);
   if (!o.itemExato) partes.push(`   Equivalente: ${o.itemOferecido}`);
   if (l.alertas.length) partes.push(`   Atenção: ${l.alertas.join("; ")}`);
   return partes.join("\n");
@@ -165,6 +174,7 @@ async function montarMapa(m: MudancaItem) {
   const d = await carregar(m.itemPedidoId);
   if (!d) return;
   const { item, pedido: p } = d;
+  const refs = await referenciasDoItem(item.id);
   const c = comparar(
     {
       quantidade: Number(item.quantidade),
@@ -174,7 +184,9 @@ async function montarMapa(m: MudancaItem) {
       urgencia: p.urgencia,
     },
     d.ofertas,
+    refs.mediana,
   );
+  const blocoReferencia = textoReferencias(refs, item.unidade);
   const cabecalho = `Pedido ${p.id} · ${quantidade(item.quantidade, item.unidade)} de ${item.descricao}`;
 
   if (!c.vencedora) {
@@ -185,7 +197,7 @@ async function montarMapa(m: MudancaItem) {
       motivo: d.ofertas.length ? `Cortadas: ${c.cortadas.map((l) => `${l.oferta.fornecedorNome} (${l.motivos.join(", ")})`).join("; ")}.` : "Nenhum fornecedor mandou proposta.",
       dados: { comparacao: c },
     }).catch(ignorarCorrida);
-    const texto = [cabecalho, "", d.ofertas.length ? "Nenhuma proposta passou nas regras:" : `Nenhum dos ${d.consultados} fornecedores consultados mandou proposta.`, ...cortes].join("\n");
+    const texto = [cabecalho, "", d.ofertas.length ? "Nenhuma proposta passou nas regras:" : `Nenhum dos ${d.consultados} fornecedores consultados mandou proposta.`, ...cortes, ...blocoReferencia].join("\n");
     await enviar(p.compradorId, texto, { pedidoId: p.id, itemPedidoId: item.id, tipo: "aviso" });
     return;
   }
@@ -229,18 +241,38 @@ async function montarMapa(m: MudancaItem) {
     cabecalho,
     `Mapa de cotação${item.rodada > 1 ? `, rodada ${item.rodada}` : ""}: ${c.validas.length} ${c.validas.length === 1 ? "proposta válida" : "propostas válidas"} de ${d.ofertas.length} recebidas (${d.consultados} consultados).`,
     "",
-    ...c.validas.map(linhaMapa),
+    ...c.validas.map((l, i) => linhaMapa(l, i, d.verificacoes)),
   ];
   if (c.cortadas.length) {
     texto.push("", "Fora da comparação:");
     for (const l of c.cortadas) texto.push(`- ${nomeComSelo(l.oferta)}: ${l.motivos.join("; ")}`);
   }
+  texto.push(...blocoReferencia);
   texto.push("", `${c.podeDizerMelhor ? "Recomendo" : "Na frente"}: ${c.vencedora.oferta.fornecedorNome}. ${recomendacao}`);
   if (justificativaMenosDeTres) texto.push("", justificativaMenosDeTres);
   if (p.urgencia !== "normal") texto.push("", "O prazo pesa o dobro porque o pedido é urgente.");
   texto.push("", "A decisão é sua: nada é comprado sem a sua aprovação.");
 
   await enviar(p.compradorId, texto.join("\n"), { pedidoId: p.id, itemPedidoId: item.id, botoes: botoesDecisao(item.id, c), tipo: "aviso" });
+}
+
+const hora = (d: Date) => d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+
+/** Bloco "Referência pública": preço real da internet, com fonte, data e frete para o CEP. */
+export function textoReferencias(refs: Awaited<ReturnType<typeof referenciasDoItem>>, unidade: string): string[] {
+  if (!refs.aceitas.length) return [];
+  const linhas = ["", `Referência pública (internet${refs.mediana !== null ? `, mediana ${formatarBRL(refs.mediana)} por ${unidade}` : ""}):`];
+  for (const r of refs.aceitas.slice(0, 3)) {
+    const preco = r.precoUnitario !== null ? `${formatarBRL(Number(r.precoUnitario))} por ${unidade}` : formatarBRL(Number(r.precoFonte));
+    const entrega =
+      r.entregaNoCep === true && r.frete !== null
+        ? `entrega no CEP por ${formatarBRL(Number(r.frete))}${r.fretePrazoDias !== null ? ` em ${dias(r.fretePrazoDias)}` : ""}`
+        : (r.regiaoDoPreco ?? "");
+    const estoque = `${r.disponivel === false ? " · sem estoque" : ""}${r.cnpjAtivo ? " · CNPJ ativo" : ""}`;
+    linhas.push(`- ${r.loja}: ${preco}${r.conversao ? ` (${r.conversao})` : ""}${estoque}${entrega ? ` · ${entrega}` : ""} · coletado às ${hora(r.coletadoEm)}`);
+    linhas.push(`  ${r.url}`);
+  }
+  return linhas;
 }
 
 function ignorarCorrida(erro: unknown) {

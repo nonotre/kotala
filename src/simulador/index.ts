@@ -7,6 +7,7 @@ import { SIM_ATRASO_FATOR } from "../config.ts";
 import { db } from "../nucleo/db/cliente.ts";
 import { contato, fornecedor, itemPedido, pedido } from "../nucleo/db/schema.ts";
 import { receber, type AdaptadorCanal, type OpcoesEnvio } from "../nucleo/mensagens/index.ts";
+import { referenciasDoItem } from "../agentes/busca/internet.ts";
 import { PERGUNTA_ANTES, PERSONAS, textoProposta, type Persona } from "./personas.ts";
 
 const personaPorChave = new Map(PERSONAS.map((p) => [p.chave, p]));
@@ -44,7 +45,8 @@ async function itemDa(opcoes: OpcoesEnvio) {
 async function enviarProposta(p: Persona, opcoes: OpcoesEnvio) {
   const item = await itemDa(opcoes);
   if (!item) return;
-  const texto = textoProposta(p, item, item.rodada);
+  const { mediana } = await referenciasDoItem(opcoes.itemPedidoId!);
+  const texto = textoProposta(p, item, item.rodada, mediana);
   if (texto) await responder(p.chave, texto);
 }
 

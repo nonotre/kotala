@@ -9,6 +9,9 @@ import { contato, cotacao, fornecedor, itemPedido } from "../../nucleo/db/schema
 import { aoEntrarItem, avancarItem, type MudancaItem } from "../../nucleo/orquestrador/index.ts";
 import { registrar } from "../../nucleo/registro.ts";
 import { PERSONAS, vendeItem } from "../../simulador/personas.ts";
+import { buscarNaInternet } from "./internet.ts";
+
+export { buscarNaInternet, referenciasDoItem } from "./internet.ts";
 
 const personaPorChave = new Map(PERSONAS.map((p) => [p.chave, p]));
 
@@ -51,6 +54,20 @@ async function buscar(m: MudancaItem) {
   }
   const [item] = await db.select().from(itemPedido).where(eq(itemPedido.id, m.itemPedidoId));
   if (!item) return;
+
+  // Busca real na internet: preço de referência com fonte. Falha aqui não trava o pedido.
+  try {
+    await buscarNaInternet(item.id);
+  } catch (erro) {
+    await registrar(db, {
+      agente: "Busca",
+      acao: "A busca na internet falhou.",
+      motivo: erro instanceof Error ? erro.message : String(erro),
+      pedidoId: m.pedidoId,
+      itemPedidoId: item.id,
+    });
+  }
+
   const todos = await candidatos(item.descricao);
   const aptos = todos.filter((c) => !c.motivoCorte).slice(0, MAX_FORNECEDORES());
   const cortados = todos.filter((c) => c.motivoCorte);

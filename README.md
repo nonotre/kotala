@@ -2,6 +2,8 @@
 
 Agentes de IA para cotação de compras de material de obra.
 
+Como tudo funciona, passo a passo: [docs/arquitetura.md](docs/arquitetura.md). Decisões: [docs/decisoes.md](docs/decisoes.md).
+
 ## Rodar
 
 Requer Node 26 ou maior e Docker.
@@ -34,6 +36,12 @@ npm run simular -- "40 cp2 pra obra alfa, rua das flores 100 campinas, até quin
   "clicar:Confirmar" "esperar:aguardando_decisao" "clicar:Aprovar" "clicar:Sim" "esperar:confirmado"
 ```
 
+### Busca real e créditos do Serper
+
+O Serper tem 2.500 consultas, uma vez só. Cada item gasta no máximo 2 (`BUSCA_MAX_CONSULTAS_ITEM`), a mesma consulta é reaproveitada por 24 h (`BUSCA_CACHE_HORAS`), o app para em `SERPER_LIMITE` (contado por banco) e os testes automáticos nunca gastam. Para testar uma busca: `npm run busca:testar -- "Cimento CP II 50 kg" saco 40 01310-100`. Na demo sem rede, `BUSCA_MODO=snapshot` usa só as buscas guardadas.
+
+Para testar a verificação de um fornecedor: `npm run verificacao:testar -- https://www.telhanorte.com.br` ou `-- 15.351.310/0001-28`. O e-SAJ do TJSP ficou em manutenção em 07 e 08/11/2026; quando ele não responde, o fornecedor não perde pontos e o motivo aparece.
+
 Para os testes de integração, crie o banco de teste uma vez:
 `docker compose exec banco psql -U kotala -c "create database kotala_teste"`.
 
@@ -55,7 +63,8 @@ Pedido → Interpretador → confirmação → Busca → Cotador → respostas �
 |---|---|---|
 | R1 Telegram | `src/canais/telegram.ts`, `src/bots.ts` | Um bot do comprador e um do fornecedor, por long polling. Baixa PDF e foto para o Extrator. |
 | R2 Interpretador | `src/agentes/interpretador/` | Lê o pedido solto, entende o jargão, separa os itens e devolve destino, prazo em dias, urgência, suposições e o que falta. |
-| R3 Busca | `src/agentes/busca/` | Por enquanto só na base: fornecedores reais cadastrados e simulados que vendem o item, com o motivo de cada corte. |
+| R3 Busca | `src/agentes/busca/` | Busca real em etapas: entende (IA monta as consultas e os termos), coleta (lojas VTEX com estoque e frete para o CEP, Serper shopping e web, leitura de página por JSON-LD ou IA com trecho conferido), filtra (item certo, tamanho, kit, unidade), confere (fonte, data) e ordena. Grava como referência pública com link e hora, usada no mapa, na retenção de preço e para ancorar os simulados. Também usa os fornecedores da base. |
+| Q8 Verificação | `src/agentes/verificacao/` | Julga se o fornecedor real é confiável: CNPJ (achado no site ou informado na proposta) consultado na Receita pela BrasilAPI, com Minha Receita de reserva; sanções no CEIS e no CNEP (dados abertos do Portal da Transparência, atualizados por dia); processos no TJSP (e-SAJ), em que só falência e recuperação judicial pesam; idade da empresa, atividade, presença verificável, histórico e homologação. Gera pontos (0 a 100), nível e motivos, usados na nota de confiança do mapa e nos alertas. Sócios, e-mail e telefone da Receita são descartados. |
 | R4 Cotador e Q4 | `src/agentes/cotador/` | Pedido de cotação por template, lembrete na metade do prazo, dúvidas respondidas com os dados do pedido (ou levadas ao comprador), encerramento quando todos respondem ou o prazo vence. |
 | R5 Cadastro | `src/fluxo/fornecedor.ts` | O fornecedor abre o bot pelo link de convite (o log mostra o link), recebe o aviso de privacidade e informa o nome da empresa. |
 | R6 Extrator | `src/agentes/extrator/` | Separa proposta, dúvida, recusa e PARAR, e extrai preço, frete, prazo, pagamento, impostos e validade, de texto, PDF ou foto. |

@@ -11,6 +11,7 @@ export const AGENTES = [
   "Extrator",
   "Comparador",
   "Negociador",
+  "Verificação",
   "Voz",
   "Comprador", // ação humana
   "Fornecedor",

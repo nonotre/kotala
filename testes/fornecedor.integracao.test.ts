@@ -30,6 +30,11 @@ test("fornecedor entra pelo bot, informa o nome e fica cadastrado", { skip: pula
   m.ligarFluxos();
   const endereco = `forn-${crypto.randomUUID()}`;
 
+  // "oi" antes do convite não vira nome de empresa.
+  await m.receber({ canal: "web", endereco, papel: "fornecedor", texto: "oi", idExterno: "0" });
+  assert.match(enviadas.at(-1)!.texto, /nome da sua empresa/);
+  assert.equal((await m.db.query.contato.findFirst({ where: (t, { eq }) => eq(t.endereco, endereco) }))!.fornecedorId, null);
+
   await m.receber({ canal: "web", endereco, papel: "fornecedor", texto: "/start convite", idExterno: "1" });
   assert.match(enviadas.at(-1)!.texto, /nome da sua empresa/);
 

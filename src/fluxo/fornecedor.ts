@@ -10,12 +10,14 @@ import type { AnexoIa } from "../nucleo/ia/index.ts";
 import { baixarAnexo, enviar, marcarParouContato, type MensagemRecebida } from "../nucleo/mensagens/index.ts";
 import { registrar } from "../nucleo/registro.ts";
 import { aoRespostaDoVencedor, pedidoEnviadoPara } from "./decisao.ts";
+import { cnpjValido, formatarCnpj, verificarFornecedor } from "../agentes/verificacao/index.ts";
 
 export const AVISO_PRIVACIDADE_FORNECEDOR =
   "Olá! Sou o assistente automatizado de cotações de material de construção. Ao se cadastrar, você recebe pedidos de cotação por aqui, " +
   "sem compromisso de compra. Guardo o nome da empresa e as mensagens desta conversa só para as cotações. Para sair, escreva PARAR.";
 
 const PERGUNTA_NOME = "Qual o nome da sua empresa?";
+const SAUDACAO = /^(oi+|ol[aá]|opa|e a[ií]|bom dia|boa tarde|boa noite|tudo bem\??|ok|blz|beleza)[!.\s]*$/i;
 const CONFIRMA = /^(confirmo|confirmado|confirmamos|ok,? confirmo|pode mandar|fechado)[!.\s]*$/i;
 
 export async function aoMensagemDoFornecedor({ contato, mensagemId, entrada }: MensagemRecebida) {
@@ -30,7 +32,9 @@ export async function aoMensagemDoFornecedor({ contato, mensagemId, entrada }: M
 
   // R5: cadastro. Quem chega ao bot do fornecedor sem cadastro informa o nome da empresa.
   if (!contato.fornecedorId) {
-    if (!texto || texto.startsWith("/")) {
+    // Só aceita o nome depois de perguntar; saudação nunca vira nome de empresa.
+    const jaPerguntou = !!contato.avisoPrivacidadeEm;
+    if (!texto || texto.startsWith("/") || !jaPerguntou || SAUDACAO.test(texto)) {
       if (!contato.avisoPrivacidadeEm) {
         await db.update(tContato).set({ avisoPrivacidadeEm: new Date() }).where(eq(tContato.id, contato.id));
       }
@@ -125,6 +129,15 @@ async function processarResposta(
     await registrar(db, { agente: "Extrator", acao: "Não conseguiu ler a resposta.", motivo: String(erro), ...ctx, fornecedorIds: [c.fornecedorId] });
     await enviar(contatoId, "Recebi! Tive um problema para ler agora. Pode reenviar em instantes?", ctx);
     return;
+  }
+
+  // Q8: CNPJ citado na resposta ou no PDF vai para o fornecedor e é conferido.
+  if (e.cnpj && cnpjValido(e.cnpj)) {
+    const [f] = await db.select({ cnpj: fornecedor.cnpj }).from(fornecedor).where(eq(fornecedor.id, c.fornecedorId));
+    if (f && !f.cnpj) {
+      await db.update(fornecedor).set({ cnpj: formatarCnpj(e.cnpj) }).where(eq(fornecedor.id, c.fornecedorId));
+      await verificarFornecedor(c.fornecedorId, { forcar: true }).catch((erro) => console.error("[verificação]", erro));
+    }
   }
 
   switch (e.classificacao) {

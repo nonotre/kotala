@@ -71,6 +71,13 @@ test("transição inválida e concorrente", { skip: pular }, async () => {
   assert.equal(r.filter((x) => x.status === "fulfilled").length, 1);
 });
 
+test("mesmo id de mensagem em conversas diferentes não é repetida", { skip: pular }, async () => {
+  const a = await m.receber({ canal: "simulado", endereco: `a-${crypto.randomUUID()}`, texto: "oi", idExterno: "42" });
+  const b = await m.receber({ canal: "simulado", endereco: `b-${crypto.randomUUID()}`, texto: "oi", idExterno: "42" });
+  assert.equal(a.tipo, "recebida");
+  assert.equal(b.tipo, "recebida");
+});
+
 test("PARAR bloqueia o envio em todos os canais do fornecedor", { skip: pular }, async () => {
   const { adaptador, enviadas } = m.canalEmMemoria("simulado");
   m.registrarCanal(adaptador);

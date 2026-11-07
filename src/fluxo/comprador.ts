@@ -14,6 +14,7 @@ import {
   TransicaoInvalida,
 } from "../nucleo/orquestrador/index.ts";
 import { registrar } from "../nucleo/registro.ts";
+import { EMPRESA } from "../config.ts";
 import { aoBotaoDoComprador } from "./decisao.ts";
 import { dias, fmtNumero, quantidade } from "../texto.ts";
 
@@ -52,6 +53,7 @@ export function textoConfirmacao(p: {
   id: number;
   itens: ItemResumo[];
   destino: string | null;
+  cep?: string | null;
   prazoTexto: string | null;
   prazoMaxDias: number | null;
   urgencia: "normal" | "urgente" | "obra_parada";
@@ -66,7 +68,7 @@ export function textoConfirmacao(p: {
     linhas.push(`${i + 1}. ${qtd} de ${it.descricao}${it.aceitaSimilar ? " (aceita similar)" : ""}`);
   });
   linhas.push("");
-  const entrega = p.modoEntrega === "retirada" ? "Retirada na loja" : `Entrega: ${p.destino ?? "não informado"}`;
+  const entrega = p.modoEntrega === "retirada" ? "Retirada na loja" : `Entrega: ${p.destino ?? "não informado"}${p.cep ? `, CEP ${p.cep}` : ""}`;
   linhas.push(entrega);
   if (p.janelaRecebimento) linhas.push(`Recebe: ${p.janelaRecebimento}`);
   const prazo = p.prazoTexto
@@ -119,6 +121,13 @@ export async function interpretarEResponder(pedidoId: number) {
   }
 
   const i: Interpretacao = r.valor;
+  // Sem destino: usa o endereço padrão da empresa, em vez de perguntar.
+  if (i.ehPedido && i.modoEntrega !== "retirada" && !i.destino) {
+    i.destino = EMPRESA.enderecoEntrega;
+    i.cep = EMPRESA.cep;
+    i.suposicoes = [...i.suposicoes, "Entrega no endereço padrão da empresa"];
+    i.faltando = i.faltando.filter((f) => !/destino|endere[cç]o|entreg|onde|local|cep/i.test(f));
+  }
   if (!i.ehPedido) {
     await avancarPedido(pedidoId, "cancelar", {
       agente: "Interpretador",
@@ -175,6 +184,7 @@ export async function interpretarEResponder(pedidoId: number) {
     id: pedidoId,
     itens: itens.map((it) => ({ ...it })),
     destino: i.destino,
+    cep: i.cep,
     prazoTexto: i.prazoTexto,
     prazoMaxDias: i.prazoDias,
     urgencia: i.urgencia,
@@ -277,6 +287,14 @@ export async function aoMensagemDoComprador({ contato, entrada }: MensagemRecebi
   }
   if (pendente?.estado === "aguardando_confirmacao" && CONFIRMACAO.test(texto)) {
     return confirmar(pendente.id, contato.id);
+  }
+  // Saudação com pedido pendente não é correção: lembra o pedido em aberto.
+  if (pendente?.estado === "aguardando_confirmacao" && SAUDACAO.test(texto)) {
+    await enviar(contato.id, `Olá! O pedido ${pendente.id} está esperando sua confirmação. Confirma, corrige ou cancela?`, {
+      pedidoId: pendente.id,
+      botoes: botoesConfirmacao(pendente.id, false),
+    });
+    return;
   }
   if (pendente) {
     const correcoes = [...pendente.correcoes, texto];

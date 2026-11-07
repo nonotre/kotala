@@ -16,7 +16,9 @@
     "checar": "npm run tipos && npm run teste",
     "ia:testar": "node --env-file=.env scripts/testar-ia.ts",
     "bots": "node --env-file=.env src/bots.ts",
-    "simular": "node --env-file=.env scripts/simular-comprador.ts"
+    "simular": "node --env-file=.env scripts/simular-comprador.ts",
+    "busca:testar": "node --env-file=.env scripts/testar-busca.ts",
+    "verificacao:testar": "node --env-file=.env scripts/testar-verificacao.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.113",

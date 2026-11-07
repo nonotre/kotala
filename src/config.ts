@@ -5,10 +5,15 @@ const num = (v: string | undefined, padrao: number) => {
   return Number.isFinite(n) && n > 0 ? n : padrao;
 };
 
+/** Empresa fictícia que usa o sistema. Na demo fica em São Paulo, onde as lojas online entregam. */
 export const EMPRESA = {
   nome: process.env.EMPRESA_NOME ?? "Construtora Exemplo Ltda.",
   /** Fictício na demo. */
   cnpj: process.env.EMPRESA_CNPJ ?? "00.000.000/0001-00",
+  cidade: process.env.EMPRESA_CIDADE ?? "São Paulo/SP",
+  /** Endereço de entrega padrão, usado quando o comprador não diz o destino. */
+  enderecoEntrega: process.env.EMPRESA_ENDERECO ?? "Obra Alfa, Rua de Exemplo, 100, Bela Vista, São Paulo/SP",
+  cep: process.env.EMPRESA_CEP ?? "01310-100",
 };
 
 /** Q4: quanto tempo os fornecedores têm para responder. Cerca de 2 minutos na demo. */

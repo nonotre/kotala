@@ -1,0 +1,2 @@
+DROP INDEX "mensagem_entrada_id_externo";--> statement-breakpoint
+CREATE UNIQUE INDEX "mensagem_entrada_id_externo" ON "mensagem" USING btree ("canal","contato_id","id_externo") WHERE "mensagem"."direcao" = 'entrada' and "mensagem"."id_externo" is not null;

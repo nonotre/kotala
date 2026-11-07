@@ -30,6 +30,10 @@ export type OfertaComparavel = {
   homologado: boolean;
   /** Já vendeu antes (histórico). */
   conhecido: boolean;
+  /** Pontos do Q8 (0 a 100), quando verificado; senão a nota usa a regra simples. */
+  confiancaFornecedor?: number | null;
+  /** Sinais de suspeita do Q8 (CNPJ irregular, empresa nova...). */
+  alertasFornecedor?: string[];
   itemOferecido: string;
   itemExato: boolean;
   precoUnitario: number | null;
@@ -122,6 +126,7 @@ function produtoDa(o: OfertaComparavel, quantidade: number): number | null {
 }
 
 function notaConfianca(o: OfertaComparavel): number {
+  if (o.confiancaFornecedor !== undefined && o.confiancaFornecedor !== null && !o.simulado) return o.confiancaFornecedor;
   const base = o.simulado ? 60 : o.verificado ? 80 : 50;
   return Math.min(100, base + (o.homologado ? 20 : 0) + (o.conhecido ? 10 : 0));
 }
@@ -196,6 +201,7 @@ export function comparar(item: ItemComparado, ofertas: OfertaComparavel[], refer
     if (o.validadeDias === null) alertas.push("Sem validade da proposta");
     if (!o.itemExato && item.aceitaSimilar) alertas.push(`Item equivalente: ${o.itemOferecido}`);
     if (abaixo >= 0.15 && portoes.naoRetida) alertas.push(`Preço ${Math.round(abaixo * 100)}% abaixo da referência`);
+    for (const a of o.alertasFornecedor ?? []) alertas.push(a);
 
     return {
       oferta: o,

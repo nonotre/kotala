@@ -46,7 +46,9 @@ Regras:
 - Correções posteriores do comprador valem mais que o texto original.
 - "prazoDias": dias corridos de hoje até a data pedida ("até sexta", "semana que vem", "amanhã"). null se não houver prazo.
 - "urgencia": "obra_parada" se disser obra parada ou equivalente; "urgente" se disser urgente, hoje, o quanto antes; senão "normal".
-- "faltando": no máximo 3 perguntas, só sobre o que impede a cotação: quantidade ausente, item ambíguo demais, destino da entrega quando não houver nenhum. Não pergunte o que já foi dito.
+- "faltando": no máximo 3 perguntas, só sobre o que impede a cotação: quantidade ausente ou item ambíguo demais. Não pergunte o que já foi dito.
+- Se o comprador não disser o destino, deixe destino e cep null e não pergunte: o sistema usa o endereço padrão da empresa.
+- "cep": só se o comprador escrever o CEP. Nunca invente CEP.
 - Se a mensagem não for um pedido de material (saudação, assunto alheio), responda ehPedido=false e itens vazios.
 - Nunca invente quantidade: se não foi dita, use 0 e pergunte em "faltando".
 

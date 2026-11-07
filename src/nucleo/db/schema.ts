@@ -63,7 +63,8 @@ export const fornecedor = pgTable("fornecedor", {
   origem: origemFornecedorEnum("origem").notNull(),
   /** Q8: CNPJ ativo ou presença conferida, com link da fonte. */
   verificado: boolean("verificado").notNull().default(false),
-  verificacao: jsonb("verificacao").$type<{ fonte: string; em: string; resumo: string }>(),
+  /** Julgamento do Q8 (pontos, nível, motivos, CNPJ consultado). */
+  verificacao: jsonb("verificacao").$type<Record<string, unknown>>(),
   /** X2: aprovação formal, diferente de verificado. */
   homologado: boolean("homologado").notNull().default(false),
   fonte: text("fonte"),
@@ -259,8 +260,9 @@ export const mensagem = pgTable(
     criadoEm: criadoEm(),
   },
   (t) => [
+    // O id da mensagem no Telegram é por conversa: a chave inclui o contato.
     uniqueIndex("mensagem_entrada_id_externo")
-      .on(t.canal, t.idExterno)
+      .on(t.canal, t.contatoId, t.idExterno)
       .where(sql`${t.direcao} = 'entrada' and ${t.idExterno} is not null`),
     index("mensagem_contato").on(t.contatoId, t.criadoEm),
   ],
@@ -345,4 +347,85 @@ export const mapaCotacao = pgTable(
     criadoEm: criadoEm(),
   },
   (t) => [index("mapa_item").on(t.itemPedidoId, t.criadoEm)],
+);
+
+// ---------- Busca real (R3) ----------
+
+export const metodoColetaEnum = pgEnum("metodo_coleta", ["vtex_api", "jsonld", "ia_trecho", "serper_shopping"]);
+
+/** Preço público coletado na internet, com fonte e data. Referência, não proposta. */
+export const referenciaPreco = pgTable(
+  "referencia_preco",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    itemPedidoId: integer("item_pedido_id")
+      .notNull()
+      .references(() => itemPedido.id),
+    fornecedorId: uuid("fornecedor_id").references(() => fornecedor.id),
+    loja: text("loja").notNull(),
+    titulo: text("titulo").notNull(),
+    /** Sem link de fonte, não entra. */
+    url: text("url").notNull(),
+    metodo: metodoColetaEnum("metodo").notNull(),
+    /** Preço como a loja mostra, pela unidade dela. */
+    precoFonte: reais("preco_fonte").notNull(),
+    unidadeFonte: text("unidade_fonte"),
+    /** Preço convertido para a unidade do pedido, quando a conversão é segura. */
+    precoUnitario: reais("preco_unitario"),
+    conversao: text("conversao"),
+    disponivel: boolean("disponivel"),
+    /** Frete real para o CEP (simulação da loja), quando houver. */
+    frete: reais("frete"),
+    fretePrazoDias: integer("frete_prazo_dias"),
+    entregaNoCep: boolean("entrega_no_cep"),
+    regiaoDoPreco: text("regiao_do_preco"),
+    /** Trecho da página que contém o preço, conferido no código. */
+    trecho: text("trecho"),
+    aceita: boolean("aceita").notNull(),
+    motivoCorte: text("motivo_corte"),
+    confianca: integer("confianca").notNull(),
+    coletadoEm: timestamp("coletado_em", { withTimezone: true }).notNull(),
+    criadoEm: criadoEm(),
+  },
+  (t) => [index("referencia_item").on(t.itemPedidoId)],
+);
+
+/** Respostas de APIs de busca guardadas: evita gastar crédito com a mesma consulta. */
+export const cacheBusca = pgTable(
+  "cache_busca",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    provedor: text("provedor").notNull(),
+    consulta: text("consulta").notNull(),
+    resposta: jsonb("resposta").notNull(),
+    /** true quando a chamada gastou crédito pago (Serper). */
+    pago: boolean("pago").notNull().default(false),
+    criadoEm: criadoEm(),
+  },
+  (t) => [index("cache_busca_consulta").on(t.provedor, t.consulta, t.criadoEm)],
+);
+
+// ---------- Sanções (Q8): CEIS e CNEP do Portal da Transparência, só empresas ----------
+
+export const sancao = pgTable(
+  "sancao",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    cadastro: text("cadastro").notNull(), // CEIS ou CNEP
+    cnpj: text("cnpj").notNull(),
+    /** 8 primeiros dígitos: a mesma empresa, em qualquer unidade. */
+    raiz: text("raiz").notNull(),
+    nome: text("nome").notNull(),
+    categoria: text("categoria"),
+    orgao: text("orgao"),
+    uf: text("uf"),
+    esfera: text("esfera"),
+    abrangencia: text("abrangencia"),
+    inicio: text("inicio"),
+    fim: text("fim"),
+    /** Data do arquivo do Portal da Transparência. */
+    base: text("base").notNull(),
+    carregadoEm: timestamp("carregado_em", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("sancao_cnpj").on(t.cnpj), index("sancao_raiz").on(t.raiz)],
 );

@@ -25,6 +25,7 @@ export const Extracao = z.object({
   pagamento: z.string().nullable().describe("Condição de pagamento como escreveu"),
   prazoPagamentoDias: z.number().int().nullable().describe("Dias para pagar; 0 se à vista ou antecipado"),
   entregaNoLocal: z.boolean().nullable().describe("true se confirma que entrega no local; null se não falou"),
+  cnpj: z.string().nullable().describe("CNPJ do fornecedor, se aparecer na mensagem ou no anexo"),
 });
 export type Extracao = z.infer<typeof Extracao>;
 
