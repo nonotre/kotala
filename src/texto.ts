@@ -36,3 +36,21 @@ export const MOTIVOS_CANCELAMENTO = {
   outro: "Outro motivo",
 } as const;
 export type MotivoCancelamento = keyof typeof MOTIVOS_CANCELAMENTO;
+
+const SP = "America/Sao_Paulo";
+const diaSP = (d: Date) => d.toLocaleDateString("pt-BR", { timeZone: SP });
+
+/** "às 14:30" se for hoje; "em 10/11 às 14:30" se for outro dia (prazos de dias no modo real). */
+export function quando(d: Date, agora = new Date()): string {
+  const h = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: SP });
+  if (diaSP(d) === diaSP(agora)) return `às ${h}`;
+  return `em ${d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: SP })} às ${h}`;
+}
+
+/** Nome legível do pedido: "Pedido 11 · Placa de Inox 304 (+1 item) · setor Comunicação". */
+export function nomePedido(p: { id: number; setor?: string | null }, itens: readonly { descricao: string }[] = []): string {
+  const partes = [`Pedido ${p.id}`];
+  if (itens.length) partes.push(`${itens[0]!.descricao}${itens.length > 1 ? ` (+${itens.length - 1} ${itens.length === 2 ? "item" : "itens"})` : ""}`);
+  if (p.setor) partes.push(`setor ${p.setor}`);
+  return partes.join(" · ");
+}

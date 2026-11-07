@@ -271,10 +271,11 @@ export async function conversaWeb(endereco: string) {
   if (!c) return [];
   // Pega do fim para o começo e desvira: numa conversa longa, as mais novas não podem ficar de fora.
   const recentes = await db
-    .select({ id: mensagem.id, direcao: mensagem.direcao, texto: mensagem.texto, botoes: mensagem.botoes, criadoEm: mensagem.criadoEm })
+    .select({ id: mensagem.id, direcao: mensagem.direcao, texto: mensagem.texto, botoes: mensagem.botoes, criadoEm: mensagem.criadoEm, anexos: mensagem.anexos })
     .from(mensagem)
     .where(eq(mensagem.contatoId, c.id))
     .orderBy(desc(mensagem.criadoEm))
     .limit(300);
-  return recentes.reverse();
+  // Só o nome e o tipo dos anexos vão para a tela.
+  return recentes.reverse().map(({ anexos, ...m }) => ({ ...m, anexos: (anexos ?? []).map((a) => ({ tipo: a.tipo, nome: a.nome ?? null })) }));
 }

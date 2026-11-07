@@ -13,6 +13,8 @@ export type MensagemChat = {
   texto: string;
   botoes: Botao[] | null;
   criadoEm: string;
+  /** Anexos do comprador (imagem, PDF, áudio): só nome e tipo. */
+  anexos?: { tipo: string; nome: string | null }[];
 };
 
 /** Envio que não chegou ao assistente, ou que chegou e ficou sem resposta. */

@@ -202,7 +202,8 @@ export function proximoPasso(d: DadosPedido): ProximoPasso {
   if (p.estado === "cancelado") return { quem: "fim", texto: p.motivoCancelamento ? `Pedido cancelado: ${p.motivoCancelamento}` : "Pedido cancelado.", botao: null };
 
   const com = (estado: string) => itens.find((i) => i.item.estado === estado);
-  const duvida = itens.find((i) => i.item.duvidaPendente);
+  // Dúvida só pede resposta enquanto a cotação está aberta (o assistente só repassa nesses estados).
+  const duvida = itens.find((i) => i.item.duvidaPendente && (i.item.estado === "cotando" || i.item.estado === "buscando"));
   if (duvida?.item.duvidaPendente) {
     return { quem: "comprador", texto: `${duvida.item.duvidaPendente.fornecedor} tem uma dúvida sobre ${duvida.item.descricao}.`, botao: ir("cotacoes", duvida.item.id) };
   }

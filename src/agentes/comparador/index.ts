@@ -88,6 +88,8 @@ async function carregar(itemPedidoId: number) {
       const a = anterior(f.id, o.rodada);
       return a ? produtoDe(a) : null;
     })(),
+    online: o.formato === "busca",
+    fonte: o.fonte,
   }));
 
   const [respostas] = await db
@@ -98,7 +100,7 @@ async function carregar(itemPedidoId: number) {
   return { ...l, ofertas, brutas, verificacoes, consultados: respostas?.n ?? 0 };
 }
 
-const nomeComSelo = (o: OfertaComparavel) => `${o.fornecedorNome}${o.simulado ? " (simulado)" : ""}`;
+const nomeComSelo = (o: OfertaComparavel) => `${o.fornecedorNome}${o.simulado ? " (simulado)" : o.online ? " (loja online)" : ""}`;
 
 function linhaMapa(l: Linha, i: number, verificacoes: Map<string, Verificacao>): string {
   const o = l.oferta;
@@ -114,6 +116,8 @@ function linhaMapa(l: Linha, i: number, verificacoes: Map<string, Verificacao>):
     partes.push(`   Negociado: o produto baixou de ${formatarBRL(o.produtoAnterior)} para ${formatarBRL(l.produto)}`);
   }
   if (!o.itemExato) partes.push(`   Equivalente: ${o.itemOferecido}`);
+  // Link do Google Shopping aponta para o Google, não para a loja: não ajuda o comprador.
+  if (o.online && o.fonte && !/google\.[a-z.]+\/search/.test(o.fonte)) partes.push(`   Anúncio: ${o.fonte}`);
   if (l.alertas.length) partes.push(`   Atenção: ${l.alertas.join("; ")}`);
   return partes.join("\n");
 }
@@ -210,7 +214,9 @@ async function montarMapa(m: MudancaItem) {
     d.ofertas,
     refs.mediana,
   );
-  const blocoReferencia = textoReferencias(refs, item.unidade);
+  // Lojas que já viraram proposta não se repetem na referência.
+  const naProposta = new Set(d.ofertas.filter((o) => o.online).map((o) => o.fornecedorId));
+  const blocoReferencia = textoReferencias({ ...refs, aceitas: refs.aceitas.filter((r) => !r.fornecedorId || !naProposta.has(r.fornecedorId)) }, item.unidade);
   const cabecalho = `Pedido ${p.id} · ${quantidade(item.quantidade, item.unidade)} de ${item.descricao}`;
 
   if (!c.vencedora) {
@@ -261,6 +267,7 @@ async function montarMapa(m: MudancaItem) {
     return;
   }
 
+  const lojasOnline = d.ofertas.filter((o) => o.online).length;
   const motivoNovoMapa =
     m.evento === "reavaliar"
       ? "Mapa refeito."
@@ -269,7 +276,7 @@ async function montarMapa(m: MudancaItem) {
         : null;
   const texto = [
     motivoNovoMapa ? `${cabecalho}\n${motivoNovoMapa}` : cabecalho,
-    `Mapa de cotação${item.rodada > 1 ? `, rodada ${item.rodada}` : ""}: ${c.validas.length} ${c.validas.length === 1 ? "proposta válida" : "propostas válidas"} de ${d.ofertas.length} recebidas (${d.consultados} consultados).`,
+    `Mapa de cotação${item.rodada > 1 ? `, rodada ${item.rodada}` : ""}: ${c.validas.length} ${c.validas.length === 1 ? "proposta válida" : "propostas válidas"} de ${d.ofertas.length} recebidas (${d.consultados} ${d.consultados === 1 ? "fornecedor consultado" : "fornecedores consultados"}${lojasOnline ? ` e ${lojasOnline} ${lojasOnline === 1 ? "loja online" : "lojas online"}` : ""}).`,
     "",
     ...c.validas.map((l, i) => linhaMapa(l, i, d.verificacoes)),
   ];
@@ -281,7 +288,6 @@ async function montarMapa(m: MudancaItem) {
   texto.push("", `${c.podeDizerMelhor ? "Recomendo" : "Na frente"}: ${c.vencedora.oferta.fornecedorNome}. ${recomendacao}`);
   if (justificativaMenosDeTres) texto.push("", justificativaMenosDeTres);
   if (p.urgencia !== "normal") texto.push("", "O prazo pesa o dobro porque o pedido é urgente.");
-  texto.push("", "A decisão é sua: nada é comprado sem a sua aprovação.");
 
   await enviar(p.compradorId, texto.join("\n"), { pedidoId: p.id, itemPedidoId: item.id, botoes: botoesDecisao(item.id, c), tipo: "aviso" });
   // Só depois do mapa pronto: a resposta do fornecedor encontra o item esperando a decisão.

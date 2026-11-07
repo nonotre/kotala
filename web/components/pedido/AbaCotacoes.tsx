@@ -9,6 +9,7 @@ import { GradePagina } from "@/components/Pagina";
 import { Tabela } from "@/components/Tabela";
 import type { DadosPedido, ItemDoPedido } from "@/lib/dados-pedido";
 import { brl, dataHora, hora } from "@/lib/formato";
+import { LinkExterno } from "@/components/LinkExterno";
 import { Fornecedor, IndiceItens, SecaoItem, textoDias } from "./Item";
 import { StatusCotacao } from "./Status";
 import { FORMATO_OFERTA, hrefAba } from "./textos";
@@ -59,17 +60,26 @@ function Propostas({ i }: { i: ItemDoPedido }) {
         colunas={[...(variasRodadas ? ["Rodada"] : []), "Fornecedor", "O que ofereceu", "Como chegou", "Preço unitário", "Produto", "Frete", "Entrega", "Pagamento", "Validade"]}
         linhas={ofertas.map((o) => [
           ...(variasRodadas ? [o.rodada] : []),
-          <Fornecedor key="f" nome={o.nome} simulado={o.origem === "simulado"} />,
+          <Fornecedor key="f" nome={o.nome} simulado={o.origem === "simulado"} online={o.formato === "busca"} />,
           <span key="o">
             {o.itemOferecido}
             {!o.itemExato ? <span className={s.ajudaCelula}>Equivalente</span> : null}
             {o.embalagem ? <span className={s.ajudaCelula}>Embalagem: {o.embalagem}</span> : null}
-            {o.impostosNaoInclusos ? <span className={s.ajudaCelula}>Fora do preço: {o.impostosNaoInclusos}</span> : null}
+            {o.impostosNaoInclusos ? (
+              <span className={s.ajudaCelula}>{o.impostosNaoInclusos === "inclusos" ? "Impostos inclusos no preço" : `Fora do preço: ${o.impostosNaoInclusos}`}</span>
+            ) : null}
+            {o.formato === "busca" && o.fonte ? (
+              <span className={s.ajudaCelula}>
+                <LinkExterno href={o.fonte}>Ver anúncio</LinkExterno>
+              </span>
+            ) : null}
           </span>,
           `${FORMATO_OFERTA[o.formato] ?? o.formato}, ${hora(o.criadoEm)}`,
           <span key="pu" className={s.numero}>{brl(o.precoUnitario)}</span>,
-          <span key="tp" className={s.numero}>{brl(o.totalProduto)}</span>,
-          <span key="fr" className={s.numero}>{o.frete !== null ? brl(o.frete) : "—"}</span>,
+          <span key="tp" className={s.numero}>
+            {brl(o.totalProduto ?? (o.precoUnitario !== null ? String(Number(o.precoUnitario) * Number(i.item.quantidade)) : null))}
+          </span>,
+          <span key="fr" className={s.numero}>{o.frete !== null ? brl(o.frete) : o.formato === "busca" ? "estimado no mapa" : "—"}</span>,
           textoDias(o.prazoDias),
           o.pagamento ?? "—",
           textoDias(o.validadeDias),

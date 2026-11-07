@@ -86,7 +86,8 @@ export function adaptadorTelegram(bots: Partial<Record<Papel, Bot>>): AdaptadorC
           if (umPorLinha) teclado.row();
         }
       }
-      const m = await bot.api.sendMessage(chatId, texto.slice(0, 4096), { reply_markup: teclado });
+      // Sem prévia de link: a imagem do primeiro anúncio citado parecia uma proposta escolhida.
+      const m = await bot.api.sendMessage(chatId, texto.slice(0, 4096), { reply_markup: teclado, link_preview_options: { is_disabled: true } });
       return { idExterno: String(m.message_id) };
     },
     async baixar(ref) {

@@ -26,10 +26,16 @@
 }
 
 .seloFicticio {
-  display: flex;
+  display: none;
   align-items: center;
   padding-inline-end: spacing.$spacing-03;
   white-space: nowrap;
+
+  // No celular o selo empurrava o botão de tema para fora do cabeçalho; cada fornecedor simulado
+  // continua com o próprio selo nas telas.
+  @include breakpoint.breakpoint(md) {
+    display: flex;
+  }
 }
 
 .sino {
@@ -117,6 +123,14 @@
   &:not(:has(> [data-pagina])) {
     padding: spacing.$spacing-05;
   }
+}
+
+// A regra do Carbon para o menu expandido (.cds--side-nav--expanded ~ .cds--content, 3 classes)
+// empurra o conteúdo 16rem em qualquer largura: no celular, sobra uma faixa estreita e rolagem
+// horizontal. Com 4 classes, abaixo de lg o conteúdo fica sem margem; .comMenu e .comTrilho,
+// abaixo e com o mesmo peso, devolvem a margem a partir de lg.
+.conteudo.conteudo.conteudo.conteudo {
+  margin-inline-start: 0;
 }
 
 .comMenu.comMenu.comMenu.comMenu {

@@ -58,7 +58,7 @@ function Escolha({ i }: { i: ItemDoPedido }) {
           />,
         ])}
       />
-      <p className={s.ajuda}>A decisão é sua: nada é comprado sem a sua aprovação.</p>
+      <p className={s.ajuda}>Aprovar pede uma confirmação antes de mandar o pedido de compra.</p>
     </Bloco>
   );
 }

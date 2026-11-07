@@ -1,3 +1,5 @@
+"use client";
+// Cliente: o ícone (função) passa para o Button/Link do Carbon, e telas de servidor usam este link.
 import { Button, Link as CarbonLink } from "@carbon/react";
 import { Launch } from "@carbon/react/icons";
 import type { ReactNode } from "react";

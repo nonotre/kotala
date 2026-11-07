@@ -30,10 +30,13 @@ export type Recusa = { motivo: string };
 export async function planejarNegociacao(itemPedidoId: number, rodadaAtual: number): Promise<PlanoNegociacao | Recusa> {
   if (rodadaAtual >= MAX_RODADAS) return { motivo: `Já foram ${MAX_RODADAS} rodadas: é o limite para não cansar os fornecedores.` };
   const mapa = await ultimoMapa(itemPedidoId);
-  const validas = mapa?.comparacao.validas ?? [];
-  if (!validas.length) return { motivo: "Não há proposta válida para negociar." };
+  const todas = mapa?.comparacao.validas ?? [];
+  if (!todas.length) return { motivo: "Não há proposta válida para negociar." };
+  // Loja online não tem conversa: o preço do anúncio não se negocia por aqui.
+  const validas = todas.filter((l) => !l.oferta.online);
+  if (!validas.length) return { motivo: "As propostas são de lojas online: o preço do anúncio não se negocia por aqui." };
 
-  const maisBarata = validas.reduce((a, b) => (b.custo! < a.custo! ? b : a));
+  const maisBarata = todas.reduce((a, b) => (b.custo! < a.custo! ? b : a));
   const { mediana } = await referenciasDoItem(itemPedidoId);
   if (validas.length === 1) {
     return {
@@ -75,6 +78,6 @@ export function textoNegociacao(
   }
   linhas.push("Se ajudar, podemos combinar a forma de pagamento que for melhor para você.");
   linhas.push("Se preferir manter a proposta, não precisa responder: ela continua valendo.");
-  if (respostaAte) linhas.push(`Respondo ao comprador às ${respostaAte}.`);
+  if (respostaAte) linhas.push(`Respondo ao comprador ${/^(às|em) /.test(respostaAte) ? respostaAte : `às ${respostaAte}`}.`);
   return linhas.join("\n");
 }

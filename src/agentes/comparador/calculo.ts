@@ -51,6 +51,10 @@ export type OfertaComparavel = {
   rodada?: number;
   /** X3: total do produto na proposta anterior do mesmo fornecedor (antes de negociar). */
   produtoAnterior?: number | null;
+  /** Proposta montada do anúncio de uma loja online: preço real, prazo e pagamento simulados. */
+  online?: boolean;
+  /** Link do anúncio, quando online. */
+  fonte?: string | null;
 };
 
 export type ItemComparado = {
@@ -203,6 +207,7 @@ export function comparar(item: ItemComparado, ofertas: OfertaComparavel[], refer
     if (o.impostosValor === null && !o.impostosNaoInclusos) alertas.push("Não disse se há impostos ou taxas fora do preço");
     if (!retirada && o.entregaNoLocal === null) alertas.push("Não confirmou a entrega no local");
     if (o.validadeDias === null) alertas.push("Sem validade da proposta");
+    if (o.online) alertas.push("Loja online: prazo e pagamento simulados");
     if (!o.itemExato && item.aceitaSimilar) alertas.push(`Item equivalente: ${o.itemOferecido}`);
     if (abaixo >= 0.15 && portoes.naoRetida) alertas.push(`Preço ${Math.round(abaixo * 100)}% abaixo da referência`);
     for (const a of o.alertasFornecedor ?? []) alertas.push(a);

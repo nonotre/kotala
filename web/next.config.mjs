@@ -26,6 +26,8 @@ const config = {
   // O chat registra custom elements e mexe em window: estes pacotes precisam passar pelo compilador do Next.
   transpilePackages: ["@carbon/ai-chat", "@carbon/ai-chat-components"],
   sassOptions: { quietDeps: true },
+  // Chat web com anexos: até 3 arquivos de 10 MB, em base64, pela ação enviarChat.
+  experimental: { serverActions: { bodySizeLimit: "45mb" } },
 };
 
 export default config;

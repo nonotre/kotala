@@ -81,6 +81,10 @@ export const fornecedor = pgTable("fornecedor", {
   /** Lista de bloqueio: fornecedor que deu problema não entra em busca nem recompra. */
   bloqueadoEm: timestamp("bloqueado_em", { withTimezone: true }),
   motivoBloqueio: text("motivo_bloqueio"),
+  /** Categorias que vende (mesmos nomes da base de itens); vazio = não informou, recebe tudo. */
+  categorias: jsonb("categorias").$type<string[]>().notNull().default([]),
+  /** Cadastro pelo bot em andamento: próxima pergunta ("categorias", "cnpj"); null = completo. */
+  cadastroEtapa: text("cadastro_etapa"),
   criadoEm: criadoEm(),
 });
 
@@ -123,6 +127,10 @@ export const pedido = pgTable("pedido", {
   setor: text("setor"),
   /** Motivo do cancelamento, quando cancelado. */
   motivoCancelamento: text("motivo_cancelamento"),
+  /** Entrega combinada em datas ou em partes ("metade em 20 dias, o resto em 30"). */
+  entregas: text("entregas"),
+  /** Lembrete de confirmação já mandado ao comprador (pedido parado em "confirma?"). */
+  lembreteConfirmacaoEm: timestamp("lembrete_confirmacao_em", { withTimezone: true }),
   /** Prazo como o comprador falou e em dias, para o portão "dentro do prazo". */
   prazoTexto: text("prazo_texto"),
   prazoMaxDias: integer("prazo_max_dias"),

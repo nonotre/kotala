@@ -3,7 +3,7 @@
 // (Cotador) e confirmação do pedido de compra (R11).
 
 import { randomBytes } from "node:crypto";
-import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull } from "drizzle-orm";
 import { cotacaoAbertaDo, encerrarSeTodosResponderam, reenviarCotacaoAberta, responderDuvida } from "../agentes/cotador/index.ts";
 import { emailValido, FONTE_CONVITE_MANUAL, linkConvite, normalizarEmail } from "../canais/email.ts";
 import { EMPRESA } from "../config.ts";
@@ -24,6 +24,9 @@ import {
 import { registrar } from "../nucleo/registro.ts";
 import { aoRespostaDoVencedor, pedidoEnviadoPara } from "./decisao.ts";
 import { cnpjValido, formatarCnpj, verificarFornecedor } from "../agentes/verificacao/index.ts";
+import { baseDeItens } from "../agentes/interpretador/base-itens.ts";
+import { palavrasEmComum } from "../agentes/interpretador/index.ts";
+import { quando } from "../texto.ts";
 
 export const AVISO_PRIVACIDADE_FORNECEDOR =
   "Olá! Sou o assistente automatizado de cotações de material de construção. Ao se cadastrar, você recebe pedidos de cotação por aqui, " +
@@ -36,8 +39,9 @@ const CONFIRMA = /^(confirmo|confirmado|confirmamos|ok,? confirmo|pode mandar|fe
 export async function aoMensagemDoFornecedor({ contato, mensagemId, entrada }: MensagemRecebida) {
   const texto = entrada.texto.trim();
 
-  // Botões do pedido de compra.
+  // Botões do pedido de compra e do cadastro.
   if (entrada.botao) {
+    if (entrada.botao.startsWith("cad:") && contato.fornecedorId) return botaoDoCadastro(contato, entrada.botao);
     const m = /^compra:(\d+):(confirmo|desisto)$/.exec(entrada.botao);
     if (m) {
       await vincularMensagem(mensagemId, { itemPedidoId: Number(m[1]) });
@@ -68,7 +72,7 @@ export async function aoMensagemDoFornecedor({ contato, mensagemId, entrada }: M
       return;
     }
     const nome = texto.slice(0, 120);
-    const [f] = await db.insert(fornecedor).values({ nome, origem: "real", fonte: "Cadastro pelo bot" }).returning();
+    const [f] = await db.insert(fornecedor).values({ nome, origem: "real", fonte: "Cadastro pelo bot", cadastroEtapa: "categorias" }).returning();
     await db
       .update(tContato)
       .set({ fornecedorId: f!.id, papel: "fornecedor", nome, avisoPrivacidadeEm: contato.avisoPrivacidadeEm ?? new Date() })
@@ -79,8 +83,14 @@ export async function aoMensagemDoFornecedor({ contato, mensagemId, entrada }: M
       motivo: "Entrou pelo link ou QR do fornecedor.",
       fornecedorIds: [f!.id],
     });
-    await enviar(contato.id, `Cadastro feito, ${nome}! Quando houver pedido de cotação, mando por aqui. Pode responder do seu jeito, em texto ou PDF.`);
+    await perguntarCategorias(contato.id, nome, []);
     return;
+  }
+
+  // Cadastro em andamento: o que vende e CNPJ (opcional).
+  const [forn] = await db.select().from(fornecedor).where(eq(fornecedor.id, contato.fornecedorId));
+  if (forn?.cadastroEtapa && texto && !texto.startsWith("/")) {
+    if (await etapaDoCadastro(contato, forn, texto)) return;
   }
 
   if (texto.startsWith("/start")) {
@@ -100,10 +110,163 @@ export async function aoMensagemDoFornecedor({ contato, mensagemId, entrada }: M
 
   const c = await cotacaoAbertaDo(contato.fornecedorId);
   if (!c) {
-    await enviar(contato.id, "Não tenho cotação aberta para você agora. Obrigado!");
+    // Sem cotação aberta a conversa não se encerra: guarda a mensagem e explica o que acontece.
+    const temConteudo = !!texto || !!entrada.anexos?.length;
+    await registrar(db, {
+      agente: "Fornecedor",
+      acao: `${forn?.nome ?? "Fornecedor"} mandou mensagem sem cotação aberta.`,
+      motivo: texto ? texto.slice(0, 300) : entrada.anexos?.length ? "Mandou um anexo." : "Mensagem vazia.",
+      fornecedorIds: [contato.fornecedorId],
+      dados: { texto: texto.slice(0, 2000), anexos: entrada.anexos?.length ?? 0 },
+    });
+    if (!temConteudo) return;
+    // Resposta que chegou depois de a cotação fechar: explica, em vez de falar como se nada existisse.
+    const [recente] = await db
+      .select({ itemPedidoId: cotacao.itemPedidoId })
+      .from(cotacao)
+      .where(and(eq(cotacao.fornecedorId, contato.fornecedorId), gte(cotacao.criadoEm, new Date(Date.now() - 48 * 3600_000))))
+      .orderBy(desc(cotacao.criadoEm))
+      .limit(1);
+    if (recente) {
+      await enviar(
+        contato.id,
+        `A cotação ${recente.itemPedidoId} já foi encerrada. Guardei sua mensagem; se o comprador quiser negociar ou abrir nova rodada, volto a falar com você por aqui.`,
+        { itemPedidoId: recente.itemPedidoId },
+      );
+      return;
+    }
+    const perguntarCats = forn?.origem === "real" && !forn.categorias.length;
+    const cats = forn?.categorias.length ? ` de ${forn.categorias.join(", ")}` : "";
+    await enviar(
+      contato.id,
+      `Recebi sua mensagem e guardei aqui. No momento não há pedido de cotação aberto para vocês. ` +
+        `Quando surgir um pedido${cats}, mando por aqui com os detalhes, e aí você pode responder com preço, frete, prazo e pagamento.` +
+        (perguntarCats ? " Para receber os pedidos certos, me diga o que vocês vendem (ex.: hidráulica, elétrico, cimento)." : ""),
+    );
+    if (forn && perguntarCats && !forn.cadastroEtapa) await db.update(fornecedor).set({ cadastroEtapa: "categorias" }).where(eq(fornecedor.id, forn.id));
     return;
   }
   await processarResposta(c, contato.id, mensagemId, entrada);
+}
+
+// ---------- R5: cadastro em etapas (o que vende e CNPJ) ----------
+
+/** Categorias da base de itens: as mesmas que a busca usa para escolher a quem cotar. */
+export function categoriasConhecidas(): string[] {
+  return [...new Set(baseDeItens().map((i) => i.categoria).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+}
+
+/** Acha categorias citadas em texto livre ("vendo cimento, areia e tinta" → Cimentícios, Agregados, Tintas). */
+export function categoriasDoTexto(texto: string): string[] {
+  const achadas = new Set<string>();
+  for (const cat of categoriasConhecidas()) {
+    if (palavrasEmComum(texto, cat)) {
+      achadas.add(cat);
+      continue;
+    }
+    // Pelo nome dos itens da categoria: "cimento" acha Cimentícios, "areia" acha Agregados.
+    if (baseDeItens().some((i) => i.categoria === cat && palavrasEmComum(texto, i.descricao))) achadas.add(cat);
+  }
+  return [...achadas];
+}
+
+async function perguntarCategorias(contatoId: string, nome: string, marcadas: string[]) {
+  const cats = categoriasConhecidas();
+  await enviar(
+    contatoId,
+    `${marcadas.length ? `Anotei: ${marcadas.join(", ")}.` : `Cadastro iniciado, ${nome}!`} O que vocês vendem? Toque nas categorias (pode marcar várias) e depois em Pronto, ou escreva do seu jeito.`,
+    {
+      botoes: [
+        ...cats.map((c, i) => ({ rotulo: `${marcadas.includes(c) ? "✓ " : ""}${c}`, dado: `cad:cat:${i}` })),
+        { rotulo: "Pronto", dado: "cad:pronto" },
+      ],
+    },
+  );
+}
+
+async function perguntarCnpj(contatoId: string) {
+  await enviar(contatoId, "Último passo: qual o CNPJ da empresa? Ele serve para conferirmos o cadastro na Receita. Se preferir, toque em Pular.", {
+    botoes: [{ rotulo: "Pular", dado: "cad:pular" }],
+  });
+}
+
+async function concluirCadastro(contatoId: string, f: typeof fornecedor.$inferSelect) {
+  await db.update(fornecedor).set({ cadastroEtapa: null }).where(eq(fornecedor.id, f.id));
+  const [atual] = await db.select().from(fornecedor).where(eq(fornecedor.id, f.id));
+  await registrar(db, {
+    agente: "Fornecedor",
+    acao: `${f.nome} completou o cadastro.`,
+    motivo: `Vende: ${atual?.categorias.join(", ") || "não informou"}. CNPJ: ${atual?.cnpj ?? "não informou"}.`,
+    fornecedorIds: [f.id],
+  });
+  await enviar(
+    contatoId,
+    `Cadastro feito, ${f.nome}!${atual?.categorias.length ? ` Vou mandar pedidos de ${atual.categorias.join(", ")}.` : ""} Quando houver pedido de cotação, mando por aqui. Pode responder do seu jeito, em texto, PDF, foto ou áudio.`,
+  );
+  // Cotação que já esperava por este fornecedor chega agora.
+  await reenviarCotacaoAberta(f.id, contatoId).catch(() => false);
+}
+
+/** Texto durante o cadastro. Devolve false quando a mensagem não é resposta do cadastro (segue o fluxo normal). */
+async function etapaDoCadastro(contato: Contato, f: typeof fornecedor.$inferSelect, texto: string): Promise<boolean> {
+  if (f.cadastroEtapa === "categorias") {
+    const achadas = categoriasDoTexto(texto);
+    if (!achadas.length) {
+      await enviar(contato.id, `Não reconheci a categoria em "${texto.slice(0, 60)}". Escolha nos botões acima ou escreva, por exemplo: hidráulica, elétrico, cimento, areia, tintas.`);
+      return true;
+    }
+    const categorias = [...new Set([...f.categorias, ...achadas])];
+    await db.update(fornecedor).set({ categorias, cadastroEtapa: f.cnpj ? null : "cnpj" }).where(eq(fornecedor.id, f.id));
+    await enviar(contato.id, `Anotei: ${categorias.join(", ")}.`);
+    if (f.cnpj) await concluirCadastro(contato.id, f);
+    else await perguntarCnpj(contato.id);
+    return true;
+  }
+  if (f.cadastroEtapa === "cnpj") {
+    const digitos = texto.replace(/\D/g, "");
+    if (digitos.length === 14 && cnpjValido(digitos)) {
+      await db.update(fornecedor).set({ cnpj: formatarCnpj(digitos) }).where(eq(fornecedor.id, f.id));
+      verificarFornecedor(f.id, { forcar: true }).catch((erro) => console.error("[verificação]", erro));
+      await concluirCadastro(contato.id, f);
+      return true;
+    }
+    if (/^(pular|n[aã]o( tenho)?|depois|sem cnpj)\b/i.test(texto)) {
+      await concluirCadastro(contato.id, f);
+      return true;
+    }
+    if (digitos.length >= 11) {
+      await enviar(contato.id, "Esse CNPJ não parece válido. Pode conferir os 14 números? Ou toque em Pular.", { botoes: [{ rotulo: "Pular", dado: "cad:pular" }] });
+      return true;
+    }
+    // Outra coisa (uma proposta, uma dúvida): conclui sem CNPJ e deixa a mensagem seguir.
+    await concluirCadastro(contato.id, f);
+    return false;
+  }
+  return false;
+}
+
+async function botaoDoCadastro(contato: Contato, dado: string) {
+  const [f] = await db.select().from(fornecedor).where(eq(fornecedor.id, contato.fornecedorId!));
+  if (!f) return;
+  const cat = /^cad:cat:(\d+)$/.exec(dado);
+  if (cat) {
+    const nome = categoriasConhecidas()[Number(cat[1])];
+    if (!nome) return;
+    const categorias = f.categorias.includes(nome) ? f.categorias.filter((c) => c !== nome) : [...f.categorias, nome];
+    await db.update(fornecedor).set({ categorias, cadastroEtapa: f.cadastroEtapa ?? "categorias" }).where(eq(fornecedor.id, f.id));
+    await perguntarCategorias(contato.id, f.nome, categorias);
+    return;
+  }
+  if (dado === "cad:pronto") {
+    if (!f.categorias.length) {
+      await enviar(contato.id, "Marque pelo menos uma categoria, ou escreva o que vocês vendem.");
+      return;
+    }
+    if (f.cnpj) return concluirCadastro(contato.id, f);
+    await db.update(fornecedor).set({ cadastroEtapa: "cnpj" }).where(eq(fornecedor.id, f.id));
+    return perguntarCnpj(contato.id);
+  }
+  if (dado === "cad:pular") return concluirCadastro(contato.id, f);
 }
 
 // ---------- E1: convite por e-mail com link pessoal ----------
@@ -252,6 +415,14 @@ async function processarResposta(
     }
   }
 
+  // Mensagem que completa a proposta já mandada ("validade 10 dias", "frete grátis"):
+  // junta com a anterior em vez de trocar por uma proposta sem preço.
+  const [anterior] = await db.select().from(oferta).where(and(eq(oferta.cotacaoId, c.id), eq(oferta.rodada, c.rodada))).limit(1);
+  if (anterior && (e.classificacao === "proposta" || e.classificacao === "outro")) {
+    const completa = completarComAnterior(e, anterior);
+    if (completa) e = completa;
+  }
+
   switch (e.classificacao) {
     case "proposta": {
       await db.transaction(async (tx) => {
@@ -287,6 +458,7 @@ async function processarResposta(
       if (e.prazoDias === null) faltam.push("prazo de entrega");
       if (e.frete === null && l.pedido.modoEntrega !== "retirada") faltam.push("frete");
       if (e.pagamento === null) faltam.push("condição de pagamento");
+      if (e.validadeDias === null) faltam.push("validade da proposta (até quando vale o preço)");
       await registrar(db, {
         agente: "Extrator",
         acao: `Leu a proposta: ${e.precoUnitario !== null ? `R$ ${e.precoUnitario} por ${l.item.unidade}` : `total R$ ${e.totalProduto}`}${e.itemExato ? "" : " (item equivalente)"}.`,
@@ -297,12 +469,23 @@ async function processarResposta(
       if (e.pedidoContato) {
         await enviar(l.pedido.compradorId, `Pedido ${l.pedido.id}: a proposta chegou, e o fornecedor também pediu para falar com uma pessoa.`, { ...ctx, tipo: "aviso" });
       }
+      await encerrarSeTodosResponderam(l.item.id);
+      const [agora] = await db.select({ estado: itemPedido.estado }).from(itemPedido).where(eq(itemPedido.id, l.item.id));
+      const aberta = agora?.estado === "cotando";
+      const ate = l.item.prazoRespostasEm ? ` até ${quando(l.item.prazoRespostasEm).replace(/^(às|em) /, "")}` : "";
       await enviar(
         contatoId,
-        `Recebi sua proposta para a cotação ${l.item.id}. Obrigado!${faltam.length ? ` Se puder, me diga também: ${faltam.join(", ")}.` : ""} Aviso se for escolhida.`,
-        ctx,
+        [
+          `Recebi sua proposta para a cotação ${l.item.id}. Obrigado!`,
+          faltam.length ? `Para completar, me diga também: ${faltam.join("; ")}.` : "",
+          aberta
+            ? `Vou comparar com as outras propostas e aviso o resultado. Se quiser melhorar alguma condição (preço, frete, prazo ou pagamento), pode mandar por aqui${ate}.`
+            : "Vou comparar com as outras propostas e aviso o resultado. Se o comprador quiser negociar alguma condição, volto a falar com você por aqui.",
+        ]
+          .filter(Boolean)
+          .join(" "),
+        { ...ctx, tipo: faltam.length && aberta ? "completar_proposta" : "proposta_recebida" },
       );
-      await encerrarSeTodosResponderam(l.item.id);
       return;
     }
     case "duvida":
@@ -328,6 +511,34 @@ async function processarResposta(
     default:
       await enviar(contatoId, "Não encontrei preço na sua mensagem. Pode mandar o preço unitário, o frete e o prazo de entrega?", ctx);
   }
+}
+
+const numOuNull = (v: string | null) => (v === null ? null : Number(v));
+
+/** Junta a extração nova com a proposta anterior do mesmo fornecedor. null se a mensagem não traz nada de proposta. */
+export function completarComAnterior(e: Extracao, a: typeof oferta.$inferSelect): Extracao | null {
+  const trazAlgo = [e.precoUnitario, e.totalProduto, e.frete, e.prazoDias, e.validadeDias, e.pagamento, e.prazoPagamentoDias, e.impostosValor, e.impostosNaoInclusos, e.entregaNoLocal].some((v) => v !== null);
+  if (!trazAlgo) return null;
+  const novoPreco = e.precoUnitario !== null || e.totalProduto !== null;
+  return {
+    ...e,
+    classificacao: "proposta",
+    itemOferecido: e.itemOferecido ?? a.itemOferecido,
+    itemExato: novoPreco ? e.itemExato : a.itemExato,
+    precoUnitario: novoPreco ? e.precoUnitario : numOuNull(a.precoUnitario),
+    totalProduto: novoPreco ? e.totalProduto : numOuNull(a.totalProduto),
+    quantidadeOfertada: e.quantidadeOfertada ?? numOuNull(a.quantidadeOfertada),
+    unidadeOfertada: e.unidadeOfertada ?? a.unidadeOfertada,
+    embalagem: e.embalagem ?? a.embalagem,
+    frete: e.frete ?? numOuNull(a.frete),
+    impostosValor: e.impostosValor ?? numOuNull(a.impostosValor),
+    impostosNaoInclusos: e.impostosNaoInclusos ?? a.impostosNaoInclusos,
+    prazoDias: e.prazoDias ?? a.prazoDias,
+    validadeDias: e.validadeDias ?? a.validadeDias,
+    pagamento: e.pagamento ?? a.pagamento,
+    prazoPagamentoDias: e.prazoPagamentoDias ?? a.prazoPagamentoDias,
+    entregaNoLocal: e.entregaNoLocal ?? a.entregaNoLocal,
+  };
 }
 
 /**

@@ -26,7 +26,7 @@ O Kotala é um comprador de obra que trabalha sozinho do pedido à confirmação
 
 - [ ] `docker compose up -d --build` e as telas abrindo em http://127.0.0.1:3300 (usar o container ou `npm run telas`, nunca o modo dev).
 - [ ] Os dois bots respondendo (`docker compose logs bots`).
-- [ ] `PRAZO_RESPOSTAS_SEG` ajustado para o tempo do palco (120 s é confortável; 60 s se a demo estiver apertada).
+- [ ] `PRAZO_RESPOSTAS_SEG` ajustado para o tempo do palco: o padrão é 300 s (dá tempo de uma pessoa responder como fornecedor); com só simulados, 120 s é confortável, e 60 s se a demo estiver apertada.
 - [ ] Rede: hotspot testado. Sem rede, `BUSCA_MODO=snapshot` usa as buscas já guardadas (a tela mostra a hora da coleta).
 - [ ] Um pedido ensaiado do mesmo item antes, para a recompra aparecer.
 - [ ] Celular com Telegram aberto no bot do comprador; QR do convite em outra aba.

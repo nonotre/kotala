@@ -16,7 +16,7 @@ async function chamar(rota: string, corpo: unknown): Promise<Resultado> {
       headers: { "content-type": "application/json", "x-kotala-token": token },
       body: JSON.stringify(corpo),
       cache: "no-store",
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(90_000),
     });
     const j = (await r.json().catch(() => ({}))) as { erro?: string };
     return r.ok ? { ok: true } : { ok: false, erro: j.erro ?? `Erro ${r.status}` };
@@ -32,8 +32,10 @@ export async function tocarBotao(dado: string): Promise<Resultado> {
   return r;
 }
 
-export async function enviarChat(endereco: string, texto: string, botao?: string): Promise<Resultado> {
-  return chamar("/chat", { endereco, texto, botao });
+export type AnexoChat = { nome: string; mediaType: string; base64: string };
+
+export async function enviarChat(endereco: string, texto: string, botao?: string, anexos?: AnexoChat[]): Promise<Resultado> {
+  return chamar("/chat", { endereco, texto, botao, anexos });
 }
 
 /** Lista de bloqueio e homologação do fornecedor. */

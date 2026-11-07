@@ -2,9 +2,9 @@
 // Entende → Coleta (VTEX, Serper, páginas) → Filtra → Confere → Ordena.
 // O resultado é preço de referência com fonte e data, nunca proposta inventada.
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "../../nucleo/db/cliente.ts";
-import { fornecedor, itemPedido, pedido, referenciaPreco } from "../../nucleo/db/schema.ts";
+import { fornecedor, itemPedido, oferta, pedido, referenciaPreco } from "../../nucleo/db/schema.ts";
 import { registrar } from "../../nucleo/registro.ts";
 import { verificarVarios } from "../verificacao/index.ts";
 import { planejar } from "./entende.ts";
@@ -319,4 +319,63 @@ export async function referenciasDoItem(itemPedidoId: number) {
     .sort((a, b) => Number(b.disponivel !== false) - Number(a.disponivel !== false) || b.confianca - a.confianca);
   const precos = aceitas.filter((r) => r.disponivel !== false && r.precoUnitario !== null).map((r) => Number(r.precoUnitario));
   return { aceitas, mediana: mediana(precos) };
+}
+
+/** Quantas lojas online viram proposta no mapa, no máximo. */
+export const MAX_OFERTAS_ONLINE = 3;
+/** Dados que o anúncio não traz e ficam simulados até a loja confirmar. */
+export const SIMULADO_ONLINE = { prazoDias: 4, pagamento: "Cartão ou PIX à vista", prazoPagamentoDias: 0, validadeDias: 1 } as const;
+
+/**
+ * Loja achada na internet vira proposta do mapa (conta para as 3 propostas válidas).
+ * Preço e frete vêm do anúncio, com link; prazo de entrega (quando a loja não simula),
+ * pagamento e validade ficam simulados e marcados como tal. Refeito a cada busca.
+ */
+export async function ofertasDaInternet(itemPedidoId: number): Promise<number> {
+  const [item] = await db.select().from(itemPedido).where(eq(itemPedido.id, itemPedidoId));
+  if (!item) return 0;
+  const { aceitas } = await referenciasDoItem(itemPedidoId);
+  const escolhidas: typeof aceitas = [];
+  const vistos = new Set<string>();
+  for (const r of aceitas) {
+    if (!r.fornecedorId || r.precoUnitario === null || r.disponivel === false || vistos.has(r.fornecedorId)) continue;
+    vistos.add(r.fornecedorId);
+    escolhidas.push(r);
+    if (escolhidas.length >= MAX_OFERTAS_ONLINE) break;
+  }
+  await db.transaction(async (tx) => {
+    await tx.delete(oferta).where(and(eq(oferta.itemPedidoId, itemPedidoId), eq(oferta.rodada, item.rodada), eq(oferta.formato, "busca")));
+    for (const r of escolhidas) {
+      const simulados = ["pagamento", "validade", ...(r.fretePrazoDias === null ? ["prazo de entrega"] : []), ...(r.frete === null ? ["frete (estimado no mapa)"] : [])];
+      await tx.insert(oferta).values({
+        itemPedidoId,
+        fornecedorId: r.fornecedorId!,
+        rodada: item.rodada,
+        itemOferecido: r.titulo,
+        itemExato: true,
+        precoUnitario: r.precoUnitario,
+        frete: r.entregaNoCep && r.frete !== null ? r.frete : null,
+        origemFrete: r.entregaNoCep && r.frete !== null ? "informado" : null,
+        prazoDias: r.fretePrazoDias ?? SIMULADO_ONLINE.prazoDias,
+        validadeDias: SIMULADO_ONLINE.validadeDias,
+        pagamento: SIMULADO_ONLINE.pagamento,
+        prazoPagamentoDias: SIMULADO_ONLINE.prazoPagamentoDias,
+        entregaNoLocal: r.entregaNoCep === false ? false : r.entregaNoCep,
+        formato: "busca",
+        fonte: r.url,
+        extraido: { loja: r.loja, metodo: r.metodo, coletadoEm: r.coletadoEm, simulados },
+      });
+    }
+  });
+  if (escolhidas.length) {
+    await registrar(db, {
+      agente: "Busca",
+      acao: `Montou ${escolhidas.length} ${escolhidas.length === 1 ? "proposta" : "propostas"} de loja online: ${escolhidas.map((r) => r.loja).join(", ")}.`,
+      motivo: "Preço e frete do anúncio, com link; prazo, pagamento e validade simulados até a loja confirmar.",
+      pedidoId: item.pedidoId,
+      itemPedidoId,
+      fornecedorIds: escolhidas.map((r) => r.fornecedorId!),
+    });
+  }
+  return escolhidas.length;
 }

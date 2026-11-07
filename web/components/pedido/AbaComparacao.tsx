@@ -92,7 +92,7 @@ function Mapa({ i }: { i: ItemDoPedido }) {
             </TableHeader>
             {c.validas.map((l, n) => (
               <TableHeader key={l.oferta.id} className={n === 0 ? s.colunaRecomendada : undefined}>
-                <Fornecedor nome={l.oferta.fornecedorNome} simulado={l.oferta.simulado} />
+                <Fornecedor nome={l.oferta.fornecedorNome} simulado={l.oferta.simulado} online={l.oferta.online} />
                 {n === 0 ? <span className={s.rotuloRecomendada}>{c.podeDizerMelhor ? "Recomendada" : "Na frente"}</span> : null}
               </TableHeader>
             ))}
@@ -134,7 +134,7 @@ function Recomendacao({ d, i }: { d: DadosPedido; i: ItemDoPedido }) {
       {v ? (
         <>
           <p className={s.recomendacaoFrase}>
-            {c.podeDizerMelhor ? "Recomendo" : "Na frente"}: <Fornecedor nome={v.oferta.fornecedorNome} simulado={v.oferta.simulado} />
+            {c.podeDizerMelhor ? "Recomendo" : "Na frente"}: <Fornecedor nome={v.oferta.fornecedorNome} simulado={v.oferta.simulado} online={v.oferta.online} />
           </p>
           <p className={s.custoGrande}>{brl(v.custo)}</p>
           <p className={s.ajuda}>Custo total com frete{v.oferta.prazoDias !== null ? `, entrega em ${textoDias(v.oferta.prazoDias)}` : ""}.</p>
@@ -181,7 +181,7 @@ function DeOndeVemANota({ i }: { i: ItemDoPedido }) {
         destaque={[0]}
         colunas={["Fornecedor", ...CRITERIOS.map((k) => `${ROTULO_CRITERIO[k]} (${c.pesos[k]})`), "Nota"]}
         linhas={comCriterios.map((l) => [
-          <Fornecedor key="f" nome={l.oferta.fornecedorNome} simulado={l.oferta.simulado} />,
+          <Fornecedor key="f" nome={l.oferta.fornecedorNome} simulado={l.oferta.simulado} online={l.oferta.online} />,
           ...CRITERIOS.map((k) => (
             <span key={k} className={s.numero}>
               {nota(l.criterios![k])}
@@ -206,7 +206,7 @@ function ForaDaComparacao({ i }: { i: ItemDoPedido }) {
         vazio="Nenhuma proposta cortada."
         apagadas={c.cortadas.map((_, n) => n)}
         colunas={["Fornecedor", "Custo", "Motivo"]}
-        linhas={c.cortadas.map((l) => [<Fornecedor key="f" nome={l.oferta.fornecedorNome} simulado={l.oferta.simulado} />, brl(l.custo), l.motivos.join("; ")])}
+        linhas={c.cortadas.map((l) => [<Fornecedor key="f" nome={l.oferta.fornecedorNome} simulado={l.oferta.simulado} online={l.oferta.online} />, brl(l.custo), l.motivos.join("; ")])}
       />
     </Bloco>
   );

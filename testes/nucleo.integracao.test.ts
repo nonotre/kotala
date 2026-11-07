@@ -60,6 +60,21 @@ test("pedido com 2 itens: fila cota um por vez e fecha o pedido", { skip: pular 
   assert.ok(eventos.length >= 10);
 });
 
+test("cancelar o pedido não puxa o próximo item da fila (bug do teste da Liria)", { skip: pular }, async () => {
+  const c = await comprador();
+  const p = await o.abrirPedido({ compradorId: c.id, canalOrigem: "simulado", textoOriginal: "cabo e placa" });
+  const [i1, i2] = await o.definirItens(db, p.id, [
+    { descricao: "Cabo de aço", quantidade: 1, unidade: "unidade" },
+    { descricao: "Placa de metal", quantidade: 0, unidade: "unidade" },
+  ]);
+  await o.avancarPedido(p.id, "interpretado", { agente: "Interpretador", motivo: "teste" });
+  await o.avancarPedido(p.id, "cancelar", { agente: "Interpretador", motivo: "teste" });
+  const estado = async (id: number) => (await db.query.itemPedido.findFirst({ where: (t, { eq }) => eq(t.id, id) }))!.estado;
+  // Antes: o cancelamento do 1º item liberava a fila e o 2º ia para "buscando" e era cotado com 0 unidades.
+  assert.equal(await estado(i1!.id), "cancelado");
+  assert.equal(await estado(i2!.id), "cancelado");
+});
+
 test("transição inválida e concorrente", { skip: pular }, async () => {
   const c = await comprador();
   const p = await o.abrirPedido({ compradorId: c.id, canalOrigem: "simulado", textoOriginal: "x" });

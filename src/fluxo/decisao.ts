@@ -230,6 +230,9 @@ async function enviarPedidoDeCompra(m: MudancaItem) {
   const l = mapa?.comparacao.validas.find((x) => x.oferta.id === d.item.ofertaEscolhidaId);
   if (!o || !f) return;
 
+  // Loja online: não há conversa com a loja. O comprador finaliza no site; a confirmação é simulada.
+  if (o.formato === "busca") return comprarNaLojaOnline(d, o, f, l?.custo ?? null);
+
   if (!ct) {
     await enviar(d.pedido.compradorId, `Pedido ${d.pedido.id}: ${f.nome} não tem mais canal ativo. Escolha outra proposta.`, { pedidoId: d.pedido.id, itemPedidoId: d.item.id });
     await avancarItem(m.itemPedidoId, "pedido_enviado", { agente: "Acompanhamento do pedido", motivo: "Sem canal do vencedor." }).catch(ignorarCorrida);
@@ -244,6 +247,7 @@ async function enviarPedidoDeCompra(m: MudancaItem) {
     o.formato === "historico" && o.precoUnitario ? `Mesmo preço da última compra: ${formatarBRL(Number(o.precoUnitario))} por ${d.item.unidade}${o.frete ? `, frete ${formatarBRL(Number(o.frete))}` : ""}.` : "",
     d.pedido.modoEntrega === "retirada" ? "Retirada na loja." : `Entrega: ${d.pedido.destino ?? "a combinar"}${d.pedido.janelaRecebimento ? ` (${d.pedido.janelaRecebimento})` : ""}.`,
     o.prazoDias !== null ? `Prazo: ${dias(o.prazoDias)}.` : "",
+    d.pedido.entregas ? `Entregas: ${d.pedido.entregas}.` : "",
     "Pode confirmar o fornecimento?",
   ]
     .filter(Boolean)
@@ -257,12 +261,7 @@ async function enviarPedidoDeCompra(m: MudancaItem) {
     ],
   });
 
-  // Avisa os demais que responderam nesta rodada.
-  const outros = await db
-    .select({ contatoId: cotacao.contatoId })
-    .from(cotacao)
-    .where(and(eq(cotacao.itemPedidoId, d.item.id), eq(cotacao.rodada, d.item.rodada), eq(cotacao.situacao, "respondeu"), ne(cotacao.fornecedorId, f.id)));
-  for (const c of outros) if (c.contatoId) await enviar(c.contatoId, TEXTO_NAO_VENCEU, { itemPedidoId: d.item.id, tipo: "nao_venceu" });
+  const outros = await avisarQuemNaoVenceu(d.item.id, d.item.rodada, f.id);
 
   await avancarItem(m.itemPedidoId, "pedido_enviado", {
     agente: "Acompanhamento do pedido",
@@ -275,6 +274,46 @@ async function enviarPedidoDeCompra(m: MudancaItem) {
     itemPedidoId: d.item.id,
     tipo: "aviso",
   });
+}
+
+/** Avisa os demais que responderam nesta rodada. */
+async function avisarQuemNaoVenceu(itemPedidoId: number, rodada: number, vencedorId: string) {
+  const outros = await db
+    .select({ contatoId: cotacao.contatoId })
+    .from(cotacao)
+    .where(and(eq(cotacao.itemPedidoId, itemPedidoId), eq(cotacao.rodada, rodada), eq(cotacao.situacao, "respondeu"), ne(cotacao.fornecedorId, vencedorId)));
+  for (const c of outros) if (c.contatoId) await enviar(c.contatoId, TEXTO_NAO_VENCEU, { itemPedidoId, tipo: "nao_venceu" });
+  return outros;
+}
+
+async function comprarNaLojaOnline(
+  d: NonNullable<Awaited<ReturnType<typeof dados>>>,
+  o: typeof oferta.$inferSelect,
+  f: typeof fornecedor.$inferSelect,
+  custo: number | null,
+) {
+  const ctx = { pedidoId: d.pedido.id, itemPedidoId: d.item.id };
+  await avisarQuemNaoVenceu(d.item.id, d.item.rodada, f.id);
+  await avancarItem(d.item.id, "pedido_enviado", { agente: "Acompanhamento do pedido", acao: `Compra em loja online: ${f.nome}.`, motivo: "O comprador aprovou uma proposta de loja online.", fornecedorIds: [f.id] }).catch(ignorarCorrida);
+  await avancarItem(d.item.id, "fornecedor_confirmou", { agente: "Fornecedor", acao: `${f.nome} (loja online) confirmou, simulado.`, motivo: "Loja online: a confirmação é simulada; o comprador finaliza no site.", fornecedorIds: [f.id] }).catch(ignorarCorrida);
+  await db.insert(historicoCompra).values({
+    fornecedorId: f.id,
+    itemChave: d.item.itemChave ?? d.item.descricao,
+    descricao: d.item.descricao,
+    precoUnitario: o.precoUnitario ?? String(Number(o.totalProduto ?? 0) / Number(d.item.quantidade)),
+    quantidade: d.item.quantidade,
+    frete: o.frete,
+    data: new Date(),
+    prazoPrometidoDias: o.prazoDias,
+    simulado: true,
+    itemPedidoId: d.item.id,
+  });
+  const texto = [
+    `Pedido ${d.pedido.id}: compra aprovada em ${f.nome} (loja online)${custo !== null ? `, total ${formatarBRL(custo)}` : ""}.`,
+    o.fonte ? `Finalize no site, com o endereço de entrega ${d.pedido.destino ?? "da obra"}: ${o.fonte}` : "Finalize no site da loja.",
+    `Simulei a confirmação da loja: ${quantidade(d.item.quantidade, d.item.unidade)} de ${d.item.descricao}${o.prazoDias !== null ? `, entrega em ${dias(o.prazoDias)}` : ""}, ${o.pagamento ?? "pagamento à vista"}. Confira o prazo e o frete no carrinho antes de pagar.`,
+  ].join("\n");
+  await enviar(d.pedido.compradorId, texto, { ...ctx, tipo: "aviso" });
 }
 
 // ---------- Resposta do vencedor: compra:<itemId>:confirmo|desisto ----------

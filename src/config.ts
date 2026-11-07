@@ -16,8 +16,31 @@ export const EMPRESA = {
   cep: process.env.EMPRESA_CEP ?? "01310-100",
 };
 
-/** Q4: quanto tempo os fornecedores têm para responder. Cerca de 2 minutos na demo. */
-export const PRAZO_RESPOSTAS_SEG = () => num(process.env.PRAZO_RESPOSTAS_SEG, 120);
+/** Q4: quanto tempo os fornecedores têm para responder na demo (5 minutos: dá tempo de uma pessoa responder). */
+export const PRAZO_RESPOSTAS_SEG = () => num(process.env.PRAZO_RESPOSTAS_SEG, 300);
+/**
+ * "demo" usa PRAZO_RESPOSTAS_SEG. "real" segue a regra da área de compras: 3 a 4 dias para
+ * compras menores e 5 a 7 para maiores (usa o começo de cada faixa; a cotação fecha antes
+ * se todos responderem).
+ */
+export const PRAZO_MODO = () => (process.env.PRAZO_MODO === "real" ? "real" : "demo");
+/** Acima deste valor estimado (R$), a compra é "maior" e ganha o prazo longo. */
+export const LIMITE_COMPRA_MAIOR = () => num(process.env.LIMITE_COMPRA_MAIOR, 5000);
+const DIA_MS = 24 * 3600_000;
+
+/** Prazo de respostas dos fornecedores, em ms. valorEstimado = referência pública × quantidade, quando houver. */
+export function prazoRespostasMs(valorEstimado: number | null = null, negociacao = false): number {
+  if (PRAZO_MODO() === "demo") return PRAZO_RESPOSTAS_SEG() * 1000;
+  if (negociacao) return 2 * DIA_MS;
+  return valorEstimado !== null && valorEstimado > LIMITE_COMPRA_MAIOR() ? 5 * DIA_MS : 3 * DIA_MS;
+}
+
+/**
+ * Quanto tempo o comprador tem para terminar a solicitação (responder às perguntas e
+ * confirmar). Nesse tempo, toda mensagem dele completa o pedido em aberto; depois de um
+ * lembrete sem resposta, uma mensagem nova abre outro pedido.
+ */
+export const JANELA_CONFIRMACAO_MIN = () => num(process.env.JANELA_CONFIRMACAO_MIN, 60);
 /** Lembrete sai nesta fração do prazo. */
 export const FRACAO_LEMBRETE = 0.5;
 /** Teto de fornecedores consultados por item. */

@@ -158,6 +158,9 @@ const LIBERA_FILA: readonly EstadoItem[] = ["aguardando_decisao", "aguardando_re
 const OCUPA_FILA: readonly EstadoItem[] = ["buscando", "cotando", "comparando"];
 
 async function iniciarProximoDaFila(pedidoId: number) {
+  // Pedido cancelado (ou ainda não confirmado) não cota: o cancelamento de um item não pode puxar o próximo.
+  const [p] = await db.select({ estado: pedido.estado }).from(pedido).where(eq(pedido.id, pedidoId));
+  if (p?.estado !== "em_andamento") return;
   const ocupados = await db
     .select({ id: itemPedido.id })
     .from(itemPedido)

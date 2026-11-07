@@ -8,13 +8,15 @@ import { db } from "../nucleo/db/cliente.ts";
 import { contato, fornecedor, itemPedido, pedido } from "../nucleo/db/schema.ts";
 import { receber, type AdaptadorCanal, type OpcoesEnvio } from "../nucleo/mensagens/index.ts";
 import { referenciasDoItem } from "../agentes/busca/internet.ts";
-import { PERGUNTA_ANTES, TODAS_PERSONAS, textoProposta, type Persona } from "./personas.ts";
+import { PERGUNTA_ANTES, TODAS_PERSONAS, textoComplemento, textoProposta, type Persona } from "./personas.ts";
 
 const personaPorChave = new Map(TODAS_PERSONAS.map((p) => [p.chave, p]));
 /** Quem já perguntou antes de cotar, por item. */
 const perguntou = new Set<string>();
 /** Quem "esqueceu" e espera o lembrete, por item. */
 const esperandoLembrete = new Set<string>();
+/** Já completou a proposta depois do pedido do assistente. */
+const completou = new Set<string>();
 let seq = 0;
 
 function depois(seg: number, fn: () => Promise<unknown>) {
@@ -71,6 +73,11 @@ function reagir(p: Persona, texto: string, opcoes: OpcoesEnvio) {
       // Quem esquece não responde à contraproposta; os outros melhoram a proposta.
       if (p.comportamento === "esquece") return;
       return depois(p.atrasoSeg, () => enviarProposta(p, opcoes));
+    case "completar_proposta":
+      // O assistente pediu o que faltou: o simulado completa, uma vez por item.
+      if (completou.has(chaveItem)) return;
+      completou.add(chaveItem);
+      return depois(p.atrasoSeg / 2, () => responder(p.chave, textoComplemento(p)));
     case "confirmar_preco":
       return depois(p.atrasoSeg / 2, () => responder(p.chave, "Sim, confirmo o preço. É promoção de estoque."));
     case "lembrete":

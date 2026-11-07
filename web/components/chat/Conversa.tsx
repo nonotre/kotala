@@ -20,7 +20,7 @@ import { Button, SkeletonText } from "@carbon/react";
 import { ArrowDown } from "@carbon/react/icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pagina } from "@/components/Pagina";
-import { enviarChat } from "@/lib/acoes";
+import { enviarChat, type AnexoChat } from "@/lib/acoes";
 import { AVATAR_ASSISTENTE } from "./avatar";
 import {
   comecarEnvio,
@@ -48,6 +48,21 @@ const ROLAGEM_DO_CHAT = ".cds-aichat--messages__wrapper";
 /** O banco guarda o toque num botão sem texto. Sem o rótulo guardado neste navegador, a conversa mostra isto. */
 const TOQUE_SEM_ROTULO = "(toquei num botão)";
 const ERRO_PADRAO = "Não deu certo.";
+/** Anexos: foto do material, print de anúncio, PDF de orçamento ou áudio. */
+const ACEITA = "image/*,application/pdf,audio/*";
+const MAX_ARQUIVO = 10 * 1024 * 1024;
+const MAX_ARQUIVOS = 3;
+const NOME_TIPO: Record<string, string> = { foto: "imagem", pdf: "PDF", audio: "áudio" };
+
+/** File → base64, sem o prefixo "data:...;base64,". */
+function base64(file: File): Promise<string> {
+  return new Promise((ok, erro) => {
+    const r = new FileReader();
+    r.onload = () => ok(String(r.result).replace(/^data:[^,]*,/, ""));
+    r.onerror = () => erro(r.error);
+    r.readAsDataURL(file);
+  });
+}
 
 /** Para começar: tocar manda a frase ao assistente de verdade. */
 const EXEMPLOS = ["preciso de 40 sacos de cimento cp2 até quinta", "20 barras de ferro 3/8", "1 carrada de areia e 2 milheiros de tijolo"];
@@ -88,6 +103,8 @@ function itensDaResposta(m: MensagemChat): GenericItem[] {
 }
 
 function textoDoComprador(m: MensagemChat): string {
+  const anexos = (m.anexos ?? []).map((a) => `📎 ${a.nome ?? NOME_TIPO[a.tipo] ?? "arquivo"}`).join("  \n");
+  if (anexos) return m.texto ? `${m.texto}  \n${anexos}` : anexos;
   return m.texto || rotuloDoToque(m.id) || TOQUE_SEM_ROTULO;
 }
 
@@ -102,10 +119,14 @@ function paraHistorico(m: MensagemChat): HistoryItem | null {
   return generic.length ? { time, message: { id: m.id, output: { generic }, history: { timestamp } } } : null;
 }
 
-/** A última mensagem do assistente com botões: só ela mostra os botões. */
+/**
+ * A última mensagem do assistente com botões: só ela mostra os botões. Se o comprador já tocou
+ * num botão depois dela, nenhuma fica ativa (senão "Sim, aprovar" podia ser tocado de novo).
+ */
 function ultimaComBotoes(msgs: MensagemChat[]): string | null {
   for (let i = msgs.length - 1; i >= 0; i--) {
     const m = msgs[i];
+    if (m.direcao === "entrada" && !m.texto && !m.anexos?.length) return null; // toque num botão
     if (m.direcao === "saida" && m.botoes?.length) return m.id;
   }
   return null;
@@ -151,6 +172,8 @@ export function Conversa() {
   const pendentes = useRef<Pendente[]>([]);
   const especiais = useRef(new Map<string, Especial>());
   const noFim = useRef(true);
+  /** Arquivos escolhidos ou colados, esperando o envio, pelo id do campo do chat. */
+  const arquivos = useRef(new Map<string, File>());
 
   useEffect(() => {
     setEndereco(enderecoDoNavegador());
@@ -197,7 +220,7 @@ export function Conversa() {
   // ---------- Enviar ----------
 
   /** Manda ao assistente. O chat mostra o "pensando" até a API interna responder. */
-  const despachar = useCallback(async (envioId: string, texto: string, botao?: Botao) => {
+  const despachar = useCallback(async (envioId: string, texto: string, botao?: Botao, anexos?: AnexoChat[]) => {
     const end = enderecoAgora.current;
     if (!end) return;
     const pendente: Pendente = { chave: botao ? "" : texto, envioId, rotulo: botao?.rotulo, chegou: false };
@@ -206,7 +229,7 @@ export function Conversa() {
     comecarEnvio();
     instancia.current?.updateIsMessageLoadingCounter("increase");
     try {
-      const r = await enviarChat(end, botao ? "" : texto, botao?.dado);
+      const r = await enviarChat(end, botao ? "" : texto, botao?.dado, anexos);
       if (!r.ok) {
         // Se a mensagem já chegou ao banco, mandar de novo duplicaria: fica só o aviso.
         pendentes.current = pendentes.current.filter((p) => p !== pendente);
@@ -235,7 +258,14 @@ export function Conversa() {
         return;
       }
       const texto = String(req.input.text ?? "").trim().slice(0, 4000);
-      if (texto) await despachar(id, texto);
+      // Anexos: o chat manda o campo "file" de cada arquivo escolhido ou colado.
+      const campos = (req.input.structured_data?.fields ?? []).filter((f) => f.type === "file");
+      const files = campos.map((f) => arquivos.current.get(f.id)).filter((f): f is File => !!f);
+      for (const f of campos) arquivos.current.delete(f.id);
+      const anexos = files.length
+        ? await Promise.all(files.map(async (f) => ({ nome: f.name || "imagem colada", mediaType: f.type, base64: await base64(f) })))
+        : undefined;
+      if (texto || anexos) await despachar(id, texto, undefined, anexos);
     },
     [despachar],
   );
@@ -334,6 +364,53 @@ export function Conversa() {
     [despachar],
   );
 
+  // ---------- Anexos ----------
+
+  /** Guarda o arquivo e devolve o campo que o chat junta à mensagem pendente. */
+  const campoDoArquivo = useCallback(async (file: File) => {
+    if (!ACEITA.split(",").some((t) => (t.endsWith("/*") ? file.type.startsWith(t.slice(0, -1)) : file.type === t))) {
+      throw new Error("Mande uma imagem, um PDF ou um áudio.");
+    }
+    if (file.size > MAX_ARQUIVO) throw new Error("O arquivo passa de 10 MB.");
+    const id = crypto.randomUUID();
+    arquivos.current.set(id, file);
+    return { fields: [{ id, type: "file", label: file.name, value: { type: "reference" as const, id, name: file.name || "imagem colada", mime_type: file.type, size: file.size } }] };
+  }, []);
+
+  // Colar uma imagem (Ctrl+V de um print) anexa como se tivesse escolhido o arquivo.
+  useEffect(() => {
+    if (!chatPronto) return;
+    const raiz = document.querySelector("cds-aichat-container")?.shadowRoot;
+    if (!raiz) return;
+    const aoColar = (e: Event) => {
+      const dados = (e as ClipboardEvent).clipboardData;
+      const files = [...(dados?.files ?? [])].filter((f) => f.type.startsWith("image/"));
+      if (!files.length) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const dt = new DataTransfer();
+      for (const f of files.slice(0, MAX_ARQUIVOS)) {
+        const nome = f.name && f.name !== "image.png" ? f.name : `print-${new Date().toLocaleTimeString("pt-BR").replace(/:/g, "")}.png`;
+        dt.items.add(new File([f], nome, { type: f.type }));
+      }
+      // Passa pelo mesmo caminho do botão de anexo: o chat chama onFileUpload e mostra o arquivo no campo.
+      const entrada = raiz.querySelector<HTMLInputElement>("input[type=file]");
+      if (entrada) {
+        entrada.files = dt.files;
+        entrada.dispatchEvent(new Event("change", { bubbles: true }));
+        return;
+      }
+      void (async () => {
+        for (const arquivo of dt.files) {
+          const campo = await campoDoArquivo(arquivo).catch(() => null);
+          if (campo) instancia.current?.input.updateStructuredData((antes) => ({ ...antes, fields: [...(antes?.fields ?? []), ...campo.fields] }));
+        }
+      })();
+    };
+    raiz.addEventListener("paste", aoColar, true);
+    return () => raiz.removeEventListener("paste", aoColar, true);
+  }, [chatPronto, campoDoArquivo]);
+
   // ---------- O chat ----------
 
   const config = useMemo<PublicConfig>(
@@ -353,6 +430,13 @@ export function Conversa() {
         greeting: "Diga o que precisa comprar.",
         starters: { isOn: true, buttons: EXEMPLOS.map((label) => ({ label })) },
       },
+      upload: {
+        isOn: true,
+        accept: ACEITA,
+        maxFileSizeBytes: MAX_ARQUIVO,
+        maxFiles: MAX_ARQUIVOS,
+        onFileUpload: async (file: File) => campoDoArquivo(file),
+      },
       messaging: {
         skipWelcome: true,
         messageLoadingIndicatorTimeoutSecs: 0,
@@ -360,7 +444,7 @@ export function Conversa() {
         customLoadHistory: carregarHistorico,
       },
     }),
-    [aoEnviar, carregarHistorico],
+    [aoEnviar, carregarHistorico, campoDoArquivo],
   );
 
   const aoCriar = useCallback(

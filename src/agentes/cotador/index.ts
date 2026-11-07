@@ -3,12 +3,12 @@
 // cotação quando todos responderam ou o prazo venceu.
 
 import { textoNegociacao } from "../negociador/index.ts";
-import { quantidade, quantidadeDe } from "../../texto.ts";
-import { and, asc, eq, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
+import { quando, quantidade, quantidadeDe } from "../../texto.ts";
+import { and, asc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { EMPRESA, FRACAO_LEMBRETE, PRAZO_RESPOSTAS_SEG } from "../../config.ts";
+import { EMPRESA, FRACAO_LEMBRETE, prazoRespostasMs } from "../../config.ts";
 import { db } from "../../nucleo/db/cliente.ts";
-import { contato, cotacao, fornecedor, itemPedido, pedido } from "../../nucleo/db/schema.ts";
+import { contato, cotacao, fornecedor, itemPedido, oferta, pedido } from "../../nucleo/db/schema.ts";
 import { gerarObjeto } from "../../nucleo/ia/index.ts";
 import { contatoAtivoDoFornecedor, enviar } from "../../nucleo/mensagens/index.ts";
 import {
@@ -23,7 +23,6 @@ import { registrar } from "../../nucleo/registro.ts";
 
 export const TEXTO_ENCERRADO = "Este pedido de cotação foi encerrado. Obrigado.";
 
-const hora = (d: Date) => d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
 
 /** Canal ativo do fornecedor: Telegram primeiro, depois qualquer outro que não parou. */
 export const contatoAtivo = contatoAtivoDoFornecedor;
@@ -58,11 +57,12 @@ export function textoCotacao(d: Dados, nomeFornecedor: string): string {
   else linhas.push(`Entrega: ${p.destino ?? "a combinar"}${p.cep ? `, CEP ${p.cep}` : ""}`);
   if (p.janelaRecebimento) linhas.push(`Recebimento: ${p.janelaRecebimento}`);
   if (p.prazoTexto) linhas.push(`Prazo desejado: ${p.prazoTexto}`);
+  if (p.entregas) linhas.push(`Entregas: ${p.entregas} (aceitamos entrega em partes, se ajudar)`);
   linhas.push(
     "",
     "Por favor, informe: preço unitário, impostos ou taxas fora do preço, frete até o local, prazo de entrega, condição de pagamento, validade da proposta e se entrega no local.",
   );
-  if (item.prazoRespostasEm) linhas.push(`Respondo ao comprador às ${hora(item.prazoRespostasEm)}.`);
+  if (item.prazoRespostasEm) linhas.push(`Recebo propostas até ${quando(item.prazoRespostasEm).replace(/^(às|em) /, "")}. Depois de mandar, ainda dá para ajustar a proposta por aqui até esse horário.`);
   linhas.push("Pode responder do seu jeito, em texto ou PDF. Para não receber mais mensagens, escreva PARAR.");
   return linhas.join("\n");
 }
@@ -75,7 +75,7 @@ async function enviarCotacoes(m: MudancaItem) {
   // recebe a contraproposta mantém a proposta anterior no mapa.
   if (m.evento === "negociar" && d.item.negociacao) {
     const plano = d.item.negociacao;
-    const prazoMs = PRAZO_RESPOSTAS_SEG() * 1000;
+    const prazoMs = prazoRespostasMs(null, true);
     const prazoRespostasEm = new Date(Date.now() + prazoMs);
     await db
       .update(itemPedido)
@@ -97,7 +97,7 @@ async function enviarCotacoes(m: MudancaItem) {
         await db.update(cotacao).set({ situacao: "parou" }).where(eq(cotacao.id, c.id));
         continue;
       }
-      const texto = textoNegociacao(nome, d.item, plano, hora(prazoRespostasEm));
+      const texto = textoNegociacao(nome, d.item, plano, quando(prazoRespostasEm));
       const r = await enviar(ct.id, texto, { pedidoId: d.pedido.id, itemPedidoId: d.item.id, tipo: "negociacao" });
       await db
         .update(cotacao)
@@ -114,7 +114,7 @@ async function enviarCotacoes(m: MudancaItem) {
       fornecedorIds: plano.alvos,
       dados: plano,
     });
-    await avisarComprador(d, `Voltei a ${enviadas} ${enviadas === 1 ? "fornecedor" : "fornecedores"} para negociar o preço de ${d.item.descricao}. Fecho as respostas às ${hora(prazoRespostasEm)}; quem não responder mantém a proposta.`);
+    await avisarComprador(d, `Voltei a ${enviadas} ${enviadas === 1 ? "fornecedor" : "fornecedores"} para negociar o preço de ${d.item.descricao}. Fecho as respostas ${quando(prazoRespostasEm)}; quem não responder mantém a proposta.`);
     if (!enviadas) await encerrarSeTodosResponderam(d.item.id);
     return;
   }
@@ -122,7 +122,7 @@ async function enviarCotacoes(m: MudancaItem) {
   // Reprovação: nova rodada com quem respondeu na anterior (o comprador quer preço melhor).
   if (m.evento === "reprovar") {
     const anterior = d.item.rodada;
-    const prazoMs = PRAZO_RESPOSTAS_SEG() * 1000;
+    const prazoMs = prazoRespostasMs(null, true);
     await db
       .update(itemPedido)
       .set({
@@ -180,7 +180,20 @@ async function enviarCotacoes(m: MudancaItem) {
     itemPedidoId: d.item.id,
     fornecedorIds: pendentes.map((p) => p.cotacao.fornecedorId),
   });
-  await avisarComprador(d, `Pedi cotação de ${quantidade(d.item.quantidade, d.item.unidade)} de ${d.item.descricao} a ${enviadas} ${enviadas === 1 ? "fornecedor" : "fornecedores"}${d.item.prazoRespostasEm ? `. Fecho as respostas às ${hora(d.item.prazoRespostasEm)}` : ""}.`);
+  const [online] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(oferta)
+    .where(and(eq(oferta.itemPedidoId, d.item.id), eq(oferta.rodada, d.item.rodada), eq(oferta.formato, "busca")));
+  const lojas = online?.n ?? 0;
+  const textoLojas = lojas ? `${lojas} ${lojas === 1 ? "loja online entra" : "lojas online entram"} no mapa com o preço do anúncio` : "";
+  if (enviadas) {
+    await avisarComprador(
+      d,
+      `Pedi cotação de ${quantidade(d.item.quantidade, d.item.unidade)} de ${d.item.descricao} a ${enviadas} ${enviadas === 1 ? "fornecedor" : "fornecedores"}${textoLojas ? `, e ${textoLojas}` : ""}${d.item.prazoRespostasEm ? `. Fecho as respostas ${quando(d.item.prazoRespostasEm)}` : ""}.`,
+    );
+  } else {
+    await avisarComprador(d, `Nenhum fornecedor cadastrado vende ${d.item.descricao}${textoLojas ? `; ${textoLojas}. Monto o mapa agora` : ""}.`);
+  }
   if (!enviadas) await encerrarSeTodosResponderam(d.item.id);
 }
 
@@ -226,6 +239,22 @@ export async function encerrarSeTodosResponderam(itemPedidoId: number) {
     .where(and(eq(cotacao.itemPedidoId, itemPedidoId), eq(cotacao.rodada, item.rodada), eq(cotacao.situacao, "aguardando")))
     .limit(1);
   if (aguardando) return;
+  // Proposta incompleta (sem prazo, pagamento ou validade) segue aberta até o prazo, para o
+  // fornecedor completar: é melhor a cotação atrasar do que fechar faltando dado.
+  const incompletas = await db
+    .select({ id: oferta.id })
+    .from(oferta)
+    .innerJoin(cotacao, eq(cotacao.id, oferta.cotacaoId))
+    .where(
+      and(
+        eq(oferta.itemPedidoId, itemPedidoId),
+        eq(oferta.rodada, item.rodada),
+        eq(cotacao.situacao, "respondeu"),
+        or(isNull(oferta.prazoDias), isNull(oferta.pagamento), isNull(oferta.validadeDias)),
+      ),
+    )
+    .limit(1);
+  if (incompletas.length && item.prazoRespostasEm && item.prazoRespostasEm.getTime() > Date.now()) return;
   try {
     await avancarItem(itemPedidoId, "encerrar_cotacao", {
       agente: "Cotador",
@@ -239,6 +268,8 @@ export async function encerrarSeTodosResponderam(itemPedidoId: number) {
 /** Ao encerrar: quem não respondeu sai como "sem resposta" e recebe o aviso. */
 async function marcarSemResposta(m: MudancaItem) {
   if (m.de !== "cotando") return;
+  // Cotação fechada: dúvida de fornecedor sem resposta deixa de esperar o comprador.
+  await db.update(itemPedido).set({ duvidaPendente: null }).where(eq(itemPedido.id, m.itemPedidoId));
   const [item] = await db.select().from(itemPedido).where(eq(itemPedido.id, m.itemPedidoId));
   if (!item) return;
   const sem = await db
@@ -281,7 +312,7 @@ async function enviarLembretes(agora: Date) {
       .orderBy(asc(cotacao.criadoEm));
     for (const c of devendo) {
       if (!c.contatoId) continue;
-      const texto = `Lembrete: ainda dá tempo de mandar sua proposta para a cotação ${item.id} (${quantidade(item.quantidade, item.unidade)} de ${item.descricao})${item.prazoRespostasEm ? ` até as ${hora(item.prazoRespostasEm)}` : ""}.`;
+      const texto = `Lembrete: ainda dá tempo de mandar sua proposta para a cotação ${item.id} (${quantidade(item.quantidade, item.unidade)} de ${item.descricao})${item.prazoRespostasEm ? ` ${quando(item.prazoRespostasEm).replace(/^às/, "até as").replace(/^em/, "até")}` : ""}.`;
       const r = await enviar(c.contatoId, texto, { itemPedidoId: item.id, tipo: "lembrete" });
       if (r.situacao === "enviada") await db.update(cotacao).set({ lembreteEm: new Date() }).where(eq(cotacao.id, c.id));
     }

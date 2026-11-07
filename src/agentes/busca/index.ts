@@ -3,14 +3,14 @@
 // internet (preço de referência com fonte) entra aqui depois, sem mudar o resto.
 
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
-import { MAX_FORNECEDORES, PRAZO_RESPOSTAS_SEG, FRACAO_LEMBRETE } from "../../config.ts";
+import { MAX_FORNECEDORES, FRACAO_LEMBRETE, prazoRespostasMs } from "../../config.ts";
 import { db } from "../../nucleo/db/cliente.ts";
 import { contato, cotacao, fornecedor, itemPedido, pedido } from "../../nucleo/db/schema.ts";
 import { aoEntrarItem, avancarItem, type MudancaItem } from "../../nucleo/orquestrador/index.ts";
 import { registrar } from "../../nucleo/registro.ts";
 import { TODAS_PERSONAS, personaVende } from "../../simulador/personas.ts";
 import { casarComBase, itemDaBase } from "../interpretador/base-itens.ts";
-import { buscarNaInternet } from "./internet.ts";
+import { buscarNaInternet, ofertasDaInternet } from "./internet.ts";
 import { acharRecompra, textoRecompra } from "../memoria/index.ts";
 import { enviar } from "../../nucleo/mensagens/index.ts";
 
@@ -28,6 +28,9 @@ export function categoriaDoItem(item: { itemChave: string | null; descricao: str
   return null;
 }
 
+const semAcento = (t: string) => t.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().trim();
+const mesmaCategoria = (a: string, b: string) => semAcento(a) === semAcento(b);
+
 export type Candidato = { fornecedorId: string; nome: string; origem: "real" | "simulado"; chave?: string | null; motivoCorte?: string };
 
 /** Fornecedores com canal ativo, com o motivo de cada corte. */
@@ -43,6 +46,7 @@ export async function candidatos(item: { descricao: string; itemChave: string | 
       parouEm: fornecedor.parouEm,
       bloqueadoEm: fornecedor.bloqueadoEm,
       motivoBloqueio: fornecedor.motivoBloqueio,
+      categorias: fornecedor.categorias,
     })
     .from(fornecedor)
     .innerJoin(contato, and(eq(contato.fornecedorId, fornecedor.id), isNull(contato.parouEm)))
@@ -58,6 +62,9 @@ export async function candidatos(item: { descricao: string; itemChave: string | 
     else if (l.bloqueadoEm) motivoCorte = `Bloqueado pela empresa${l.motivoBloqueio ? `: ${l.motivoBloqueio}` : ""}`;
     else if (l.origem === "simulado" && l.chave && personaPorChave.has(l.chave) && !personaVende(personaPorChave.get(l.chave)!, descricao, categoria)) {
       motivoCorte = "Não vende este item";
+    } else if (l.origem === "real" && categoria && l.categorias.length && !l.categorias.some((c) => mesmaCategoria(c, categoria))) {
+      // Fornecedor real que disse o que vende só recebe cotação da categoria dele.
+      motivoCorte = `Não vende ${categoria} (vende ${l.categorias.join(", ")})`;
     }
     lista.push({ fornecedorId: l.fornecedorId, nome: l.nome, origem: l.origem, chave: l.chave, motivoCorte });
   }
@@ -101,9 +108,14 @@ async function buscar(m: MudancaItem) {
     }
   }
 
-  // Busca real na internet: preço de referência com fonte. Falha aqui não trava o pedido.
+  // Busca real na internet: preço de referência com fonte, e as lojas online viram proposta.
+  // Falha aqui não trava o pedido.
+  let valorEstimado: number | null = null;
+  let online = 0;
   try {
-    await buscarNaInternet(item.id);
+    const r = await buscarNaInternet(item.id);
+    if (r.medianaUnitaria !== null) valorEstimado = r.medianaUnitaria * Number(item.quantidade);
+    online = await ofertasDaInternet(item.id);
   } catch (erro) {
     await registrar(db, {
       agente: "Busca",
@@ -118,7 +130,17 @@ async function buscar(m: MudancaItem) {
   const aptos = todos.filter((c) => !c.motivoCorte).slice(0, MAX_FORNECEDORES());
   const cortados = todos.filter((c) => c.motivoCorte);
 
-  if (!aptos.length) {
+  if (!aptos.length && !online) {
+    const [p] = await db.select({ compradorId: pedido.compradorId }).from(pedido).where(eq(pedido.id, item.pedidoId));
+    // Avisa antes da transição: com o item final, o pedido pode ser concluído logo em seguida.
+    if (p) {
+      await enviar(
+        p.compradorId,
+        `Pedido ${item.pedidoId}: não achei fornecedor nem preço na internet para ${item.descricao}. ` +
+          "Para tentar de novo, mande o pedido com outra descrição (marca, medida ou nome comercial), ou convide um fornecedor pelo link de cadastro.",
+        { pedidoId: item.pedidoId, itemPedidoId: item.id, tipo: "aviso" },
+      );
+    }
     await avancarItem(m.itemPedidoId, "busca_sem_resultado", {
       agente: "Busca",
       acao: "Não achou fornecedor para este item.",
@@ -127,14 +149,14 @@ async function buscar(m: MudancaItem) {
     return;
   }
 
-  await db
+  if (aptos.length) await db
     .insert(cotacao)
     .values(aptos.map((c) => ({ itemPedidoId: item.id, fornecedorId: c.fornecedorId, rodada: item.rodada })))
     .onConflictDoNothing();
 
   await registrar(db, {
     agente: "Busca",
-    acao: `Achou ${aptos.length} ${aptos.length === 1 ? "fornecedor" : "fornecedores"} na base.`,
+    acao: `Achou ${aptos.length} ${aptos.length === 1 ? "fornecedor" : "fornecedores"} na base${online ? ` e ${online} ${online === 1 ? "loja online" : "lojas online"}` : ""}.`,
     motivo: cortados.length
       ? `Cortou ${cortados.length}: ${cortados.map((c) => `${c.nome} (${c.motivoCorte})`).join("; ")}.`
       : "Todos com canal ativo vendem o item.",
@@ -144,7 +166,7 @@ async function buscar(m: MudancaItem) {
   });
 
   const agora = Date.now();
-  const prazoMs = PRAZO_RESPOSTAS_SEG() * 1000;
+  const prazoMs = prazoRespostasMs(valorEstimado);
   await avancarItem(
     m.itemPedidoId,
     "busca_concluida",

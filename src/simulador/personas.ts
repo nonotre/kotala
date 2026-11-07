@@ -135,4 +135,12 @@ export function textoProposta(p: Persona, item: ItemPedido, rodada: number, refe
   }
 }
 
+/** Resposta quando o assistente pede o que faltou na proposta. */
+export function textoComplemento(p: Persona): string {
+  const brlS = (v: number) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const partes = [`Prazo de entrega ${p.prazoDias} ${p.prazoDias === 1 ? "dia" : "dias"}`, `pagamento ${p.pagamento}`, `validade ${p.validadeDias ?? 3} dias`];
+  partes.push(p.frete === null ? "frete R$ 250,00 até a obra" : p.frete === 0 ? "frete grátis" : `frete R$ ${brlS(p.frete)}`);
+  return `Desculpe, faltou: ${partes.join(", ")}.`;
+}
+
 export const PERGUNTA_ANTES = "Boa tarde! Antes de cotar: qual o CEP da entrega e se tem restrição de horário para caminhão?";

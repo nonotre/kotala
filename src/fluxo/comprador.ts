@@ -5,24 +5,25 @@
 import { cadastrarItensNovos } from "../agentes/interpretador/catalogo.ts";
 import { repassarRespostaDoComprador } from "../agentes/cotador/index.ts";
 import { casarComBase, especificacaoEmTexto, itemDaBase, rotuloOpcao } from "../agentes/interpretador/base-itens.ts";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lte } from "drizzle-orm";
 import { lerAnexoDoComprador, textoDoPedidoComAnexo, type LeituraAnexo } from "../agentes/interpretador/anexos.ts";
-import { chaveDoItem, interpretar, type Interpretacao } from "../agentes/interpretador/index.ts";
+import { chaveDoItem, interpretar, palavrasEmComum, type Interpretacao } from "../agentes/interpretador/index.ts";
 import { db } from "../nucleo/db/cliente.ts";
 import { contato as tContato, itemPedido, pedido } from "../nucleo/db/schema.ts";
 import type { AnexoIa } from "../nucleo/ia/index.ts";
 import { baixarAnexo, enviar, vincularMensagem, type Anexo, type Botao, type Canal, type MensagemRecebida } from "../nucleo/mensagens/index.ts";
 import {
   abrirPedido,
+  aoVarrer,
   avancarPedido,
   definirItens,
   TransicaoConcorrente,
   TransicaoInvalida,
 } from "../nucleo/orquestrador/index.ts";
 import { registrar } from "../nucleo/registro.ts";
-import { EMPRESA } from "../config.ts";
+import { EMPRESA, JANELA_CONFIRMACAO_MIN } from "../config.ts";
 import { aoBotaoDoComprador } from "./decisao.ts";
-import { dias, fmtNumero, MOTIVOS_CANCELAMENTO, quantidade, quantidadeDe, type MotivoCancelamento } from "../texto.ts";
+import { dias, fmtNumero, MOTIVOS_CANCELAMENTO, nomePedido, quantidade, quantidadeDe, type MotivoCancelamento } from "../texto.ts";
 
 export const TEXTO_BOAS_VINDAS =
   "Olá! Sou o assistente de cotações. Mande o que precisa comprar, do seu jeito, por exemplo: " +
@@ -60,6 +61,7 @@ type ItemResumo = { descricao: string; quantidade: string | number; unidade: str
 export function textoConfirmacao(p: {
   id: number;
   setor?: string | null;
+  entregas?: string | null;
   itens: ItemResumo[];
   destino: string | null;
   cep?: string | null;
@@ -71,7 +73,7 @@ export function textoConfirmacao(p: {
   suposicoes: string[];
   perguntas: string[];
 }): string {
-  const linhas = [`Pedido ${p.id}. Entendi assim:`, ""];
+  const linhas = [`${nomePedido(p, p.itens)}. Entendi assim:`, ""];
   p.itens.forEach((it, i) => {
     const nome = Number(it.quantidade) > 0 ? quantidadeDe(it.quantidade, it.unidade, it.descricao) : `? ${it.unidade} de ${it.descricao}`;
     // Item da base: mostra o código e as duas primeiras especificações técnicas.
@@ -87,6 +89,7 @@ export function textoConfirmacao(p: {
     ? `${p.prazoTexto}${p.prazoMaxDias !== null ? ` (${dias(p.prazoMaxDias)})` : ""}`
     : "não informado";
   linhas.push(`Prazo: ${prazo}`);
+  if (p.entregas) linhas.push(`Entregas: ${p.entregas}`);
   if (p.urgencia === "obra_parada") linhas.push("Obra parada: o prazo pesa mais que o preço.");
   else if (p.urgencia === "urgente") linhas.push("Urgente.");
   if (p.suposicoes.length) {
@@ -118,9 +121,21 @@ export async function interpretarEResponder(pedidoId: number) {
   const [p] = await db.select().from(pedido).where(eq(pedido.id, pedidoId));
   if (!p) return;
 
+  // Na correção, a IA recebe o que já estava entendido e aplica só a última mensagem.
+  const atuais = p.correcoes.length ? await db.select().from(itemPedido).where(eq(itemPedido.pedidoId, pedidoId)).orderBy(asc(itemPedido.ordem)) : [];
+  const atual = atuais.length
+    ? {
+        itens: atuais.map((it) => ({ descricao: it.descricao, quantidade: Number(it.quantidade), unidade: it.unidade, especificacao: it.especificacao })),
+        destino: p.destino,
+        cep: p.cep,
+        setor: p.setor,
+        prazoTexto: p.prazoTexto,
+        entregas: p.entregas,
+      }
+    : undefined;
   let r: Awaited<ReturnType<typeof interpretar>>;
   try {
-    r = await interpretar({ textoOriginal: p.textoOriginal, correcoes: p.correcoes }, { pedidoId });
+    r = await interpretar({ textoOriginal: p.textoOriginal, correcoes: p.correcoes, atual }, { pedidoId });
   } catch (erro) {
     await registrar(db, {
       agente: "Interpretador",
@@ -133,6 +148,39 @@ export async function interpretarEResponder(pedidoId: number) {
   }
 
   const i: Interpretacao = r.valor;
+  const anteriores = atuais;
+
+  // Correção que a IA não leu como pedido (ou que apagou todos os itens) nunca cancela o pedido:
+  // descarta a correção e mostra de novo o que já estava entendido.
+  if (!i.ehPedido && p.correcoes.length && anteriores.length) {
+    const correcoes = p.correcoes.slice(0, -1);
+    try {
+      await avancarPedido(
+        pedidoId,
+        "interpretado",
+        { agente: "Interpretador", acao: "Não entendeu a correção; manteve o pedido como estava.", motivo: `Correção sem item legível: "${p.correcoes.at(-1)?.slice(0, 200)}".` },
+        { correcoes },
+      );
+    } catch (erro) {
+      ignorarCorrida(erro);
+      return;
+    }
+    await mostrarConfirmacao(pedidoId, "Não entendi essa correção, então o pedido continua como estava. Diga o que mudar, por exemplo \"quantidade: 10\" ou \"setor: manutenção\".\n\n");
+    return;
+  }
+  // A IA relê o pedido inteiro a cada correção e às vezes perde a quantidade já dita:
+  // item sem quantidade que já tinha uma mantém a anterior.
+  if (p.correcoes.length) {
+    for (const [n, it] of i.itens.entries()) {
+      if (it.quantidade > 0) continue;
+      const mesmo = anteriores.find((a) => a.itemChave === chaveDoItem(it.descricao) || a.descricao.toLowerCase() === it.descricao.toLowerCase()) ?? (i.itens.length === anteriores.length ? anteriores[n] : undefined);
+      if (mesmo && Number(mesmo.quantidade) > 0) {
+        it.quantidade = Number(mesmo.quantidade);
+        if (it.unidade === "unidade" && mesmo.unidade) it.unidade = mesmo.unidade;
+        i.faltando = i.faltando.filter((f) => !(/quant/i.test(f) && palavrasEmComum(f, it.descricao)));
+      }
+    }
+  }
   // Sem destino: usa o endereço padrão da empresa, em vez de perguntar.
   if (i.ehPedido && i.modoEntrega !== "retirada" && !i.destino) {
     i.destino = EMPRESA.enderecoEntrega;
@@ -184,6 +232,7 @@ export async function interpretarEResponder(pedidoId: number) {
     prazoMaxDias: i.prazoDias,
     urgencia: i.urgencia,
     setor: i.setor ?? p.setor,
+    entregas: i.entregas ?? p.entregas,
     faltando: i.faltando,
     suposicoes: i.suposicoes,
     perguntasFeitas: p.perguntasFeitas + (perguntar ? 1 : 0),
@@ -211,6 +260,7 @@ export async function interpretarEResponder(pedidoId: number) {
     destino: i.destino,
     cep: i.cep,
     setor: i.setor ?? p.setor,
+    entregas: i.entregas ?? p.entregas,
     prazoTexto: i.prazoTexto,
     prazoMaxDias: i.prazoDias,
     urgencia: i.urgencia,
@@ -254,6 +304,13 @@ async function escolherDaBase(pedidoId: number, ordem: number, idBase: string, c
     .set({ descricao: b.descricao, itemChave: b.id, especificacao: { ...it.especificacao, ...especificacaoEmTexto(b) } })
     .where(eq(itemPedido.id, it.id));
   await registrar(db, { agente: "Comprador", acao: `Escolheu ${b.id} (${b.descricao}) para o item ${ordem}.`, motivo: "Escolha na base de itens.", pedidoId, itemPedidoId: it.id });
+  await mostrarConfirmacao(pedidoId);
+}
+
+/** Mostra de novo a confirmação do pedido como está no banco (sem chamar a IA). */
+async function mostrarConfirmacao(pedidoId: number, antes = "") {
+  const [p] = await db.select().from(pedido).where(eq(pedido.id, pedidoId));
+  if (!p) return;
   const itens = await db.select().from(itemPedido).where(eq(itemPedido.pedidoId, pedidoId)).orderBy(asc(itemPedido.ordem));
   const texto = textoConfirmacao({
     id: pedidoId,
@@ -261,6 +318,7 @@ async function escolherDaBase(pedidoId: number, ordem: number, idBase: string, c
     destino: p.destino,
     cep: p.cep,
     setor: p.setor,
+    entregas: p.entregas,
     prazoTexto: p.prazoTexto,
     prazoMaxDias: p.prazoMaxDias,
     urgencia: p.urgencia,
@@ -270,8 +328,10 @@ async function escolherDaBase(pedidoId: number, ordem: number, idBase: string, c
     perguntas: [],
   });
   const escolha = escolhasDaBase(pedidoId, itens);
-  await enviar(compradorId, texto + escolha.texto, { pedidoId, botoes: [...escolha.botoes, ...botoesConfirmacao(pedidoId, false)] });
+  await enviar(p.compradorId, antes + texto + escolha.texto, { pedidoId, botoes: [...escolha.botoes, ...botoesConfirmacao(pedidoId, false)] });
 }
+
+
 
 function ignorarCorrida(erro: unknown) {
   if (erro instanceof TransicaoInvalida || erro instanceof TransicaoConcorrente) return;
@@ -291,9 +351,20 @@ async function confirmar(pedidoId: number, compradorId: string) {
     .from(itemPedido)
     .where(eq(itemPedido.pedidoId, pedidoId))
     .orderBy(asc(itemPedido.ordem));
+  // Nunca cota sem quantidade: pergunta antes de seguir.
+  const semQuantidade = itens.filter((it) => !(Number(it.quantidade) > 0));
+  if (semQuantidade.length) {
+    await enviar(
+      compradorId,
+      `Antes de cotar, falta a quantidade de: ${semQuantidade.map((it) => it.descricao).join(", ")}. Quantos ${semQuantidade.length === 1 ? `(em ${semQuantidade[0]!.unidade})` : ""}?`,
+      { pedidoId },
+    );
+    return;
+  }
   const [primeiro, ...resto] = itens;
   // A mensagem sai antes da transição: a busca dispara outras mensagens logo em seguida.
-  const linhas = [`Pedido ${pedidoId} confirmado.`];
+  const [pc] = await db.select({ setor: pedido.setor }).from(pedido).where(eq(pedido.id, pedidoId));
+  const linhas = [`${nomePedido({ id: pedidoId, setor: pc?.setor }, itens)}: confirmado.`];
   if (primeiro) linhas.push(`Vou buscar fornecedores para ${quantidadeTexto(primeiro.quantidade, primeiro.unidade)} de ${primeiro.descricao}.`);
   if (resto.length) linhas.push(`${resto.length === 1 ? "O outro item fica" : `Os outros ${resto.length} itens ficam`} na fila.`);
   linhas.push("Aviso você a cada novidade.");
@@ -330,15 +401,52 @@ async function cancelar(pedidoId: number, compradorId: string, motivo?: MotivoCa
   }
 }
 
-/** Pedido do comprador ainda antes da confirmação: a próxima mensagem dele é correção. */
-async function pedidoPendente(compradorId: string) {
+/** Última atividade do pedido em aberto: a mudança mais recente ou o lembrete. */
+const ultimaAtividade = (p: { atualizadoEm: Date; lembreteConfirmacaoEm: Date | null }) =>
+  Math.max(p.atualizadoEm.getTime(), p.lembreteConfirmacaoEm?.getTime() ?? 0);
+
+/**
+ * Pedido do comprador ainda antes da confirmação: a próxima mensagem dele é correção.
+ * Vale por JANELA_CONFIRMACAO_MIN desde a última atividade (o lembrete renova a janela).
+ * Depois disso, uma mensagem nova abre outro pedido em vez de virar correção de um pedido velho.
+ */
+async function pedidoPendente(compradorId: string, agora = Date.now()) {
   const [p] = await db
     .select()
     .from(pedido)
     .where(and(eq(pedido.compradorId, compradorId), inArray(pedido.estado, ["interpretando", "aguardando_confirmacao"])))
     .orderBy(desc(pedido.id))
     .limit(1);
-  return p;
+  if (p && agora - ultimaAtividade(p) > JANELA_CONFIRMACAO_MIN() * 60_000) return { ...p, vencido: true as const };
+  return p ? { ...p, vencido: false as const } : undefined;
+}
+
+/** Pedido parado em "confirma?" há uma janela inteira: um lembrete, uma vez. */
+export async function lembrarConfirmacoes(agora: Date) {
+  const limite = new Date(agora.getTime() - JANELA_CONFIRMACAO_MIN() * 60_000);
+  const parados = await db
+    .select()
+    .from(pedido)
+    .where(and(eq(pedido.estado, "aguardando_confirmacao"), isNull(pedido.lembreteConfirmacaoEm), lte(pedido.atualizadoEm, limite)));
+  for (const p of parados) {
+    const marcou = await db
+      .update(pedido)
+      .set({ lembreteConfirmacaoEm: agora })
+      .where(and(eq(pedido.id, p.id), isNull(pedido.lembreteConfirmacaoEm)))
+      .returning({ id: pedido.id });
+    if (!marcou.length) continue;
+    const itens = await db.select({ descricao: itemPedido.descricao }).from(itemPedido).where(eq(itemPedido.pedidoId, p.id)).orderBy(asc(itemPedido.ordem));
+    await enviar(
+      p.compradorId,
+      `${nomePedido(p, itens)} ainda espera sua confirmação. Nada é cotado antes disso. Confirma, corrige ou cancela? Na próxima hora, o que você escrever completa este pedido; depois, abre um pedido novo.`,
+      { pedidoId: p.id, tipo: "aviso", botoes: botoesConfirmacao(p.id, false) },
+    );
+    await registrar(db, { agente: "Acompanhamento do pedido", acao: `Lembrou o comprador de confirmar o pedido ${p.id}.`, motivo: `Pedido parado em "confirma?" há ${JANELA_CONFIRMACAO_MIN()} min.`, pedidoId: p.id });
+  }
+}
+
+export function ligarComprador() {
+  aoVarrer(lembrarConfirmacoes);
 }
 
 export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: MensagemRecebida) {
@@ -390,7 +498,9 @@ export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: Me
   // Dúvida de fornecedor esperando o comprador: esta mensagem é a resposta.
   if (await repassarRespostaDoComprador(contato.id, texto)) return;
 
-  const pendente = await pedidoPendente(contato.id);
+  const achado = await pedidoPendente(contato.id);
+  // Pedido velho (fora da janela) continua aberto, mas não captura mensagem nova como correção.
+  const pendente = achado && (!achado.vencido || CONFIRMACAO.test(texto)) ? achado : undefined;
   if (!pendente && SAUDACAO.test(texto)) {
     await enviar(contato.id, TEXTO_BOAS_VINDAS);
     return;
@@ -426,6 +536,9 @@ export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: Me
 
   const novo = await abrirPedido({ compradorId: contato.id, canalOrigem: contato.canal, textoOriginal: texto });
   await vincularMensagem(mensagemId, { pedidoId: novo.id });
+  if (achado?.vencido) {
+    await enviar(contato.id, `Abri um pedido novo. O pedido ${achado.id} continua esperando confirmação; os botões dele ainda valem.`, { pedidoId: novo.id });
+  }
   if (leitura) await anotarLeitura(novo.id, contato.id, leitura);
   await interpretarEResponder(novo.id);
 }

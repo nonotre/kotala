@@ -12,11 +12,11 @@ import { tituloItem } from "./textos";
 import s from "./pedido.module.scss";
 
 /** Nome do fornecedor com o selo, quando é simulado. */
-export function Fornecedor({ nome, simulado }: { nome: string; simulado: boolean }) {
+export function Fornecedor({ nome, simulado, online = false }: { nome: string; simulado: boolean; online?: boolean }) {
   return (
     <span className={comum.fornecedor}>
       <span>{nome}</span>
-      {simulado ? <SeloSimulado /> : null}
+      {simulado ? <SeloSimulado /> : online ? <SeloSimulado texto="loja online" /> : null}
     </span>
   );
 }
@@ -24,12 +24,13 @@ export function Fornecedor({ nome, simulado }: { nome: string; simulado: boolean
 /** Linha de apoio do item: estado, rodada, prazo das respostas e se aceita equivalente. */
 export function ContextoItem({ item }: { item: ItemDoPedido["item"] }) {
   return (
-    <p className={s.itemContexto}>
+    // div, não p: o StatusItem desenha uma div, e div dentro de p quebra a hidratação.
+    <div className={s.itemContexto}>
       <StatusItem estado={item.estado} />
       {item.rodada > 1 ? <span>Rodada {item.rodada}</span> : null}
       {item.prazoRespostasEm && item.estado === "cotando" ? <span>Respostas até {hora(item.prazoRespostasEm)}</span> : null}
       {item.aceitaSimilar ? <span>Aceita equivalente</span> : null}
-    </p>
+    </div>
   );
 }
 
