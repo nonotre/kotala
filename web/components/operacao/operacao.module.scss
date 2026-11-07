@@ -1,0 +1,74 @@
+// Peças comuns das telas de operação. Só tokens do Carbon.
+@use '@carbon/react/scss/theme';
+@use '@carbon/react/scss/spacing';
+@use '@carbon/react/scss/type';
+@use '@carbon/react/scss/breakpoint';
+
+.vista {
+  inline-size: calc(#{spacing.$spacing-12} * 2 + #{spacing.$spacing-09}); /* stylelint-disable-line carbon/layout-use */
+
+  @include breakpoint.breakpoint-down(md) {
+    inline-size: 100%;
+  }
+}
+
+.ladoCabecalho {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: spacing.$spacing-03 spacing.$spacing-05;
+
+  @include breakpoint.breakpoint-down(md) {
+    justify-content: flex-start;
+    inline-size: 100%;
+  }
+}
+
+// O aviso do Carbon tem largura máxima. Aqui ele acompanha a coluna.
+.esticado > * {
+  max-inline-size: none;
+  inline-size: 100%;
+}
+
+.rotulo {
+  @include type.type-style('label-01');
+
+  color: theme.$text-secondary;
+}
+
+.frase {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-primary;
+}
+
+.apoio {
+  @include type.type-style('label-01');
+
+  color: theme.$text-secondary;
+}
+
+.contagem {
+  @include type.type-style('label-01');
+
+  font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
+  color: theme.$text-secondary;
+}
+
+// ---------- Progresso do pedido ----------
+.progressoGrande {
+  min-inline-size: 0;
+
+  @include breakpoint.breakpoint-down(lg) {
+    display: none;
+  }
+}
+
+.progressoPequeno {
+  inline-size: 100%;
+
+  @include breakpoint.breakpoint(lg) {
+    display: none;
+  }
+}

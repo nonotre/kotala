@@ -1,0 +1,600 @@
+// Início: uma tarefa em destaque, o resto em apoio. Só tokens do Carbon.
+@use '@carbon/react/scss/theme';
+@use '@carbon/react/scss/spacing';
+@use '@carbon/react/scss/type';
+@use '@carbon/react/scss/breakpoint';
+
+.somenteLeitor {
+  position: absolute;
+  overflow: hidden;
+  clip-path: inset(50%);
+  inline-size: 1px;
+  block-size: 1px;
+  white-space: nowrap;
+}
+
+// A ação principal do destaque: abaixo de lg, ela mora na barra do pé.
+.soLargo {
+  display: contents;
+
+  @include breakpoint.breakpoint-down(lg) {
+    display: none;
+  }
+}
+
+.contagem {
+  @include type.type-style('label-01');
+
+  color: theme.$text-secondary;
+  font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
+}
+
+// ---------- Topo ----------
+.topo {
+  padding-block: spacing.$spacing-05;
+  background: theme.$layer-01;
+  border-block-end: 1px solid theme.$border-subtle-01;
+}
+
+// Texto solto alinhado ao texto de dentro do destaque.
+.topoFrase {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: spacing.$spacing-02;
+  padding-inline-start: spacing.$spacing-05;
+}
+
+.topoAtalhos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: spacing.$spacing-03;
+
+  @include breakpoint.breakpoint-down(lg) {
+    justify-content: flex-start;
+    padding-block-start: spacing.$spacing-03;
+    padding-inline-start: spacing.$spacing-05;
+  }
+}
+
+.frase {
+  @include type.type-style('heading-03');
+
+  color: theme.$text-primary;
+}
+
+.fraseApoio {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-secondary;
+}
+
+// ---------- Destaque ----------
+.gradePrincipal {
+  align-items: flex-start;
+}
+
+.colunaHeroi {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.heroi {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.heroiMiolo {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-06;
+  min-inline-size: 0;
+}
+
+.heroiTopo {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+  // O selo de IA mora no canto: o título não passa por baixo dele.
+  padding-inline-end: spacing.$spacing-07;
+}
+
+// Texto corrido, e não flex: se quebrar, o ponto não vira o começo da linha seguinte.
+.heroiRotulo {
+  @include type.type-style('label-01');
+
+  color: theme.$text-secondary;
+
+  > span + span::before {
+    content: ' · ';
+  }
+}
+
+.heroiIcone {
+  fill: theme.$support-success;
+}
+
+.heroiTitulo {
+  @include type.type-style('heading-04');
+
+  color: theme.$text-primary;
+
+  @include breakpoint.breakpoint(md) {
+    @include type.type-style('heading-05');
+  }
+}
+
+.heroiFatos {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-secondary;
+
+  > span + span::before {
+    content: ' · ';
+    color: theme.$text-secondary;
+  }
+}
+
+.heroiFrase {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-secondary;
+}
+
+// Os rótulos dos passos transbordam um pouco a caixa do indicador.
+.heroiProgresso {
+  min-inline-size: 0;
+  padding-block-end: spacing.$spacing-05;
+}
+
+.heroiRodape {
+  display: flex;
+  flex-wrap: wrap;
+  gap: spacing.$spacing-03;
+}
+
+// ---------- Número e troca ----------
+.numeros {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-06;
+}
+
+.numeroLinha {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: spacing.$spacing-05;
+
+  @include breakpoint.breakpoint(md) {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: spacing.$spacing-07;
+  }
+}
+
+.numeroPrincipal {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: spacing.$spacing-02;
+}
+
+.numeroRotulo {
+  @include type.type-style('label-01');
+
+  color: theme.$text-secondary;
+}
+
+.numero {
+  @include type.type-style('heading-06');
+
+  color: theme.$text-primary;
+  font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
+
+  @include breakpoint.breakpoint(lg) {
+    @include type.type-style('heading-07');
+  }
+}
+
+.numeroPrazo {
+  @include type.type-style('heading-compact-01');
+
+  color: theme.$text-primary;
+}
+
+.trocaBloco {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+}
+
+.troca {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, max-content));
+  gap: spacing.$spacing-03 spacing.$spacing-04;
+
+  @include breakpoint.breakpoint(md) {
+    column-gap: spacing.$spacing-05;
+  }
+
+  > div {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+}
+
+.trocaNumero {
+  @include type.type-style('heading-03');
+
+  color: theme.$text-primary;
+  font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
+
+  @include breakpoint.breakpoint(lg) {
+    @include type.type-style('heading-04');
+  }
+}
+
+.alertas {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-02;
+
+  svg {
+    flex-shrink: 0;
+  }
+}
+
+.porque {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-secondary;
+}
+
+// Tabela curta dentro do destaque: sem fundo próprio, para não pesar sobre a superfície.
+.propostas {
+  position: relative;
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
+  border-block-start: 1px solid theme.$border-subtle-01;
+
+  th {
+    @include type.type-style('label-01');
+
+    padding-block: spacing.$spacing-03 spacing.$spacing-02;
+    padding-inline-end: spacing.$spacing-05;
+    color: theme.$text-secondary;
+    text-align: start;
+  }
+
+  td {
+    @include type.type-style('body-compact-01');
+
+    padding-block: spacing.$spacing-02;
+    padding-inline-end: spacing.$spacing-05;
+    color: theme.$text-primary;
+    white-space: nowrap;
+    border-block-start: 1px solid theme.$border-subtle-01;
+  }
+
+  th:first-child,
+  td:first-child {
+    inline-size: 100%;
+  }
+
+  th:last-child,
+  td:last-child {
+    padding-inline-end: 0;
+  }
+}
+
+.propostaRecomendada td {
+  @include type.type-style('heading-compact-01');
+}
+
+.propostaFornecedor {
+  display: flex;
+  align-items: center;
+  gap: spacing.$spacing-03;
+}
+
+// A recomendada se distingue por escrito, e não só pelo peso do texto.
+.propostaMarca {
+  @include type.type-style('label-01');
+
+  color: theme.$text-secondary;
+}
+
+.resumoCusto {
+  @include type.type-style('heading-compact-01');
+
+  font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
+}
+
+// ---------- O que foi entendido ----------
+.entendido {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-05;
+}
+
+.entendidoLista {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: spacing.$spacing-05;
+
+  @include breakpoint.breakpoint(lg) {
+    grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr));
+  }
+}
+
+.entendidoValor {
+  @include type.type-style('heading-compact-01');
+
+  color: theme.$text-primary;
+}
+
+// O que não foi dito não pesa como o que o comprador disse.
+.entendidoAssumido {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-secondary;
+}
+
+.listaCurta {
+  @include type.type-style('body-compact-01');
+
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-02;
+  color: theme.$text-primary;
+}
+
+.citacao {
+  @include type.type-style('body-compact-01');
+
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-02;
+  padding-inline-start: spacing.$spacing-05;
+  color: theme.$text-primary;
+  border-inline-start: 1px solid theme.$border-strong-01;
+}
+
+// ---------- Primeira vez ----------
+.passos {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-05;
+}
+
+.passo {
+  display: grid;
+  grid-template-columns: spacing.$spacing-07 minmax(0, 1fr);
+  gap: spacing.$spacing-03;
+}
+
+.passoNumero {
+  @include type.type-style('heading-03');
+
+  color: theme.$text-secondary;
+  font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
+}
+
+.passoTexto {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-02;
+}
+
+.passoTitulo {
+  @include type.type-style('heading-compact-01');
+
+  color: theme.$text-primary;
+}
+
+.passoCorpo {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-secondary;
+}
+
+// ---------- Coluna ao lado ----------
+.colunaLado {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-05;
+  min-inline-size: 0;
+
+  // De lg até xlg o destaque ocupa as 16 colunas: os blocos de apoio ficam lado a lado abaixo dele.
+  @include breakpoint.breakpoint-between(lg, xlg) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+
+.linhas {
+  display: flex;
+  flex-direction: column;
+}
+
+.pendencia,
+.andamento {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: spacing.$spacing-03;
+  padding-block: spacing.$spacing-05;
+  border-block-start: 1px solid theme.$border-subtle-01;
+
+  &:first-child {
+    padding-block-start: 0;
+    border-block-start: 0;
+  }
+
+  &:last-child {
+    padding-block-end: 0;
+  }
+}
+
+.andamento {
+  align-items: stretch;
+}
+
+.linhaRotulo {
+  @include type.type-style('label-01');
+
+  color: theme.$text-secondary;
+
+  > span + span::before {
+    content: ' · ';
+  }
+}
+
+.linhaItem {
+  color: theme.$text-secondary;
+}
+
+.pendenciaTexto {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-primary;
+}
+
+.pendenciaAcao {
+  display: flex;
+  flex-wrap: wrap;
+  gap: spacing.$spacing-03;
+}
+
+.andamentoTopo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: spacing.$spacing-02 spacing.$spacing-05;
+}
+
+.andamentoTitulo {
+  @include type.type-style('body-compact-01');
+
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-01;
+  min-inline-size: 0;
+}
+
+.andamentoTexto {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-secondary;
+}
+
+.andamentoEtiquetas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: spacing.$spacing-02 spacing.$spacing-05;
+
+  &:empty {
+    display: none;
+  }
+}
+
+.linksPedidos {
+  @include type.type-style('body-compact-01');
+
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: spacing.$spacing-03 spacing.$spacing-05;
+  padding-inline: spacing.$spacing-05;
+
+  @include breakpoint.breakpoint-between(lg, xlg) {
+    grid-column: 1 / -1;
+  }
+}
+
+// ---------- Em números ----------
+.indicadores {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: spacing.$spacing-05;
+
+  @include breakpoint.breakpoint-down(lg) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.indicador {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-02;
+  padding-block-start: spacing.$spacing-03;
+  border-block-start: 1px solid theme.$border-subtle-01;
+}
+
+.indicadorValor {
+  @include type.type-style('heading-05');
+
+  color: theme.$text-primary;
+  font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
+}
+
+// ---------- Apoio ----------
+.gradeApoio {
+  padding-block-start: spacing.$spacing-03;
+}
+
+// Texto solto alinhado ao texto de dentro das superfícies acima.
+.colunaPlana {
+  padding-inline: spacing.$spacing-05;
+}
+
+.linkSolto {
+  margin-block-start: spacing.$spacing-05;
+}
+
+.registro {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-05;
+}
+
+.registroLinha {
+  display: grid;
+  grid-template-columns: spacing.$spacing-11 minmax(0, 1fr);
+  gap: spacing.$spacing-03;
+}
+
+.registroHora {
+  @include type.type-style('label-01');
+
+  padding-block-start: spacing.$spacing-01;
+  color: theme.$text-secondary;
+  font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
+}
+
+.registroTexto {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-02;
+  min-inline-size: 0;
+}
+
+.registroAcao {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-primary;
+}
+
+.registroMotivo {
+  @include type.type-style('label-01');
+
+  color: theme.$text-secondary;
+}

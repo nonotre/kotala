@@ -1,0 +1,252 @@
+// Avisos: primeiro o que espera o comprador, depois o que já aconteceu. Só tokens do Carbon.
+@use '@carbon/react/scss/theme';
+@use '@carbon/react/scss/spacing';
+@use '@carbon/react/scss/type';
+@use '@carbon/react/scss/breakpoint';
+
+.principal,
+.lado {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-07;
+  min-inline-size: 0;
+}
+
+// O título acerta com o de Precisa de você, que tem o respiro da superfície.
+.lado {
+  @include breakpoint.breakpoint(xlg) {
+    padding-block-start: spacing.$spacing-05;
+  }
+}
+
+.superficie {
+  padding: spacing.$spacing-05;
+  background: theme.$layer-01;
+}
+
+.contagem {
+  @include type.type-style('label-01');
+
+  padding-block-start: spacing.$spacing-02;
+  color: theme.$text-secondary;
+  font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
+}
+
+.hora {
+  @include type.type-style('label-01');
+
+  color: theme.$text-secondary;
+  font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
+}
+
+.rotulo {
+  @include type.type-style('label-01');
+
+  color: theme.$text-secondary;
+}
+
+.apoio {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-secondary;
+}
+
+// ---------- Precisa de você ----------
+.tarefas,
+.passados {
+  display: flex;
+  flex-direction: column;
+}
+
+.tarefa {
+  display: grid;
+  grid-template-columns: spacing.$spacing-11 minmax(0, 1fr) calc(#{spacing.$spacing-13} + #{spacing.$spacing-11});
+  gap: spacing.$spacing-03 spacing.$spacing-05;
+  align-items: start;
+  padding-block: spacing.$spacing-05;
+
+  &:first-child {
+    padding-block-start: 0;
+  }
+
+  &:last-child {
+    padding-block-end: 0;
+  }
+
+  & + & {
+    border-block-start: 1px solid theme.$border-subtle-01;
+  }
+
+  @include breakpoint.breakpoint-down(md) {
+    grid-template-columns: minmax(0, 1fr);
+    gap: spacing.$spacing-04;
+
+    > .tarefaTexto {
+      grid-area: 1 / 1;
+    }
+
+    > .tarefaAcao {
+      grid-area: 2 / 1;
+    }
+
+    > .hora {
+      grid-area: 3 / 1;
+    }
+  }
+}
+
+.tarefaTexto {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-02;
+  min-inline-size: 0;
+}
+
+.frase {
+  @include type.type-style('body-compact-02');
+
+  color: theme.$text-primary;
+  text-wrap: pretty;
+}
+
+// A primeira da lista é a que o comprador resolve agora.
+.fraseGrande {
+  @include type.type-style('heading-03');
+
+  color: theme.$text-primary;
+  text-wrap: pretty;
+}
+
+.tarefaMarcas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: spacing.$spacing-02 spacing.$spacing-05;
+  align-items: center;
+  margin-block-start: spacing.$spacing-02;
+}
+
+.tarefaAcao {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+  align-items: flex-start;
+  min-inline-size: 0;
+}
+
+// ---------- O que já aconteceu ----------
+.passado {
+  display: grid;
+  grid-template-columns: spacing.$spacing-11 minmax(0, 1fr) spacing.$spacing-12 spacing.$spacing-12;
+  gap: spacing.$spacing-02 spacing.$spacing-05;
+  align-items: start;
+  padding-block: spacing.$spacing-04;
+  border-block-start: 1px solid theme.$border-subtle-01;
+
+  // Hora, pedido e canal numa linha; a frase embaixo.
+  @include breakpoint.breakpoint-down(md) {
+    grid-template-columns: auto auto minmax(0, 1fr);
+    column-gap: spacing.$spacing-04;
+    align-items: center;
+
+    > .passadoTexto {
+      grid-area: 2 / 1 / 3 / -1;
+    }
+
+    > .passadoCanal {
+      justify-self: end;
+    }
+  }
+}
+
+.passadoHora {
+  @include type.type-style('label-01');
+
+  padding-block-start: spacing.$spacing-01;
+  color: theme.$text-secondary;
+  font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
+}
+
+.passadoTexto {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: spacing.$spacing-02;
+  min-inline-size: 0;
+}
+
+.passadoFrase {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-primary;
+  text-wrap: pretty;
+}
+
+.passadoApoio {
+  @include type.type-style('label-01');
+
+  color: theme.$text-secondary;
+}
+
+.passadoPedido,
+.passadoCanal {
+  @include type.type-style('body-compact-01');
+
+  white-space: nowrap;
+}
+
+.passadoCanal {
+  color: theme.$text-secondary;
+}
+
+// Largura por opção, sem cortar rótulo.
+.filtro {
+  inline-size: calc(var(--opcoes) * #{spacing.$spacing-13});
+  max-inline-size: 100%;
+}
+
+.semResultado {
+  @include type.type-style('body-compact-01');
+
+  display: flex;
+  flex-wrap: wrap;
+  gap: spacing.$spacing-03;
+  align-items: center;
+  color: theme.$text-secondary;
+}
+
+// ---------- Sem pendência ----------
+.emDia {
+  display: grid;
+  grid-template-columns: spacing.$spacing-08 minmax(0, 1fr) calc(#{spacing.$spacing-13} + #{spacing.$spacing-11});
+  gap: spacing.$spacing-04 spacing.$spacing-05;
+  align-items: start;
+
+  @include breakpoint.breakpoint-down(md) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.emDiaIcone {
+  fill: theme.$support-success;
+}
+
+// ---------- Lado ----------
+.oQueChega {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+
+  > li {
+    @include type.type-style('body-compact-01');
+
+    padding-block-start: spacing.$spacing-03;
+    color: theme.$text-primary;
+    border-block-start: 1px solid theme.$border-subtle-01;
+  }
+}
+
+.ladoTexto {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-primary;
+}

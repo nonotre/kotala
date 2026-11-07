@@ -1,0 +1,263 @@
+// Lista de pedidos: tabela no notebook, linhas no celular. Só tokens do Carbon.
+@use '@carbon/react/scss/theme';
+@use '@carbon/react/scss/spacing';
+@use '@carbon/react/scss/type';
+@use '@carbon/react/scss/breakpoint';
+
+// A coluna de custo tem a mesma largura com proposta, sem proposta e no cabeçalho, a partir de 1440 px.
+@mixin largura-custo {
+  @include breakpoint.breakpoint(90rem) {
+    min-inline-size: calc(#{spacing.$spacing-13} + #{spacing.$spacing-10});
+  }
+}
+
+// ---------- Tabela ----------
+.tabela td {
+  padding-block: spacing.$spacing-04;
+  vertical-align: top;
+}
+
+.filtros {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-inline-size: 0;
+
+  @include breakpoint.breakpoint(xlg) {
+    inline-size: calc(#{spacing.$spacing-13} * 5); /* stylelint-disable-line carbon/layout-use */
+  }
+
+  @include breakpoint.breakpoint-down(xlg) {
+    padding-inline: spacing.$spacing-05;
+  }
+}
+
+.filtros > * {
+  flex: 1 1 auto;
+}
+
+.colPedido {
+  inline-size: spacing.$spacing-11;
+}
+
+.colCusto {
+  @include largura-custo;
+
+  white-space: nowrap;
+}
+
+// A coluna que diz o que fazer nunca é a mais estreita.
+.colPasso {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-inline-size: calc(#{spacing.$spacing-13} + #{spacing.$spacing-03});
+}
+
+.seletor {
+  min-inline-size: 0;
+}
+
+.numero {
+  @include type.type-style('heading-compact-01');
+
+  font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
+  white-space: nowrap;
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-01;
+  min-inline-size: spacing.$spacing-12;
+
+  @include breakpoint.breakpoint(xlg) {
+    min-inline-size: spacing.$spacing-13;
+  }
+}
+
+.situacao {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: spacing.$spacing-02;
+  white-space: nowrap;
+}
+
+.situacao > span {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.itemNome {
+  @include type.type-style('heading-compact-01');
+
+  display: block;
+  color: theme.$text-primary;
+}
+
+.apoio {
+  @include type.type-style('label-01');
+
+  display: block;
+  color: theme.$text-secondary;
+
+  // A urgência acompanha o tamanho da linha.
+  > span {
+    font-size: inherit;
+    line-height: inherit;
+  }
+}
+
+// A mensagem do comprador, como ele escreveu.
+.mensagem {
+  @include type.type-style('label-01');
+
+  display: block;
+  padding-inline-start: spacing.$spacing-03;
+  color: theme.$text-secondary;
+  border-inline-start: 1px solid theme.$border-subtle-01;
+}
+
+.passo {
+  @include type.type-style('body-compact-01');
+
+  display: block;
+  color: theme.$text-secondary;
+}
+
+.passoVez {
+  @include type.type-style('body-compact-01');
+
+  display: block;
+  color: theme.$text-primary;
+}
+
+.acao {
+  @include type.type-style('body-compact-01');
+
+  margin-block-start: spacing.$spacing-02;
+
+  @include breakpoint.breakpoint-down(lg) {
+    display: inline-flex;
+    align-items: center;
+    min-block-size: spacing.$spacing-06;
+  }
+}
+
+.proposta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: spacing.$spacing-01;
+
+  @include largura-custo;
+}
+
+.propostaLinha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: spacing.$spacing-02 spacing.$spacing-03;
+}
+
+.custo {
+  @include type.type-style('heading-compact-01');
+
+  color: theme.$text-primary;
+  font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
+}
+
+.semValor {
+  @include largura-custo;
+
+  display: block;
+  color: theme.$text-secondary;
+}
+
+.semLinhas {
+  padding: spacing.$spacing-05;
+  background: theme.$layer-01;
+  border-block-start: 1px solid theme.$border-subtle-01;
+}
+
+.rodape {
+  @include type.type-style('label-01');
+
+  padding: spacing.$spacing-04 spacing.$spacing-05;
+  color: theme.$text-secondary;
+  background: theme.$layer-01;
+  border-block-start: 1px solid theme.$border-subtle-01;
+}
+
+// ---------- Celular ----------
+.celular {
+  display: flex;
+  flex-direction: column;
+}
+
+.celularBarra {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+  margin-block-end: spacing.$spacing-03;
+
+  @include breakpoint.breakpoint(md) {
+    flex-direction: row;
+    align-items: center;
+    gap: spacing.$spacing-05;
+  }
+}
+
+.celularLista {
+  background: theme.$layer-01;
+  list-style: none;
+}
+
+.celularItem + .celularItem {
+  border-block-start: 1px solid theme.$border-subtle-01;
+}
+
+.celularLinha {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+  padding: spacing.$spacing-05 spacing.$spacing-05 spacing.$spacing-03;
+  color: theme.$text-primary;
+  text-decoration: none;
+
+  &:hover {
+    background: theme.$layer-hover-01;
+  }
+
+  &:focus-visible {
+    outline: spacing.$spacing-01 solid theme.$focus;
+    outline-offset: calc(-1 * #{spacing.$spacing-01});
+  }
+}
+
+.celularTopo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: spacing.$spacing-02 spacing.$spacing-05;
+}
+
+.celularNumero {
+  @include type.type-style('label-01');
+
+  color: theme.$text-secondary;
+  font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
+}
+
+.celularSeta {
+  margin-inline-start: auto;
+  color: theme.$icon-secondary;
+}
+
+.celularPe {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+  padding: 0 spacing.$spacing-05 spacing.$spacing-05;
+}
