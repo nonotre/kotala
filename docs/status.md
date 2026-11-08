@@ -2,7 +2,7 @@
 
 Retrato em 08/11/2026, depois da junção da rodada 2 (as quatro frentes, o dashboard e a Base de Dados; ver [Junção da rodada 2](#junção-da-rodada-2-08112026)). Como cada parte funciona: [arquitetura.md](arquitetura.md). Decisões: [decisoes.md](decisoes.md). Pitch: [pitch.md](pitch.md).
 
-**Resumo:** dos 42 módulos do escopo V1, 37 prontos, 2 parciais e 3 não feitos (todos das fases de complemento e "só se sobrar"). Fases 0 a 2, pitch e todos os diferenciais (Raro, Épico e Lendário) completos. O assistente agora é generalista (compras de uma empresa; construção é só o nicho de exemplo), com guardrails dos dois lados. 441 testes automáticos passando.
+**Resumo:** dos 42 módulos do escopo V1, 37 prontos, 2 parciais e 3 não feitos (todos das fases de complemento e "só se sobrar"). Fases 0 a 2, pitch e todos os diferenciais (Raro, Épico e Lendário) completos. O assistente agora é generalista (compras de uma empresa; construção é só o nicho de exemplo), com guardrails dos dois lados. 447 testes automáticos passando.
 
 ## Módulos
 
@@ -118,7 +118,7 @@ As quatro frentes de [frentes.md](frentes.md), o dashboard e a Base de Dados da 
 - Política da empresa (bebida, tabaco, uso pessoal, serviços), os "10 minutos" do solicitante, a cotação esperar a janela do desconto, a lista de produtos controlados.
 - As cinco perguntas abertas de [frente-3-simulador.md](frente-3-simulador.md) (seção 7).
 
-**Depois da junção (mesmo dia):** revisão do chat da Ester (Assistente também no Telegram, negociar e cotar com mais quando o comprador pede, mapa com unitário e total, desconto separado com 5 min), anotações da Liria nas telas (título, etapas, faixa, Detalhes, Busca em cards por rodada, Propostas limpa), Conversar de novo como tela própria com "Nova conversa", PARAR só da cotação, forma de pagamento perguntada, e o Bloco 4: sessão em cookie, empresas e locais, "Só os meus", avisos por pessoa, /vincular, negociador com IA, memória na conversa, cotação de serviços, transbordo inteligente (Ester), frete do anúncio, PDF do mapa, contrato anual e urgência "parada" (migrações 0018 e 0019). Fornecedor simulado espera 5 min antes de responder (dá tempo de responder como ele pelo Telegram simulado).
+**Depois da junção (mesmo dia):** revisão do chat da Ester (Assistente também no Telegram, negociar e cotar com mais quando o comprador pede, mapa com unitário e total, desconto separado com 5 min), anotações da Liria nas telas (título, etapas, faixa, Detalhes, Busca em cards por rodada, Propostas limpa), Conversar de novo como tela própria com "Nova conversa", PARAR só da cotação, forma de pagamento perguntada, e o Bloco 4: sessão em cookie, empresas e locais, "Só os meus", avisos por pessoa, /vincular, negociador com IA, memória na conversa, cotação de serviços, transbordo inteligente (Ester), frete do anúncio, PDF do mapa, contrato anual e urgência "parada" (migrações 0018 e 0019). Fornecedor simulado espera 5 min antes de responder (dá tempo de responder como ele pelo Telegram simulado). Simulador por cenários com gabarito e trava de rede (`npm run simulador -- todos`, 11 cenários passando), que achou e ajudou a corrigir dois bugs: complemento de proposta perdido quando chega junto, e alerta de "antecipado" em toda proposta à vista.
 
 **Ainda não feito:** cálculo de frete por distância; comparação de modelos num conjunto misto; o Extrator ainda lê "R$ 300" para 5 unidades como unitário sem perguntar (depende do prompt).
 
