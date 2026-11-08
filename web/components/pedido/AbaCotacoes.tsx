@@ -79,7 +79,7 @@ function Propostas({ i }: { i: ItemDoPedido }) {
           <span key="tp" className={s.numero}>
             {brl(o.totalProduto ?? (o.precoUnitario !== null ? String(Number(o.precoUnitario) * Number(i.item.quantidade)) : null))}
           </span>,
-          <span key="fr" className={s.numero}>{o.frete !== null ? brl(o.frete) : o.formato === "busca" ? "estimado no mapa" : "—"}</span>,
+          <span key="fr" className={s.numero}>{o.frete !== null ? brl(o.frete) : o.formato === "busca" ? "a calcular no site" : "—"}</span>,
           textoDias(o.prazoDias),
           o.pagamento ?? "—",
           textoDias(o.validadeDias),
