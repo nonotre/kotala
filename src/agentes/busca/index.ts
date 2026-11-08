@@ -14,6 +14,8 @@ import { SEM_CATEGORIA } from "../interpretador/catalogo.ts";
 import { categoriaProvavel } from "../../dominio/categorias.ts";
 import { buscarNaInternet, ofertasDaInternet } from "./internet.ts";
 import { acharRecompra, textoRecompra } from "../memoria/index.ts";
+import { acharContrato, dataCurta, textoContrato } from "../memoria/contrato.ts";
+import { formatarBRL } from "../comparador/calculo.ts";
 import { enviar } from "../../nucleo/mensagens/index.ts";
 import { barrarItemNaBusca } from "../guardrail/rastro.ts";
 
@@ -103,6 +105,9 @@ async function buscar(m: MudancaItem) {
   if (!item) return;
   // S: item proibido ou controlado não vai à internet, às lojas nem a fornecedor.
   if (await barrarItemNaBusca(item)) return;
+
+  // X2: contrato anual vigente? Propõe pedir direto ao fornecedor do contrato, antes de tudo.
+  if (m.evento === "iniciar_busca" && (await proporContrato(item))) return;
 
   // X2: compra repetida em menos de 3 meses? Propõe repetir antes de buscar e cotar.
   if (m.evento === "iniciar_busca") {
@@ -196,6 +201,50 @@ async function buscar(m: MudancaItem) {
     { agente: "Busca", motivo: "A busca terminou." },
     { prazoRespostasEm: new Date(agora + prazoMs), lembreteEm: new Date(agora + prazoMs * FRACAO_LEMBRETE) },
   );
+}
+
+/**
+ * X2: item com contrato vigente e ativo não vai à cotação: o comprador recebe a pergunta
+ * com dois toques ("pedir direto" ou "cotar mesmo assim"). Contrato que existe mas não
+ * serve (fornecedor parado ou bloqueado, unidade diferente) fica no rastro, o comprador
+ * é avisado e a cotação segue normal. Devolve true quando o item passou a esperar a escolha.
+ */
+async function proporContrato(item: typeof itemPedido.$inferSelect): Promise<boolean> {
+  const achado = await acharContrato(item);
+  if (!achado) return false;
+  const c = achado.contrato;
+  const [p] = await db.select({ compradorId: pedido.compradorId }).from(pedido).where(eq(pedido.id, item.pedidoId));
+  const ctx = { pedidoId: item.pedidoId, itemPedidoId: item.id };
+  if (achado.tipo === "indisponivel") {
+    await registrar(db, {
+      agente: "Busca",
+      acao: `Achou contrato de ${c.descricao} com ${c.fornecedorNome}, mas não dá para usar agora.`,
+      motivo: `Motivo: ${achado.motivo}. Segue a cotação normal.`,
+      ...ctx,
+      fornecedorIds: [c.fornecedorId],
+      dados: { tipo: "contrato_indisponivel", contratoId: c.id, motivo: achado.motivo },
+    });
+    if (p) await enviar(p.compradorId, `Pedido ${item.pedidoId}: ${item.descricao} tem contrato com ${c.fornecedorNome} até ${dataCurta(c.fim)}, mas ${achado.motivo}. Vou cotar normalmente.`, { ...ctx, tipo: "aviso" });
+    return false;
+  }
+  await avancarItem(item.id, "propor_recompra", {
+    agente: "Busca",
+    acao: `Achou contrato vigente do item com ${c.fornecedorNome}, até ${dataCurta(c.fim)}, a ${formatarBRL(c.precoUnitario)} por ${c.unidade}.`,
+    motivo: "Item com contrato anual: propõe pedir direto ao fornecedor do contrato, sem cotar.",
+    fornecedorIds: [c.fornecedorId],
+    dados: { tipo: "contrato", contratoId: c.id, precoUnitario: c.precoUnitario, unidade: c.unidade, fim: c.fim.toISOString() },
+  });
+  if (p) {
+    await enviar(p.compradorId, textoContrato(item.pedidoId, item, c), {
+      ...ctx,
+      tipo: "aviso",
+      botoes: [
+        { rotulo: `Pedir direto a ${c.fornecedorNome}`, dado: `item:${item.id}:contrato:${c.id}`, estilo: "sucesso" },
+        { rotulo: "Cotar mesmo assim", dado: `item:${item.id}:cotar_novo` },
+      ],
+    });
+  }
+  return true;
 }
 
 export function ligarBusca() {
