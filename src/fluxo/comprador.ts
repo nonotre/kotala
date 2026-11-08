@@ -1,15 +1,37 @@
 // Conversa com o comprador: abre o pedido, chama o Interpretador, pergunta
 // "Entendi assim, confirma?" e trata confirmação, correção e cancelamento.
 // Áudio, foto, print de loja e PDF viram texto antes (R1b), em lerAnexos.
+// S e Q3: a triagem do guardrail roda antes da IA, a mensagem nova é interpretada
+// antes de abrir o pedido e a resposta depende da classe (pedido, ambíguo,
+// controlado, proibido, fora do escopo, consulta, injeção, ofensa).
 
 import { cadastrarItensNovos } from "../agentes/interpretador/catalogo.ts";
 import { repassarRespostaDoComprador } from "../agentes/cotador/index.ts";
 import { casarComBase, especificacaoEmTexto, itemDaBase, rotuloOpcao } from "../agentes/interpretador/base-itens.ts";
-import { and, asc, desc, eq, inArray, isNull, lte } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
 import { lerAnexoDoComprador, textoDoPedidoComAnexo, type LeituraAnexo } from "../agentes/interpretador/anexos.ts";
 import { chaveDoItem, interpretar, palavrasEmComum, type Interpretacao } from "../agentes/interpretador/index.ts";
+import {
+  deveAvisarGestor,
+  posRegras,
+  precisaModeloForte,
+  respostaControlados,
+  respostaDaClasse,
+  ROTULO_CONTESTAR,
+  TEXTO_DADO_PESSOAL,
+  TEXTO_RESPOSTA_FIXA,
+  TEXTO_SERVICO,
+  TEXTO_SO_COM_NOTA,
+  triagem,
+  TRIAGEM_NEUTRA,
+  type Classe,
+  type Decisao,
+  type ItemControlado,
+  type Triagem,
+} from "../agentes/guardrail/index.ts";
+import { avisarGestor, insistenciaDo, registrarCaso, trecho } from "../agentes/guardrail/rastro.ts";
 import { db } from "../nucleo/db/cliente.ts";
-import { contato as tContato, itemPedido, pedido } from "../nucleo/db/schema.ts";
+import { contato as tContato, evento, itemPedido, pedido } from "../nucleo/db/schema.ts";
 import type { AnexoIa } from "../nucleo/ia/index.ts";
 import { baixarAnexo, enviar, vincularMensagem, type Anexo, type Botao, type Canal, type MensagemRecebida } from "../nucleo/mensagens/index.ts";
 import {
@@ -27,7 +49,7 @@ import { dias, fmtNumero, MOTIVOS_CANCELAMENTO, nomePedido, quantidade, quantida
 
 export const TEXTO_BOAS_VINDAS =
   "Olá! Sou o assistente de cotações. Mande o que precisa comprar, do seu jeito, por exemplo: " +
-  "\"40 sacos de cp2 e 2 carradas de areia média para a Obra Alfa até sexta\". " +
+  "\"10 caixas de clipes de papel e 5 resmas de papel A4 para o escritório até sexta\". " +
   "Eu entendo o pedido, confirmo com você e busco fornecedores.";
 
 export const AVISO_PRIVACIDADE =
@@ -41,6 +63,8 @@ const quantidadeTexto = quantidade;
 
 const CONFIRMACAO = /^(sim|ok|okay|confirm[oa]|confirmado|pode( seguir| cotar)?|isso|certo|fechado|beleza|blz|manda)[!.\s]*$/i;
 const SAUDACAO = /^(oi+|ol[aá]|opa|e a[ií]|bom dia|boa tarde|boa noite|tudo bem\??|obrigad[oa]|valeu|ok|blz|beleza)[!.\s]*$/i;
+/** "/start", "\start" (com a barra invertida, como no pedido 10) e "start" valem igual; o mesmo para ajuda. */
+export const INICIO = /^[/\\]?start(\s|$)|^[/\\]?ajuda[!.?\s]*$/i;
 
 // ---------- Botões ----------
 
@@ -117,7 +141,34 @@ function botoesConfirmacao(pedidoId: number, comPerguntas: boolean): Botao[] {
 
 // ---------- Interpretar e responder ----------
 
-export async function interpretarEResponder(pedidoId: number) {
+/** O que a IA leu, já com as pós-regras do guardrail. */
+type Lida = { d: Decisao; meta: { modelo: string; rota: string; caiuNaReserva: boolean; forte: boolean } };
+
+/**
+ * Lê com o Interpretador e aplica as pós-regras (S). I4: com sinal sensível ou
+ * risco que a lista não confirma, refaz a leitura com o modelo forte.
+ */
+async function lerComGuardrail(entrada: Parameters<typeof interpretar>[0], pedidoId: number | undefined, t: Triagem): Promise<Lida> {
+  let r = await interpretar(entrada, { pedidoId });
+  let forte = false;
+  if (precisaModeloForte(t, r.valor)) {
+    try {
+      r = await interpretar(entrada, { pedidoId, papel: "forte" });
+      forte = true;
+    } catch (erro) {
+      console.error("[comprador] modelo forte", erro); // fica a leitura do rápido
+    }
+  }
+  return { d: posRegras(r.valor, t), meta: { modelo: r.modelo, rota: r.rota, caiuNaReserva: r.caiuNaReserva, forte } };
+}
+
+/** Ambíguo que o comprador já confirmou (Sim ou opção): segue como pedido. */
+function comoPedido(l: Lida): Lida {
+  const i = l.d.interpretacao;
+  return { ...l, d: { ...l.d, interpretacao: { ...i, classe: "pedido", subtipo: null, opcoes: [], ehPedido: i.itens.length > 0 } } };
+}
+
+export async function interpretarEResponder(pedidoId: number, opcoes: { lida?: Lida; triagem?: Triagem } = {}) {
   const [p] = await db.select().from(pedido).where(eq(pedido.id, pedidoId));
   if (!p) return;
 
@@ -133,39 +184,55 @@ export async function interpretarEResponder(pedidoId: number) {
         entregas: p.entregas,
       }
     : undefined;
-  let r: Awaited<ReturnType<typeof interpretar>>;
-  try {
-    r = await interpretar({ textoOriginal: p.textoOriginal, correcoes: p.correcoes, atual }, { pedidoId });
-  } catch (erro) {
-    await registrar(db, {
-      agente: "Interpretador",
-      acao: "Não conseguiu ler o pedido.",
-      motivo: erro instanceof Error ? erro.message : String(erro),
-      pedidoId,
-    });
-    await enviar(p.compradorId, TEXTO_FALHA_IA, { pedidoId });
-    return;
+  let lida = opcoes.lida;
+  if (!lida) {
+    try {
+      lida = await lerComGuardrail({ textoOriginal: p.textoOriginal, correcoes: p.correcoes, atual }, pedidoId, opcoes.triagem ?? TRIAGEM_NEUTRA);
+    } catch (erro) {
+      await registrar(db, {
+        agente: "Interpretador",
+        acao: "Não conseguiu ler o pedido.",
+        motivo: erro instanceof Error ? erro.message : String(erro),
+        pedidoId,
+      });
+      await enviar(p.compradorId, TEXTO_FALHA_IA, { pedidoId });
+      return;
+    }
   }
 
-  const i: Interpretacao = r.valor;
+  const i: Interpretacao = lida.d.interpretacao;
   const anteriores = atuais;
+  // O texto que acabou de chegar: a última correção, ou a mensagem que abriu o pedido.
+  const textoNovo = p.correcoes.at(-1) ?? p.textoOriginal;
 
   // Correção que a IA não leu como pedido (ou que apagou todos os itens) nunca cancela o pedido:
-  // descarta a correção e mostra de novo o que já estava entendido.
+  // descarta a correção e mostra de novo o que já estava entendido. Correção proibida, fora do
+  // escopo, consulta ou tentativa de mudar as regras tem a resposta da classe (S).
   if (!i.ehPedido && p.correcoes.length && anteriores.length) {
     const correcoes = p.correcoes.slice(0, -1);
+    const classe = i.classe;
+    const daClasse = classe !== "pedido" && classe !== "ambiguo" && classe !== "controlado";
+    let antes = "Não entendi essa correção, então o pedido continua como estava. Diga o que mudar, por exemplo \"quantidade: 10\" ou \"setor: manutenção\".\n\n";
+    if (daClasse) {
+      const r = await responderClasse(p.compradorId, textoNovo, lida, { pedidoId, enviarResposta: false });
+      antes = `${r}\n\nO pedido ${pedidoId} continua como estava.\n\n`;
+    }
     try {
       await avancarPedido(
         pedidoId,
         "interpretado",
-        { agente: "Interpretador", acao: "Não entendeu a correção; manteve o pedido como estava.", motivo: `Correção sem item legível: "${p.correcoes.at(-1)?.slice(0, 200)}".` },
+        {
+          agente: "Interpretador",
+          acao: "Não entendeu a correção; manteve o pedido como estava.",
+          motivo: daClasse ? `Correção descartada (${classe}${i.subtipo ? `, ${i.subtipo}` : ""}).` : `Correção sem item legível: "${trecho(textoNovo)}".`,
+        },
         { correcoes },
       );
     } catch (erro) {
       ignorarCorrida(erro);
       return;
     }
-    await mostrarConfirmacao(pedidoId, "Não entendi essa correção, então o pedido continua como estava. Diga o que mudar, por exemplo \"quantidade: 10\" ou \"setor: manutenção\".\n\n");
+    await mostrarConfirmacao(pedidoId, antes);
     return;
   }
   // A IA relê o pedido inteiro a cada correção e às vezes perde a quantidade já dita:
@@ -181,6 +248,23 @@ export async function interpretarEResponder(pedidoId: number) {
       }
     }
   }
+
+  // S: item controlado sai do pedido e vai a uma pessoa; o resto segue. Na correção,
+  // só avisa o item que a própria correção trouxe (a IA relê o pedido inteiro).
+  const controladosNovos = p.correcoes.length ? lida.d.controlados.filter((c) => palavrasEmComum(textoNovo, c.descricao)) : lida.d.controlados;
+  if (controladosNovos.length) await encaminharControlados(p.compradorId, controladosNovos, { pedidoId, outrosSeguem: i.ehPedido, texto: textoNovo });
+  if (i.ehPedido) {
+    // Condição irregular ("sem nota") é tirada; o item é cotado com nota.
+    if (i.condicaoIrregular && (!p.correcoes.length || triagem(textoNovo).condicaoIrregular)) {
+      await avisarCondicaoIrregular(p.compradorId, i.condicaoIrregular, textoNovo, pedidoId);
+    }
+    if (i.condicaoIrregular) i.suposicoes = [...i.suposicoes, "Cotação com nota fiscal"];
+    // Pedido junto com tentativa de mudar as regras ou ofensa: cota só o pedido, sem comentar.
+    const novaTentativa = i.tentouMudarRegras && (!p.correcoes.length || Boolean(opcoes.triagem?.injecao));
+    if (novaTentativa) await registrarCaso({ contatoId: p.compradorId, classe: "injecao", acao: "Tentou mudar as regras junto com o pedido.", motivo: "Cotou só o pedido, sem seguir a instrução.", texto: textoNovo, pedidoId });
+    if (i.hostil && !p.correcoes.length) await registrarCaso({ contatoId: p.compradorId, classe: "ofensa", acao: "Mensagem hostil junto com o pedido.", motivo: "Seguiu o pedido sem comentar.", texto: textoNovo, pedidoId });
+  }
+
   // Sem destino: usa o endereço padrão da empresa, em vez de perguntar.
   if (i.ehPedido && i.modoEntrega !== "retirada" && !i.destino) {
     i.destino = EMPRESA.enderecoEntrega;
@@ -191,9 +275,13 @@ export async function interpretarEResponder(pedidoId: number) {
   if (!i.ehPedido) {
     await avancarPedido(pedidoId, "cancelar", {
       agente: "Interpretador",
-      motivo: "A mensagem não tinha pedido de material.",
+      motivo: `A mensagem não tinha pedido de compra (${i.classe}).`,
     }).catch(ignorarCorrida);
-    await enviar(p.compradorId, TEXTO_BOAS_VINDAS);
+    // O item controlado já teve o aviso acima; as outras classes têm a resposta delas.
+    if (i.classe !== "controlado") {
+      const r = i.classe === "pedido" || i.classe === "ambiguo" ? TEXTO_BOAS_VINDAS : await responderClasse(p.compradorId, textoNovo, lida, { enviarResposta: false });
+      await enviar(p.compradorId, r || TEXTO_BOAS_VINDAS);
+    }
     return;
   }
 
@@ -217,7 +305,8 @@ export async function interpretarEResponder(pedidoId: number) {
         unidade: it.unidade,
         itemChave: c.tipo === "unico" ? c.item.id : chaveDoItem(it.descricao),
         especificacao: c.tipo === "unico" ? { ...especificacaoEmTexto(c.item), ...espec } : espec,
-        aceitaSimilar: it.aceitaSimilar ?? false,
+        // Q2: sem marca exigida e sem o comprador dizer, vale o equivalente técnico.
+        aceitaSimilar: it.aceitaSimilar ?? !it.marcaExigida,
       };
     }),
   );
@@ -245,7 +334,7 @@ export async function interpretarEResponder(pedidoId: number) {
         agente: "Interpretador",
         acao: `Leu ${itens.length} ${itens.length === 1 ? "item" : "itens"}: ${i.itens.map((it) => it.descricao).join(", ")}.`,
         motivo: i.suposicoes.length ? `Assumiu: ${i.suposicoes.join("; ")}.` : "Tudo veio na mensagem do comprador.",
-        dados: { interpretacao: i, modelo: r.modelo, rota: r.rota, caiuNaReserva: r.caiuNaReserva },
+        dados: { interpretacao: i, controlados: lida.d.controlados, ...lida.meta },
       },
       alteracoes,
     );
@@ -270,7 +359,45 @@ export async function interpretarEResponder(pedidoId: number) {
     perguntas: perguntar ? i.faltando : [],
   });
   const escolha = escolhasDaBase(pedidoId, itens);
-  await enviar(p.compradorId, texto + escolha.texto, { pedidoId, botoes: [...escolha.botoes, ...botoesConfirmacao(pedidoId, perguntar)] });
+  // Q5: pedido de foto ou print com marca vista: pergunta se a marca é exigida.
+  const deImagem = /\[(Foto|Print de loja)\]/.test([p.textoOriginal, ...p.correcoes].join("\n"));
+  const marcas = deImagem ? perguntasDeMarca(pedidoId, i.itens) : { texto: "", botoes: [] };
+  await enviar(p.compradorId, texto + escolha.texto + marcas.texto, { pedidoId, botoes: [...marcas.botoes, ...escolha.botoes, ...botoesConfirmacao(pedidoId, perguntar)] });
+}
+
+/** Q5: "Cotar só a marca X ou aceita similar?", em dois botões por item. */
+function perguntasDeMarca(pedidoId: number, itens: Interpretacao["itens"]) {
+  const botoes: Botao[] = [];
+  const linhas: string[] = [];
+  itens.forEach((it, n) => {
+    if (!it.marca || it.marcaExigida || it.aceitaSimilar !== null || botoes.length >= 4) return;
+    const ordem = n + 1;
+    linhas.push(`Item ${ordem}: cotar só a marca ${it.marca} ou aceita similar?`);
+    botoes.push(
+      { rotulo: `${ordem}: só ${it.marca}`.slice(0, 40), dado: `pedido:${pedidoId}:marca:${ordem}:so` },
+      { rotulo: `${ordem}: aceita similar`, dado: `pedido:${pedidoId}:marca:${ordem}:similar` },
+    );
+  });
+  return { botoes, texto: linhas.length ? `\n\n${linhas.join("\n")}` : "" };
+}
+
+/** Q5: resposta à pergunta da marca. Vira correção, para valer também se o pedido for relido. */
+async function escolherMarca(pedidoId: number, ordem: number, escolha: "so" | "similar", compradorId: string) {
+  const [p] = await db.select().from(pedido).where(eq(pedido.id, pedidoId));
+  if (!p || p.compradorId !== compradorId) return;
+  if (p.estado !== "aguardando_confirmacao") {
+    await enviar(compradorId, `O pedido ${pedidoId} não está esperando confirmação.`, { pedidoId });
+    return;
+  }
+  const [it] = await db.select().from(itemPedido).where(and(eq(itemPedido.pedidoId, pedidoId), eq(itemPedido.ordem, ordem)));
+  if (!it) return;
+  const marca = Object.entries(it.especificacao).find(([k]) => /^marca$/i.test(k.trim()))?.[1] ?? "da imagem";
+  const so = escolha === "so";
+  const frase = so ? `Item ${ordem}: só a marca ${marca}.` : `Item ${ordem}: aceita similar à marca ${marca}.`;
+  await db.update(itemPedido).set({ aceitaSimilar: !so }).where(eq(itemPedido.id, it.id));
+  await db.update(pedido).set({ correcoes: [...p.correcoes, frase] }).where(eq(pedido.id, pedidoId));
+  await registrar(db, { agente: "Comprador", acao: so ? `Exigiu a marca ${marca} no item ${ordem}.` : `Aceitou similar à marca ${marca} no item ${ordem}.`, motivo: "Resposta à pergunta da marca vista na imagem.", pedidoId, itemPedidoId: it.id });
+  await mostrarConfirmacao(pedidoId);
 }
 
 /** E6: itens com variações na base viram botões ("1: 50 mm", "1: 25 mm"). */
@@ -449,12 +576,256 @@ export function ligarComprador() {
   aoVarrer(lembrarConfirmacoes);
 }
 
+// ---------- Guardrail: respostas por classe (S) ----------
+
+const ACAO_DA_CLASSE: Partial<Record<Classe, string>> = {
+  proibido: "Pedido proibido bloqueado.",
+  fora_do_escopo: "Fora do escopo.",
+  consulta: "Consulta sobre pedidos, respondida curto.",
+  injecao: "Tentou mudar as regras.",
+  ofensa: "Mensagem ofensiva.",
+};
+
+const SUBTIPO_SEM_TRECHO = new Set(["sexual", "sexual_menor"]);
+
+/**
+ * Responde (ou devolve o texto da resposta) para proibido, fora do escopo,
+ * consulta, injeção e ofensa: registra o caso, conta a insistência e avisa o
+ * gestor quando a regra pede. Recusa leva o botão "Era uma compra da empresa".
+ */
+async function responderClasse(
+  contatoId: string,
+  texto: string,
+  c: { d: { interpretacao: Pick<Interpretacao, "classe" | "subtipo" | "motivo">; porLista: boolean; outrosItens: number }; meta?: Lida["meta"] },
+  opcoes: { pedidoId?: number; enviarResposta?: boolean } = {},
+): Promise<string> {
+  const i = c.d.interpretacao;
+  const classe = i.classe;
+  const ins = await insistenciaDo(contatoId);
+  const vez = classe === "proibido" ? ins.proibido + 1 : classe === "injecao" ? ins.injecao + 1 : classe === "fora_do_escopo" ? ins.foraSeguidas + 1 : classe === "ofensa" ? ins.ofensa + 1 : 1;
+  const semTrecho = SUBTIPO_SEM_TRECHO.has(i.subtipo ?? "");
+  const ev = await registrarCaso({
+    contatoId,
+    classe,
+    subtipo: i.subtipo,
+    acao: ACAO_DA_CLASSE[classe] ?? `Mensagem da classe ${classe}.`,
+    motivo: i.motivo || (c.d.porLista ? "Lista dura." : "Classe dada pela leitura."),
+    texto: semTrecho ? undefined : texto,
+    pedidoId: opcoes.pedidoId,
+    dados: { vez, porLista: c.d.porLista, ...c.meta },
+  });
+  if (deveAvisarGestor(classe, i.subtipo, vez)) {
+    await avisarGestor({
+      chave: `${classe}:${i.subtipo ?? ""}:${contatoId}`,
+      texto: `${ACAO_DA_CLASSE[classe] ?? classe}${i.subtipo ? ` (${i.subtipo})` : ""}, ${vez}ª vez em 24 h, contato ${contatoId}${semTrecho ? "" : `: "${trecho(texto)}"`}`,
+      contatoId,
+      pedidoId: opcoes.pedidoId,
+    });
+  }
+  let resposta = respostaDaClasse({ classe, subtipo: i.subtipo, vez, empresa: EMPRESA.nome, comOutrosItens: c.d.outrosItens > 0 });
+  if (classe === "consulta") resposta = await textoConsulta(contatoId, texto, resposta);
+  if (opcoes.enviarResposta !== false && resposta) {
+    const botoes = classe === "proibido" ? [{ rotulo: ROTULO_CONTESTAR, dado: `g:${ev.id}:contestar` }] : undefined;
+    await enviar(contatoId, resposta, { pedidoId: opcoes.pedidoId, botoes });
+  }
+  return resposta;
+}
+
+/** Consulta pelo Telegram: por ora, só o estado do pedido citado (ou do último). */
+async function textoConsulta(contatoId: string, texto: string, padrao: string): Promise<string> {
+  const n = /\bpedido\s*(?:n[º°o.]?\s*)?(\d+)/i.exec(texto)?.[1];
+  const [p] = n
+    ? await db.select().from(pedido).where(and(eq(pedido.id, Number(n)), eq(pedido.compradorId, contatoId)))
+    : await db.select().from(pedido).where(eq(pedido.compradorId, contatoId)).orderBy(desc(pedido.id)).limit(1);
+  if (!p) return padrao;
+  const estado = { interpretando: "em leitura", aguardando_confirmacao: "esperando sua confirmação", em_andamento: "em cotação", concluido: "concluído", cancelado: "cancelado" }[p.estado];
+  return `Ainda não consigo responder isso por aqui. O pedido ${p.id} está ${estado}; os detalhes ficam na tela de pedidos.`;
+}
+
+/** Item controlado: não cota, encaminha ao gestor (um aviso por item em 24 h) e registra. */
+async function encaminharControlados(contatoId: string, itens: readonly ItemControlado[], o: { pedidoId?: number; outrosSeguem: boolean; texto: string }) {
+  let avisado = false;
+  for (const c of itens) {
+    await registrarCaso({
+      contatoId,
+      classe: "controlado",
+      subtipo: c.grupo,
+      acao: "Item controlado encaminhado.",
+      motivo: `${c.descricao}: ${c.grupo}${c.orgao ? ` (${c.orgao})` : ""}. Não foi cotado.`,
+      texto: o.texto,
+      pedidoId: o.pedidoId,
+      dados: { item: c.descricao, orgao: c.orgao },
+    });
+    const foi = await avisarGestor({
+      chave: `controlado:${contatoId}:${c.descricao.toLowerCase()}`,
+      texto: `Pedido de item controlado: ${c.descricao} (${c.grupo}${c.orgao ? `; ${c.orgao}` : ""}), contato ${contatoId}${o.pedidoId ? `, pedido ${o.pedidoId}` : ""}. A compra exige autorização e um responsável.`,
+      contatoId,
+      pedidoId: o.pedidoId,
+    });
+    avisado ||= foi;
+  }
+  await enviar(contatoId, respostaControlados(itens, avisado, o.outrosSeguem), { pedidoId: o.pedidoId });
+}
+
+/** "Sem nota" e afins: tira a condição, avisa o comprador e conta para a insistência. */
+async function avisarCondicaoIrregular(contatoId: string, condicao: string, texto: string, pedidoId: number) {
+  const ins = await insistenciaDo(contatoId);
+  const vez = ins.condicao + 1;
+  await registrarCaso({ contatoId, classe: "condicao_irregular", subtipo: condicao, acao: "Condição irregular ignorada.", motivo: `"${condicao}": o pedido segue com nota fiscal.`, texto, pedidoId, dados: { vez } });
+  if (deveAvisarGestor("condicao_irregular", condicao, vez)) {
+    await avisarGestor({ chave: `condicao:${contatoId}`, texto: `Pediu de novo condição irregular ("${condicao}"), ${vez}ª vez em 24 h, contato ${contatoId}, pedido ${pedidoId}.`, contatoId, pedidoId });
+  }
+  await enviar(contatoId, TEXTO_SO_COM_NOTA, { pedidoId });
+}
+
+/**
+ * Q3: mensagem nova, sem pedido em aberto. Interpreta antes de abrir o pedido,
+ * para não deixar pedido cancelado no quadro, e responde por classe (S).
+ */
+async function novaMensagem(m: {
+  contatoId: string;
+  canal: MensagemRecebida["contato"]["canal"];
+  mensagemId?: string;
+  texto: string;
+  leitura: LeituraAnexo | null;
+  t: Triagem;
+  achado?: { id: number; vencido: boolean };
+  /** Já houve uma pergunta de esclarecimento: não pergunta de novo. */
+  jaPerguntou?: boolean;
+}) {
+  let lida: Lida;
+  try {
+    lida = await lerComGuardrail({ textoOriginal: m.texto }, undefined, m.t);
+  } catch (erro) {
+    await registrar(db, { agente: "Interpretador", acao: "Não conseguiu ler a mensagem do comprador.", motivo: erro instanceof Error ? erro.message : String(erro) });
+    await enviar(m.contatoId, TEXTO_FALHA_IA);
+    return;
+  }
+  const i = lida.d.interpretacao;
+  if (i.classe === "ambiguo" && !(m.jaPerguntou && i.itens.length && i.subtipo !== "servico")) {
+    return perguntarAmbiguo(m.contatoId, m.texto, lida, Boolean(m.jaPerguntou));
+  }
+  if (i.classe === "controlado") return encaminharControlados(m.contatoId, lida.d.controlados, { outrosSeguem: false, texto: m.texto });
+  if (i.classe !== "pedido" && i.classe !== "ambiguo") {
+    await responderClasse(m.contatoId, m.texto, lida);
+    return;
+  }
+  if (!i.itens.length && !lida.d.controlados.length) {
+    await enviar(m.contatoId, TEXTO_BOAS_VINDAS);
+    return;
+  }
+  await abrirEInterpretar({ ...m, lida: i.classe === "ambiguo" ? comoPedido(lida) : lida });
+}
+
+/** Abre o pedido já com a leitura feita (sem chamar a IA de novo) e mostra a confirmação. */
+async function abrirEInterpretar(m: { contatoId: string; canal: MensagemRecebida["contato"]["canal"]; mensagemId?: string; texto: string; leitura: LeituraAnexo | null; t: Triagem; achado?: { id: number; vencido: boolean }; lida: Lida }) {
+  const novo = await abrirPedido({ compradorId: m.contatoId, canalOrigem: m.canal, textoOriginal: m.texto });
+  if (m.mensagemId) await vincularMensagem(m.mensagemId, { pedidoId: novo.id });
+  if (m.achado?.vencido) {
+    await enviar(m.contatoId, `Abri um pedido novo. O pedido ${m.achado.id} continua esperando confirmação; os botões dele ainda valem.`, { pedidoId: novo.id });
+  }
+  if (m.leitura) await anotarLeitura(novo.id, m.contatoId, m.leitura);
+  await interpretarEResponder(novo.id, { lida: m.lida, triagem: m.t });
+}
+
+/**
+ * Ambíguo: pergunta antes de abrir o pedido. Só o nome do produto vira
+ * "Quer que eu cote X?" (Sim e Não); sem item claro, até 4 opções em botões;
+ * serviço tem a resposta de que ainda cotamos só produtos.
+ */
+async function perguntarAmbiguo(contatoId: string, texto: string, lida: Lida, jaPerguntou: boolean) {
+  const i = lida.d.interpretacao;
+  if (i.subtipo === "servico") {
+    await registrarCaso({ contatoId, classe: "ambiguo", subtipo: "servico", acao: "Pedido de serviço: ainda cotamos só produtos.", motivo: i.motivo, texto });
+    await enviar(contatoId, TEXTO_SERVICO);
+    return;
+  }
+  const comItens = i.itens.length > 0;
+  const opcoes = comItens || jaPerguntou ? [] : i.opcoes;
+  const nomes = i.itens.map((it) => it.descricao).join(", ");
+  const pergunta = comItens
+    ? i.subtipo === "confirmar_item" && i.faltando[0]
+      ? i.faltando[0]
+      : `Quer que eu cote "${nomes}"?`
+    : opcoes.length
+      ? `${i.faltando[0] ?? "Do que precisa?"} Escolha abaixo ou mande o item e a quantidade.`
+      : "Ainda não entendi o que precisa comprar. Mande o item e a quantidade, por exemplo \"10 caixas de clipes de papel\".";
+  const ev = await registrarCaso({
+    contatoId,
+    classe: "ambiguo",
+    subtipo: i.subtipo,
+    acao: "Pediu esclarecimento antes de abrir o pedido.",
+    motivo: i.motivo || pergunta,
+    texto,
+    dados: { texto: texto.slice(0, 2000), opcoes, pergunta, interpretacao: comItens ? i : undefined, meta: lida.meta },
+  });
+  const botoes: Botao[] = comItens
+    ? [
+        { rotulo: "Sim", dado: `g:${ev.id}:sim` },
+        { rotulo: "Não", dado: `g:${ev.id}:nao` },
+      ]
+    : opcoes.map((o, n) => ({ rotulo: o, dado: `g:${ev.id}:o${n}` }));
+  await enviar(contatoId, pergunta, { botoes: botoes.length ? botoes : undefined });
+}
+
+/** Botões do guardrail: g:<evento>:sim|nao|o<n>|contestar. */
+async function aoBotaoGuardrail(c: MensagemRecebida["contato"], eventoId: string, acao: string) {
+  const [ev] = await db.select().from(evento).where(and(eq(evento.id, eventoId), eq(evento.agente, "Guardrail")));
+  const dados = (ev?.dados ?? {}) as { contatoId?: string; texto?: string; opcoes?: string[]; interpretacao?: Interpretacao; meta?: Lida["meta"]; classe?: string; subtipo?: string | null };
+  if (!ev || dados.contatoId !== c.id) return; // botão de outra pessoa ou velho: ignora
+  // Um clique por pergunta: o segundo não abre outro pedido.
+  const [respondido] = await db
+    .select({ id: evento.id })
+    .from(evento)
+    .where(and(eq(evento.agente, "Guardrail"), sql`${evento.dados}->>'respostaDe' = ${eventoId}`))
+    .limit(1);
+  if (respondido) {
+    await enviar(c.id, "Essa pergunta já foi respondida.");
+    return;
+  }
+  const responder = (o: string) => registrarCaso({ contatoId: c.id, classe: "resposta", acao: `Comprador respondeu: ${o}.`, motivo: `Resposta à pergunta do guardrail.`, dados: { respostaDe: eventoId } });
+
+  if (acao === "contestar") {
+    await responder("era uma compra da empresa");
+    await avisarGestor({ chave: `contestou:${eventoId}`, texto: `O comprador contestou uma recusa (${dados.classe ?? "?"}${dados.subtipo ? `, ${dados.subtipo}` : ""}) e diz que era uma compra da empresa. Revise o caso no rastro (evento ${eventoId}).`, contatoId: c.id });
+    await enviar(c.id, "Anotei. O gestor de compras vai revisar este caso.");
+    return;
+  }
+  if (acao === "nao") {
+    await responder("não");
+    await enviar(c.id, "Tudo bem, não cotei nada. Quando precisar, mande o item e a quantidade.");
+    return;
+  }
+  const texto = dados.texto ?? "";
+  if (acao === "sim" && dados.interpretacao && texto) {
+    await responder("sim");
+    const i = dados.interpretacao;
+    const lida: Lida = { d: { interpretacao: i, controlados: [], porLista: false, outrosItens: 0 }, meta: dados.meta ?? { modelo: "", rota: "", caiuNaReserva: false, forte: false } };
+    await abrirEInterpretar({ contatoId: c.id, canal: c.canal, texto, leitura: null, t: triagem(texto), lida: comoPedido(lida) });
+    return;
+  }
+  const n = /^o(\d)$/.exec(acao);
+  const opcao = n ? dados.opcoes?.[Number(n[1])] : undefined;
+  if (opcao && texto) {
+    await responder(opcao);
+    const novoTexto = `${texto}\n${opcao}`;
+    await novaMensagem({ contatoId: c.id, canal: c.canal, texto: novoTexto, leitura: null, t: triagem(novoTexto), jaPerguntou: true });
+  }
+}
+
 export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: MensagemRecebida) {
   if (entrada.botao) {
+    const g = /^g:([0-9a-f-]{36}):(sim|nao|o\d|contestar)$/.exec(entrada.botao);
+    if (g) return aoBotaoGuardrail(contato, g[1]!, g[2]!);
     const base = /^pedido:(\d+):base:(\d+):(ITM-\d+)$/.exec(entrada.botao);
     if (base) {
       await vincularMensagem(mensagemId, { pedidoId: Number(base[1]) });
       return escolherDaBase(Number(base[1]), Number(base[2]), base[3]!, contato.id);
+    }
+    const marca = /^pedido:(\d+):marca:(\d+):(so|similar)$/.exec(entrada.botao);
+    if (marca) {
+      await vincularMensagem(mensagemId, { pedidoId: Number(marca[1]) });
+      return escolherMarca(Number(marca[1]), Number(marca[2]), marca[3] as "so" | "similar", contato.id);
     }
     const ref = /^(pedido|item):(\d+):/.exec(entrada.botao);
     if (ref) await vincularMensagem(mensagemId, ref[1] === "pedido" ? { pedidoId: Number(ref[2]) } : { itemPedidoId: Number(ref[2]) });
@@ -469,7 +840,7 @@ export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: Me
   }
 
   let texto = entrada.texto.trim();
-  if (texto === "/start" || texto.startsWith("/start ") || texto === "/ajuda") {
+  if (INICIO.test(texto)) {
     if (!contato.avisoPrivacidadeEm) {
       await db.update(tContato).set({ avisoPrivacidadeEm: new Date() }).where(eq(tContato.id, contato.id));
       await enviar(contato.id, AVISO_PRIVACIDADE);
@@ -483,16 +854,44 @@ export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: Me
   if (arquivos.length) {
     leitura = await lerAnexos(contato.id, mensagemId, entrada.canal, arquivos, texto);
     if (!leitura) return;
+    // S: imagem imprópria não é descrita nem vira pedido.
+    if (leitura.impropria) {
+      await responderClasse(contato.id, "", { d: { interpretacao: { classe: "proibido", subtipo: "sexual", motivo: "Imagem imprópria no anexo." }, porLista: false, outrosItens: 0 } });
+      return;
+    }
     texto = textoDoPedidoComAnexo(texto, leitura);
   }
   if (!texto) {
-    await enviar(contato.id, "Pode escrever o pedido, mandar um áudio, uma foto do material ou o print do anúncio?");
+    await enviar(contato.id, "Pode escrever o pedido, mandar um áudio, uma foto do produto ou o print do anúncio?");
     return;
   }
 
   if (!contato.avisoPrivacidadeEm) {
     await db.update(tContato).set({ avisoPrivacidadeEm: new Date() }).where(eq(tContato.id, contato.id));
     await enviar(contato.id, AVISO_PRIVACIDADE);
+  }
+
+  // S, barreira 1: triagem em código, antes da IA e antes de repassar ao fornecedor.
+  const t = triagem(texto);
+  texto = t.texto; // dado pessoal mascarado daqui em diante
+  if (t.dadoPessoal.length) await enviar(contato.id, TEXTO_DADO_PESSOAL);
+  if (t.bloqueio) {
+    const interpretacao = { classe: "proibido" as const, subtipo: t.bloqueio.subtipo, motivo: `Lista dura: ${t.bloqueio.subtipo}.` };
+    await responderClasse(contato.id, texto, { d: { interpretacao, porLista: true, outrosItens: 0 } });
+    return;
+  }
+  const ins = await insistenciaDo(contato.id);
+  if (ins.respostaFixa) {
+    // 3ª tentativa proibida ou de injeção na última hora: resposta fixa, sem IA.
+    await registrarCaso({ contatoId: contato.id, classe: "resposta_fixa", acao: "Respondeu fixo, sem IA.", motivo: "Insistência: 3 ou mais tentativas proibidas ou de injeção em 24 h, a última há menos de 1 h.", texto });
+    await enviar(contato.id, TEXTO_RESPOSTA_FIXA);
+    return;
+  }
+  if (t.foraDoEscopo && ins.foraSeguidas >= 3) {
+    // Fora do escopo seguido, com cara de código ou longo demais: resposta fixa, sem gastar IA.
+    const interpretacao = { classe: "fora_do_escopo" as const, subtipo: t.foraDoEscopo, motivo: "Fora do escopo repetido, sem IA." };
+    await responderClasse(contato.id, texto, { d: { interpretacao, porLista: true, outrosItens: 0 } });
+    return;
   }
 
   // Dúvida de fornecedor esperando o comprador: esta mensagem é a resposta.
@@ -530,17 +929,11 @@ export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: Me
     } else {
       await db.update(pedido).set({ correcoes }).where(eq(pedido.id, pendente.id));
     }
-    await interpretarEResponder(pendente.id);
+    await interpretarEResponder(pendente.id, { triagem: t });
     return;
   }
 
-  const novo = await abrirPedido({ compradorId: contato.id, canalOrigem: contato.canal, textoOriginal: texto });
-  await vincularMensagem(mensagemId, { pedidoId: novo.id });
-  if (achado?.vencido) {
-    await enviar(contato.id, `Abri um pedido novo. O pedido ${achado.id} continua esperando confirmação; os botões dele ainda valem.`, { pedidoId: novo.id });
-  }
-  if (leitura) await anotarLeitura(novo.id, contato.id, leitura);
-  await interpretarEResponder(novo.id);
+  await novaMensagem({ contatoId: contato.id, canal: contato.canal, mensagemId, texto, leitura, t, achado });
 }
 
 const NOME_ANEXO: Record<Anexo["tipo"], string> = { audio: "o áudio", foto: "a imagem", pdf: "o PDF", outro: "o arquivo" };

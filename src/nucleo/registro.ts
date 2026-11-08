@@ -13,6 +13,7 @@ export const AGENTES = [
   "Negociador",
   "Verificação",
   "Voz",
+  "Guardrail", // S: triagem, classes e conferências antes da busca e do fornecedor
   "Comprador", // ação humana
   "Fornecedor",
 ] as const;

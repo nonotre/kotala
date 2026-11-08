@@ -13,6 +13,7 @@ import { casarComBase, itemDaBase } from "../interpretador/base-itens.ts";
 import { buscarNaInternet, ofertasDaInternet } from "./internet.ts";
 import { acharRecompra, textoRecompra } from "../memoria/index.ts";
 import { enviar } from "../../nucleo/mensagens/index.ts";
+import { barrarItemNaBusca } from "../guardrail/rastro.ts";
 
 export { buscarNaInternet, referenciasDoItem } from "./internet.ts";
 
@@ -80,6 +81,8 @@ async function buscar(m: MudancaItem) {
   }
   const [item] = await db.select().from(itemPedido).where(eq(itemPedido.id, m.itemPedidoId));
   if (!item) return;
+  // S: item proibido ou controlado não vai à internet, às lojas nem a fornecedor.
+  if (await barrarItemNaBusca(item)) return;
 
   // X2: compra repetida em menos de 3 meses? Propõe repetir antes de buscar e cotar.
   if (m.evento === "iniciar_busca") {
