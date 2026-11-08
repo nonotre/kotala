@@ -3,7 +3,7 @@
 // cotação quando todos responderam ou o prazo venceu.
 
 import { textoNegociacao } from "../negociador/index.ts";
-import { quando, quantidade, quantidadeDe } from "../../texto.ts";
+import { escaparHtml, html, Html, htmlParaTexto, negrito, quando, quantidade, quantidadeDe } from "../../texto.ts";
 import { and, asc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { EMPRESA, FRACAO_LEMBRETE, prazoRespostasMs } from "../../config.ts";
@@ -39,33 +39,45 @@ async function dadosDoItem(itemPedidoId: number) {
 
 type Dados = NonNullable<Awaited<ReturnType<typeof dadosDoItem>>>;
 
-export function textoCotacao(d: Dados, nomeFornecedor: string): string {
+/** U4: a cotação em blocos (item, entrega e pagamento, o que responder). Os campos livres do comprador são escapados. */
+export function htmlCotacao(d: Dados, nomeFornecedor: string): Html {
   const { item, pedido: p } = d;
-  const espec = Object.entries(item.especificacao)
-    .map(([k, v]) => `${k}: ${v}`)
-    .join(", ");
-  const linhas = [
+  const junta = (partes: (string | Html)[]) => new Html(partes.map((x) => (x instanceof Html ? x.valor : escaparHtml(x))).join("\n"));
+  const lista = (itens: (string | Html)[]) => junta(itens.map((i) => html`• ${i}`));
+  const espec = Object.entries(item.especificacao).map(([k, v]) => `${k}: ${v}`);
+  const codigoBase = item.itemChave?.startsWith("ITM-") ? ` (código ${item.itemChave})` : "";
+
+  const entrega: string[] = [p.modoEntrega === "retirada" ? "Retirada na loja" : `Entrega: ${p.destino ?? "a combinar"}${p.cep ? `, CEP ${p.cep}` : ""}`];
+  if (p.janelaRecebimento) entrega.push(`Recebimento: ${p.janelaRecebimento}`);
+  if (p.prazoTexto) entrega.push(`Prazo desejado: ${p.prazoTexto}`);
+  if (p.entregas) entrega.push(`Entregas: ${p.entregas} (aceitamos entrega em partes, se ajudar)`);
+
+  const partes: (string | Html)[] = [
     `Olá, ${nomeFornecedor}! Sou o assistente automatizado de compras da ${EMPRESA.nome} (CNPJ ${EMPRESA.cnpj}).`,
-    item.rodada > 1
-      ? `Nova rodada da cotação ${item.id}: conseguem melhorar a proposta? Sem compromisso de compra.`
-      : `Pedido de cotação ${item.id}, sem compromisso de compra:`,
+    html`${negrito(`Cotação ${item.id}`)} ${item.rodada > 1 ? "· nova rodada: conseguem melhorar a proposta? Sem compromisso de compra." : "· sem compromisso de compra."}`,
     "",
-    `Item: ${quantidadeDe(item.quantidade, item.unidade, item.descricao)}${item.itemChave?.startsWith("ITM-") ? ` (código ${item.itemChave})` : ""}`,
+    negrito("Item"),
+    `${quantidadeDe(item.quantidade, item.unidade, item.descricao)}${codigoBase}`,
   ];
-  if (espec) linhas.push(`Especificação: ${espec}`);
-  linhas.push(`Aceita equivalente (outra marca, mesma especificação): ${item.aceitaSimilar ? "sim" : "não"}`);
-  if (p.modoEntrega === "retirada") linhas.push("Retirada na loja");
-  else linhas.push(`Entrega: ${p.destino ?? "a combinar"}${p.cep ? `, CEP ${p.cep}` : ""}`);
-  if (p.janelaRecebimento) linhas.push(`Recebimento: ${p.janelaRecebimento}`);
-  if (p.prazoTexto) linhas.push(`Prazo desejado: ${p.prazoTexto}`);
-  if (p.entregas) linhas.push(`Entregas: ${p.entregas} (aceitamos entrega em partes, se ajudar)`);
-  linhas.push(
+  if (espec.length) partes.push(lista(espec));
+  partes.push(
+    `Aceita equivalente (outra marca, mesma especificação): ${item.aceitaSimilar ? "sim" : "não"}`,
     "",
-    "Por favor, informe: preço unitário, impostos ou taxas fora do preço, frete até o local, prazo de entrega, condição de pagamento, validade da proposta e se entrega no local.",
+    negrito("Entrega e pagamento"),
+    junta(entrega),
+    "",
+    negrito("Por favor, responda"),
+    lista(["Preço unitário (e impostos ou taxas fora do preço, se houver)", "Frete até o local", "Prazo de entrega", "Condição de pagamento", "Validade da proposta"]),
+    "",
   );
-  if (item.prazoRespostasEm) linhas.push(`Recebo propostas até ${quando(item.prazoRespostasEm).replace(/^(às|em) /, "")}. Depois de mandar, ainda dá para ajustar a proposta por aqui até esse horário.`);
-  linhas.push("Pode responder do seu jeito, em texto ou PDF. Para não receber mais mensagens, escreva PARAR.");
-  return linhas.join("\n");
+  if (item.prazoRespostasEm) partes.push(`Recebo propostas até ${quando(item.prazoRespostasEm).replace(/^(às|em) /, "")}. Depois de mandar, ainda dá para ajustar a proposta por aqui até esse horário.`);
+  partes.push("Pode responder do seu jeito, em texto ou PDF. Para não receber mais mensagens, escreva PARAR.");
+  return junta(partes);
+}
+
+/** Texto simples equivalente (conferência de saída, banco e canais sem HTML). */
+export function textoCotacao(d: Dados, nomeFornecedor: string): string {
+  return htmlParaTexto(htmlCotacao(d, nomeFornecedor).valor);
 }
 
 async function enviarCotacoes(m: MudancaItem) {
@@ -168,7 +180,7 @@ async function enviarCotacoes(m: MudancaItem) {
       falhas.push(`${nome}: sem canal ativo`);
       continue;
     }
-    const r = await enviar(ct.id, textoCotacao(d, nome), { pedidoId: d.pedido.id, itemPedidoId: d.item.id, tipo: "cotacao" });
+    const r = await enviar(ct.id, htmlCotacao(d, nome).valor, { pedidoId: d.pedido.id, itemPedidoId: d.item.id, tipo: "cotacao", formato: "html" });
     if (r.situacao === "enviada") {
       await db.update(cotacao).set({ enviadaEm: new Date(), contatoId: ct.id }).where(eq(cotacao.id, c.id));
       enviadas++;
@@ -232,9 +244,9 @@ export async function reenviarCotacaoAberta(fornecedorId: string, contatoId: str
   const d = await dadosDoItem(c.itemPedidoId);
   if (!d) return false;
   const [f] = await db.select({ nome: fornecedor.nome }).from(fornecedor).where(eq(fornecedor.id, fornecedorId));
-  const texto = textoCotacao(d, f?.nome ?? "");
-  if (!(await liberarSaida(texto, { compradorId: d.pedido.compradorId, pedidoId: d.pedido.id, itemPedidoId: d.item.id, oQue: "o pedido de cotação" }))) return false;
-  const r = await enviar(contatoId, texto, { pedidoId: d.pedido.id, itemPedidoId: d.item.id, tipo: "cotacao" });
+  const cotacaoHtml = htmlCotacao(d, f?.nome ?? "");
+  if (!(await liberarSaida(htmlParaTexto(cotacaoHtml.valor), { compradorId: d.pedido.compradorId, pedidoId: d.pedido.id, itemPedidoId: d.item.id, oQue: "o pedido de cotação" }))) return false;
+  const r = await enviar(contatoId, cotacaoHtml.valor, { pedidoId: d.pedido.id, itemPedidoId: d.item.id, tipo: "cotacao", formato: "html" });
   if (r.situacao !== "enviada") return false;
   await db.update(cotacao).set({ contatoId, enviadaEm: c.enviadaEm ?? new Date() }).where(eq(cotacao.id, c.id));
   return true;

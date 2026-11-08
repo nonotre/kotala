@@ -8,6 +8,8 @@ export type Atributo = {
   chave: string;
   rotulo: string;
   pergunta: string;
+  /** Respostas conhecidas: o fluxo as mostra como botões. */
+  opcoes?: string[];
   /** "unidade": confere a unidade do item contra `unidadesAceitas`. */
   tipo?: "unidade";
   /** Só vale para itens cuja descrição bate (ex.: "cabo|fio" dentro de Elétrico). */
@@ -110,7 +112,7 @@ export function regraDeUnidade(item: ItemDominio): { categoria: Categoria; pergu
   return null;
 }
 
-export type AtributoFaltando = { categoria: string; chave: string; rotulo: string; pergunta: string };
+export type AtributoFaltando = { categoria: string; chave: string; rotulo: string; pergunta: string; opcoes?: string[] };
 
 /** O que a categoria exige e o item ainda não diz (Q4). Em código, sem IA. */
 export function atributosFaltando(item: ItemDominio): AtributoFaltando[] {
@@ -123,7 +125,7 @@ export function atributosFaltando(item: ItemDominio): AtributoFaltando[] {
     for (const a of c.atributos ?? []) {
       if (a.quando && !new RegExp(a.quando).test(descricao)) continue;
       const dito = a.tipo === "unidade" ? !!normalizarUnidade(item.unidade ?? "") && unidadeAceita(item.unidade ?? "", c.unidadesAceitas) : new RegExp(a.reconhece ?? "$^").test(texto);
-      if (!dito && !faltando.some((f) => f.chave === a.chave && f.categoria === c.id)) faltando.push({ categoria: c.id, chave: a.chave, rotulo: a.rotulo, pergunta: a.pergunta });
+      if (!dito && !faltando.some((f) => f.chave === a.chave && f.categoria === c.id)) faltando.push({ categoria: c.id, chave: a.chave, rotulo: a.rotulo, pergunta: a.pergunta, ...(a.opcoes ? { opcoes: a.opcoes } : {}) });
     }
   }
   return faltando;
