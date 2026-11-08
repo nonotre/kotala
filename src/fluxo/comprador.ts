@@ -12,6 +12,8 @@ import { casarComBase, especificacaoEmTexto, itemDaBase, rotuloOpcao } from "../
 import { and, asc, desc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
 import { lerAnexoDoComprador, textoDoPedidoComAnexo, type LeituraAnexo } from "../agentes/interpretador/anexos.ts";
 import { chaveDoItem, interpretar, palavrasEmComum, type Interpretacao } from "../agentes/interpretador/index.ts";
+import { ehServico, perguntasDoServico, soServicos } from "../agentes/interpretador/servicos.ts";
+import { aplicarMemoria, citaAlgoAnterior, memoriaDoComprador, textoMemoria } from "../agentes/interpretador/memoria-conversa.ts";
 import {
   deveAvisarGestor,
   posRegras,
@@ -46,6 +48,7 @@ import {
 import { registrar } from "../nucleo/registro.ts";
 import { EMPRESA, JANELA_CONFIRMACAO_MIN } from "../config.ts";
 import { aoBotaoDoComprador } from "./decisao.ts";
+import { aoBotaoDoTransbordo, aoTransbordoDoComprador, ligarTransbordo } from "./transbordo.ts";
 import { atributosFaltando, exemplosDoNicho } from "../dominio/categorias.ts";
 import { dias, fmtNumero, MOTIVOS_CANCELAMENTO, nomePedido, quantidade, quantidadeDe, type MotivoCancelamento } from "../texto.ts";
 
@@ -130,10 +133,14 @@ export function textoConfirmacao(p: {
     const nome = Number(it.quantidade) > 0 ? quantidadeDe(it.quantidade, it.unidade, it.descricao) : `? ${it.unidade} de ${it.descricao}`;
     // Item da base: mostra o código e as duas primeiras especificações técnicas.
     const espec = it.itemChave?.startsWith("ITM-") && it.especificacao ? Object.values(it.especificacao).slice(0, 2).join(", ") : "";
-    linhas.push(`${i + 1}. ${nome}${espec ? ` (${espec})` : ""}${it.aceitaSimilar ? " (aceita similar)" : ""}`);
+    // Serviço: o escopo aparece na linha; "aceita similar" não se aplica.
+    const servico = ehServico(it);
+    const escopo = servico ? Object.entries(it.especificacao ?? {}).find(([k]) => /escopo/i.test(k))?.[1] : undefined;
+    linhas.push(`${i + 1}. ${nome}${espec ? ` (${espec})` : ""}${escopo ? ` (escopo: ${escopo})` : ""}${it.aceitaSimilar && !servico ? " (aceita similar)" : ""}`);
   });
   linhas.push("");
-  const entrega = p.modoEntrega === "retirada" ? "Retirada na loja" : `Entrega: ${p.destino ?? "não informado"}${p.cep ? `, CEP ${p.cep}` : ""}`;
+  const rotuloLocal = soServicos(p.itens) ? "Local do serviço" : "Entrega";
+  const entrega = p.modoEntrega === "retirada" ? "Retirada na loja" : `${rotuloLocal}: ${p.destino ?? "não informado"}${p.cep ? `, CEP ${p.cep}` : ""}`;
   linhas.push(entrega);
   if (p.janelaRecebimento) linhas.push(`Recebe: ${p.janelaRecebimento}`);
   linhas.push(`Setor: ${p.setor ?? "não informado"}`);
@@ -199,25 +206,35 @@ function botoesConfirmacao(pedidoId: number, comPerguntas: boolean): Botao[] {
 
 // ---------- Interpretar e responder ----------
 
-/** O que a IA leu, já com as pós-regras do guardrail. */
-type Lida = { d: Decisao; meta: { modelo: string; rota: string; caiuNaReserva: boolean; forte: boolean } };
+/** O que a IA leu, já com as pós-regras do guardrail. `memoria` (I5): pedidos recentes que a leitura recebeu e o que o código completou. */
+type Lida = { d: Decisao; meta: { modelo: string; rota: string; caiuNaReserva: boolean; forte: boolean; memoria?: { consultada: number[]; completou: number | null } } };
 
 /**
  * Lê com o Interpretador e aplica as pós-regras (S). I4: com sinal sensível ou
- * risco que a lista não confirma, refaz a leitura com o modelo forte.
+ * risco que a lista não confirma, refaz a leitura com o modelo forte. I5: quando a
+ * mensagem cita algo anterior ("o mesmo de ontem", "mesmo endereço"), a leitura recebe
+ * os pedidos recentes do comprador e o código completa o que ficou vazio; as pós-regras
+ * rodam depois, sobre os itens finais.
  */
-async function lerComGuardrail(entrada: Parameters<typeof interpretar>[0], pedidoId: number | undefined, t: Triagem): Promise<Lida> {
-  let r = await interpretar(entrada, { pedidoId });
+async function lerComGuardrail(entrada: Parameters<typeof interpretar>[0], pedidoId: number | undefined, t: Triagem, compradorId?: string): Promise<Lida> {
+  const textos = [entrada.textoOriginal, ...(entrada.correcoes ?? [])].join("\n");
+  const memoria =
+    compradorId && citaAlgoAnterior(textos)
+      ? await memoriaDoComprador(compradorId, { excetoPedidoId: pedidoId }).catch((erro) => (console.error("[comprador] memória", erro), null))
+      : null;
+  const comMemoria = memoria?.pedidos.length ? { ...entrada, memoria: textoMemoria(memoria) } : entrada;
+  let r = await interpretar(comMemoria, { pedidoId });
   let forte = false;
   if (precisaModeloForte(t, r.valor)) {
     try {
-      r = await interpretar(entrada, { pedidoId, papel: "forte" });
+      r = await interpretar(comMemoria, { pedidoId, papel: "forte" });
       forte = true;
     } catch (erro) {
       console.error("[comprador] modelo forte", erro); // fica a leitura do rápido
     }
   }
-  return { d: posRegras(r.valor, t), meta: { modelo: r.modelo, rota: r.rota, caiuNaReserva: r.caiuNaReserva, forte } };
+  const lido = memoria?.pedidos.length ? aplicarMemoria(r.valor, textos, memoria, new Date()) : { interpretacao: r.valor, usou: null };
+  return { d: posRegras(lido.interpretacao, t), meta: { modelo: r.modelo, rota: r.rota, caiuNaReserva: r.caiuNaReserva, forte, ...(memoria?.pedidos.length ? { memoria: { consultada: memoria.pedidos.map((p) => p.id), completou: lido.usou } } : {}) } };
 }
 
 /** Ambíguo que o comprador já confirmou (Sim ou opção): segue como pedido. */
@@ -246,7 +263,7 @@ export async function interpretarEResponder(pedidoId: number, opcoes: { lida?: L
   let lida = opcoes.lida;
   if (!lida) {
     try {
-      lida = await lerComGuardrail({ textoOriginal: p.textoOriginal, correcoes: p.correcoes, atual }, pedidoId, opcoes.triagem ?? TRIAGEM_NEUTRA);
+      lida = await lerComGuardrail({ textoOriginal: p.textoOriginal, correcoes: p.correcoes, atual }, pedidoId, opcoes.triagem ?? TRIAGEM_NEUTRA, p.compradorId);
     } catch (erro) {
       await registrar(db, {
         agente: "Interpretador",
@@ -328,7 +345,7 @@ export async function interpretarEResponder(pedidoId: number, opcoes: { lida?: L
   if (i.ehPedido && i.modoEntrega !== "retirada" && !i.destino) {
     i.destino = EMPRESA.enderecoEntrega;
     i.cep = EMPRESA.cep;
-    i.suposicoes = [...i.suposicoes, "Entrega no endereço padrão da empresa"];
+    i.suposicoes = [...i.suposicoes, soServicos(i.itens) ? "Serviço no endereço padrão da empresa" : "Entrega no endereço padrão da empresa"];
     i.faltando = i.faltando.filter((f) => !/destino|endere[cç]o|entreg|onde|local|cep/i.test(f));
   }
   if (!i.ehPedido) {
@@ -370,6 +387,11 @@ export async function interpretarEResponder(pedidoId: number, opcoes: { lida?: L
   );
   if (daBase.length) i.suposicoes = [...i.suposicoes, `Da base de itens: ${daBase.join("; ")}`];
 
+  // Serviço: o fornecedor precisa do escopo e do prazo para dar preço (o local já tem o padrão acima).
+  if (p.perguntasFeitas === 0) {
+    const doServico = perguntasDoServico(itens, { prazoDias: i.prazoDias, prazoTexto: i.prazoTexto }, i.faltando);
+    i.faltando = [...i.faltando, ...doServico].slice(0, MAX_PERGUNTAS);
+  }
   // Q4: atributo obrigatório da categoria que o pedido não diz. Pergunta uma vez, no máximo 3 perguntas no total.
   const atributos = p.perguntasFeitas === 0 ? atributosPerguntados(itens, i.faltando.length) : [];
   i.faltando = [...i.faltando, ...atributos.map((a) => a.pergunta)];
@@ -697,6 +719,7 @@ export async function lembrarConfirmacoes(agora: Date) {
 
 export function ligarComprador() {
   aoVarrer(lembrarConfirmacoes);
+  ligarTransbordo(); // recado do comprador ao fornecedor pela cadência
 }
 
 // ---------- Guardrail: respostas por classe (S) ----------
@@ -837,7 +860,7 @@ async function novaMensagem(m: {
 }) {
   let lida: Lida;
   try {
-    lida = await lerComGuardrail({ textoOriginal: m.texto }, undefined, m.t);
+    lida = await lerComGuardrail({ textoOriginal: m.texto }, undefined, m.t, m.contatoId);
   } catch (erro) {
     await registrar(db, { agente: "Interpretador", acao: "Não conseguiu ler a mensagem do comprador.", motivo: erro instanceof Error ? erro.message : String(erro) });
     await enviar(m.contatoId, TEXTO_FALHA_IA);
@@ -873,12 +896,12 @@ async function abrirEInterpretar(m: { contatoId: string; canal: MensagemRecebida
 /**
  * Ambíguo: pergunta antes de abrir o pedido. Só o nome do produto vira
  * "Quer que eu cote X?" (Sim e Não); sem item claro, até 4 opções em botões;
- * serviço tem a resposta de que ainda cotamos só produtos.
+ * serviço sem dizer qual pede o que fazer, onde e para quando.
  */
 async function perguntarAmbiguo(contatoId: string, texto: string, lida: Lida, jaPerguntou: boolean) {
   const i = lida.d.interpretacao;
   if (i.subtipo === "servico") {
-    await registrarCaso({ contatoId, classe: "ambiguo", subtipo: "servico", acao: "Pedido de serviço: ainda cotamos só produtos.", motivo: i.motivo, texto });
+    await registrarCaso({ contatoId, classe: "ambiguo", subtipo: "servico", acao: "Pedido de serviço sem dizer qual: pediu o escopo, o local e o prazo.", motivo: i.motivo, texto });
     await enviar(contatoId, TEXTO_SERVICO);
     return;
   }
@@ -961,6 +984,8 @@ export type OpcoesMensagemComprador = {
    * leu como pedido novo, correção ou confirmação): não repassa ao fornecedor.
    */
   naoEhRespostaFornecedor?: boolean;
+  /** O Assistente já tentou resolver e o comprador insiste em falar com o fornecedor: pede a mensagem e repassa. */
+  transbordo?: boolean;
 };
 
 export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: MensagemRecebida, opcoes: OpcoesMensagemComprador = {}) {
@@ -987,6 +1012,8 @@ export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: Me
       await vincularMensagem(mensagemId, { pedidoId: Number(attr[1]) });
       return escolherAtributo(Number(attr[1]), Number(attr[2]), attr[3]!, Number(attr[4]), contato.id);
     }
+    // Transbordo: "com qual fornecedor quer falar?".
+    if (await aoBotaoDoTransbordo(contato.id, entrada.botao)) return;
     const ref = /^(pedido|item):(\d+):/.exec(entrada.botao);
     if (ref) await vincularMensagem(mensagemId, ref[1] === "pedido" ? { pedidoId: Number(ref[2]) } : { itemPedidoId: Number(ref[2]) });
     // R14b: prazo vencido com menos de 3 propostas (encerrar ou estender).
@@ -1056,6 +1083,10 @@ export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: Me
   // Dúvida de fornecedor esperando o comprador: esta mensagem é a resposta.
   // R14b: "pode estender" ou "encerra" escrito, com a pergunta do prazo aberta, vale como o botão.
   if (await respostaEscritaDoPrazo(contato, texto)) return;
+
+  // Transbordo inteligente: recado ao fornecedor em escrita, ou pedido de falar com o fornecedor
+  // (tenta resolver antes; se insistir, pede a mensagem e repassa pela cadência).
+  if (await aoTransbordoDoComprador(contato.id, texto, { insistiu: opcoes.transbordo })) return;
 
   if (!opcoes.naoEhRespostaFornecedor && (await repassarRespostaDoComprador(contato.id, texto))) return;
 

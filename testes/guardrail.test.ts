@@ -293,7 +293,8 @@ test("respostas por classe são curtas e não ecoam o pedido", () => {
   assert.match(respostaDaClasse({ classe: "proibido", subtipo: "droga", vez: 2 }), /fica registrada/);
   assert.match(respostaDaClasse({ classe: "proibido", subtipo: "droga", comOutrosItens: true }), /mensagem separada/);
   assert.match(respostaDaClasse({ classe: "fora_do_escopo", subtipo: "codigo", empresa: "Kotala" }), /assistente de cotações da Kotala/);
-  assert.match(respostaDaClasse({ classe: "ambiguo", subtipo: "servico" }), /só produtos/);
+  // Serviços passaram a ser cotados: o serviço sem detalhe pede o escopo, o local e o prazo.
+  assert.match(respostaDaClasse({ classe: "ambiguo", subtipo: "servico" }), /Também cotamos serviços.*o que precisa ser feito, onde e para quando/);
   assert.match(respostaControlados([{ descricao: "Munição .40", grupo: "arma ou munição", orgao: "Exército" }], false, true), /"Munição \.40" é produto controlado.*registrado para o gestor.*Os outros itens seguem/);
 });
 

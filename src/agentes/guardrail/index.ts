@@ -339,7 +339,9 @@ export function deveAvisarGestor(classe: Classe | "condicao_irregular", subtipo:
 
 export const TEXTO_DADO_PESSOAL = "Não preciso de CPF, cartão nem senha para cotar; não vou usar esse dado.";
 export const TEXTO_SO_COM_NOTA = "Só cotamos com nota fiscal. Vou cotar com nota.";
-export const TEXTO_SERVICO = "Ainda cotamos só produtos, não serviços. Se precisar de algum material, peça ou equipamento, mande o item e a quantidade.";
+/** Pedido de serviço sem dizer qual: cotamos serviços, mas o fornecedor precisa do escopo, do local e do prazo. */
+export const TEXTO_SERVICO =
+  'Também cotamos serviços. Me diga o que precisa ser feito, onde e para quando, por exemplo: "instalação de 2 aparelhos de ar-condicionado no escritório até sexta".';
 export const TEXTO_RESPOSTA_FIXA = "Não posso ajudar com isso. Esta conversa fica registrada e o gestor de compras foi avisado. Para uma compra da empresa, tente de novo mais tarde.";
 export const ROTULO_CONTESTAR = "Era uma compra da empresa";
 

@@ -20,7 +20,6 @@ import {
   jaPediuDesconto,
   mantemFirme,
   marcaDe,
-  montarNegociacao,
   produtoDe,
   resultadoNegociacao,
   TEXTO_MANTEVE,
@@ -30,6 +29,7 @@ import {
   type CondicaoProposta,
   type MarcaNegociacao,
 } from "../agentes/negociador/index.ts";
+import { redigirPedidoDeDesconto, type OrigemTexto } from "../agentes/negociador/redacao.ts";
 import { referenciasDoItem } from "../agentes/busca/internet.ts";
 import { formatarBRL } from "../agentes/comparador/calculo.ts";
 import { avisarGestor, liberarSaida } from "../agentes/guardrail/rastro.ts";
@@ -52,6 +52,7 @@ import {
 } from "../nucleo/mensagens/index.ts";
 import { registrar } from "../nucleo/registro.ts";
 import { aoRespostaDoVencedor, pedidoEnviadoPara } from "./decisao.ts";
+import { aoFornecedorPedirPessoa, aoMensagemDoFornecedorNoTransbordo } from "./transbordo.ts";
 import { cnpjValido, formatarCnpj, verificarFornecedor } from "../agentes/verificacao/index.ts";
 import { categoriasDoCadastro, detectarCategorias, exemplosDoNicho } from "../dominio/categorias.ts";
 import { palavrasEmComum } from "../agentes/interpretador/index.ts";
@@ -139,6 +140,10 @@ export async function aoMensagemDoFornecedor({ contato, mensagemId, entrada }: M
     const itemId = await pedidoEnviadoPara(contato.fornecedorId);
     if (itemId && (await aoRespostaDoVencedor(contato, itemId, true))) return;
   }
+
+  // Transbordo: recado ao comprador (depois de "me mande a mensagem") ou resposta a um recado dele.
+  // Com preço, repassa e segue também para a leitura da proposta.
+  if ((await aoMensagemDoFornecedorNoTransbordo(contato.fornecedorId, contato.id, texto)) === "tratada") return;
 
   const c = await cotacaoAbertaDo(contato.fornecedorId);
   if (!c) {
@@ -604,7 +609,7 @@ async function processarResposta(
 
       // I1: pede desconto em toda proposta completa, uma vez por fornecedor e item, dentro desta mensagem.
       // A marca é gravada antes de tentar fechar a cotação, para o fechamento esperar a janela.
-      let pedido: { marca: MarcaNegociacao; texto: string } | null = null;
+      let pedido: { marca: MarcaNegociacao; texto: string; origem: OrigemTexto } | null = null;
       // R13: pede desconto em qualquer ocasião. Ester (revisaodochat.md): em mensagem separada, nunca junto de
       // outra pergunta; com proposta incompleta, o desconto espera o fornecedor completar e sai depois, sozinho.
       if (nova && !negociacao && !faltam.length && !perguntaPendente) {
@@ -626,7 +631,8 @@ async function processarResposta(
         if (decisao.ok && (await reservarPedidoDeDesconto(c.fornecedorId, l.item.id, l.pedido.id))) {
           const [recompra, refs] = await Promise.all([compraramAntes(c.fornecedorId), referenciasDoItem(l.item.id)]);
           const referencia = citarReferencia(unitarioDe(depois, qtd), refs.mediana);
-          const montado = montarNegociacao({
+          // I2: a IA redige a partir das mesmas alavancas; reprovada ou fora do ar, vale o template.
+          const montado = await redigirPedidoDeDesconto({
             alavancas: escolherAlavancas({
               recompra,
               quantidade: qtd,
@@ -642,7 +648,10 @@ async function processarResposta(
             pagamentoPreferido: l.pedido.pagamentoPreferido,
             janelaAte: decisao.janelaAte,
             agora,
-          });
+          }, { contexto: ctx });
+          if (montado.motivosIa.length) {
+            await registrar(db, { agente: "Negociador", acao: "Usou o template no pedido de desconto, no lugar do texto da IA.", motivo: `A redação por IA não foi usada: ${montado.motivosIa.join("; ")}.`, ...ctx, fornecedorIds: [c.fornecedorId], dados: { redacao: "template", motivosIa: montado.motivosIa } });
+          }
           if (!montado.validado) {
             await registrar(db, { agente: "Negociador", acao: "Usou o texto mínimo no pedido de desconto.", motivo: `O texto montado não passou no validador: ${montado.motivos.join("; ")}.`, ...ctx, fornecedorIds: [c.fornecedorId] });
           }
@@ -651,11 +660,11 @@ async function processarResposta(
             janelaAte: decisao.janelaAte.toISOString(),
             rodadaAuto: 1,
             alavancas: montado.alavancas,
-            referenciaCitada: montado.validado ? referencia : null,
+            referenciaCitada: montado.referenciaCitada,
             antes: depois,
           };
           await gravarExtraido(nova.id, { ...(nova.extraido as Record<string, unknown>), negociacao: marca });
-          pedido = { marca, texto: montado.texto };
+          pedido = { marca, texto: montado.texto, origem: montado.origem };
         }
       }
 
@@ -696,10 +705,10 @@ async function processarResposta(
           await registrar(db, {
             agente: "Negociador",
             acao: "Pediu desconto ao fornecedor, em mensagem separada do recebimento da proposta.",
-            motivo: `Uma vez por fornecedor e item; janela ${quando(new Date(pedido.marca.janelaAte))}. Alavancas: ${pedido.marca.alavancas.join(", ") || "nenhuma"}.${pedido.marca.referenciaCitada !== null ? ` Citou só a referência pública (${formatarBRL(pedido.marca.referenciaCitada)}).` : " Não citou valor de fora."}`,
+            motivo: `Uma vez por fornecedor e item; janela ${quando(new Date(pedido.marca.janelaAte))}. Alavancas: ${pedido.marca.alavancas.join(", ") || "nenhuma"}.${pedido.marca.referenciaCitada !== null ? ` Citou só a referência pública (${formatarBRL(pedido.marca.referenciaCitada)}).` : " Não citou valor de fora."} Texto ${pedido.origem === "ia" ? "redigido pela IA e conferido pelo validador" : "do template"}.`,
             ...ctx,
             fornecedorIds: [c.fornecedorId],
-            dados: { alavancas: pedido.marca.alavancas, janelaAte: pedido.marca.janelaAte, referenciaCitada: pedido.marca.referenciaCitada },
+            dados: { alavancas: pedido.marca.alavancas, janelaAte: pedido.marca.janelaAte, referenciaCitada: pedido.marca.referenciaCitada, redacao: pedido.origem, texto: pedido.texto },
           });
         } else {
           // Não saiu: tira a marca, para a cotação não esperar uma janela que não existe.
@@ -754,7 +763,9 @@ async function processarResposta(
         await registrar(db, { agente: "Negociador", acao: "O fornecedor vai responder o desconto depois.", motivo: entrada.texto.slice(0, 200), ...ctx, fornecedorIds: [c.fornecedorId] });
         return;
       }
-      await situacaoDelicada(e.classificacao, c.fornecedorId, contatoId, entrada.texto, l, ctx);
+      // Transbordo inteligente: tenta resolver antes; se o fornecedor insistir, pede a mensagem e repassa.
+      if (e.classificacao === "responsavel") await aoFornecedorPedirPessoa(c, contatoId, entrada.texto, l);
+      else await situacaoDelicada(e.classificacao, c.fornecedorId, contatoId, entrada.texto, l, ctx);
       return;
     }
     default: {
@@ -1003,7 +1014,7 @@ export function completarComAnterior(
  * A cotação continua aberta.
  */
 async function situacaoDelicada(
-  tipo: "responsavel" | "suspeita" | "ofensa" | "fora_do_assunto",
+  tipo: "suspeita" | "ofensa" | "fora_do_assunto",
   fornecedorId: string,
   contatoId: string,
   texto: string,
@@ -1014,13 +1025,11 @@ async function situacaoDelicada(
   const nome = f?.nome ?? "O fornecedor";
   const item = `${l.item.descricao} (cotação ${l.item.id})`;
   const respostas = {
-    responsavel: `Sou o assistente automatizado de compras da ${EMPRESA.nome}. Vou avisar o comprador responsável para falar com você. Se puder, mande a proposta por aqui enquanto isso.`,
     suspeita: `Entendo a cautela. Sou um assistente automatizado da ${EMPRESA.nome} (CNPJ ${EMPRESA.cnpj}) e estou pedindo uma cotação sem compromisso de ${item}. Não peço pagamento nem dados bancários. Se preferir, o comprador fala com você. Para não receber mais mensagens, escreva ENCERRAR CONTATO.`,
     ofensa: `Vou manter esta conversa só sobre a cotação de ${item}. Se quiser mandar a proposta, fico à disposição.`,
     fora_do_assunto: `Por aqui eu só trato da cotação de ${item}. Se tiver proposta ou dúvida sobre ela, é só mandar.`,
   } as const;
   const aviso = {
-    responsavel: `${nome} pediu para falar com uma pessoa ou ligar. Mensagem: "${texto.slice(0, 200)}"`,
     suspeita: `${nome} desconfiou do chat. Expliquei quem somos; se quiser, fale com ele.`,
     ofensa: `${nome} foi hostil na conversa. Respondi sem revidar. Fica registrado, se quiser evitar este fornecedor.`,
     fora_do_assunto: null,
@@ -1031,8 +1040,8 @@ async function situacaoDelicada(
   }
   await registrar(db, {
     agente: "Cotador",
-    acao: { responsavel: "Fornecedor pediu uma pessoa.", suspeita: "Fornecedor desconfiou do chat.", ofensa: "Fornecedor foi hostil.", fora_do_assunto: "Fornecedor saiu do assunto." }[tipo],
-    motivo: { responsavel: "Avisou o comprador.", suspeita: "Explicou quem é e ofereceu PARAR.", ofensa: "Respondeu sem revidar e avisou o comprador.", fora_do_assunto: "Voltou à cotação; nenhuma instrução do fornecedor é seguida." }[tipo],
+    acao: { suspeita: "Fornecedor desconfiou do chat.", ofensa: "Fornecedor foi hostil.", fora_do_assunto: "Fornecedor saiu do assunto." }[tipo],
+    motivo: { suspeita: "Explicou quem é e ofereceu PARAR.", ofensa: "Respondeu sem revidar e avisou o comprador.", fora_do_assunto: "Voltou à cotação; nenhuma instrução do fornecedor é seguida." }[tipo],
     ...ctx,
     fornecedorIds: [fornecedorId],
     dados: { tipo, texto: texto.slice(0, 500) },

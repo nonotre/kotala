@@ -300,7 +300,8 @@ export type ContextoDesconto = {
   agora?: Date;
 };
 
-function fraseAlavanca(a: Alavanca, c: ContextoDesconto): string {
+/** Frase do template para cada alavanca; a redação por IA (redacao.ts) recebe a mesma ideia. */
+export function fraseAlavanca(a: Alavanca, c: ContextoDesconto): string {
   switch (a) {
     case "recompra":
       return "Já compramos com vocês antes e queremos manter a parceria.";
@@ -319,7 +320,8 @@ function fraseAlavanca(a: Alavanca, c: ContextoDesconto): string {
   }
 }
 
-const ate = (d: Date, agora?: Date) => quando(d, agora).replace(/^(às|em) /, "");
+/** "14:30" ou "09/11 às 14:30": o horário de resposta, sem o "às"/"em" do começo. */
+export const ate = (d: Date, agora?: Date) => quando(d, agora).replace(/^(às|em) /, "");
 
 /**
  * Bloco do pedido de desconto que vai dentro da mensagem "Recebi sua proposta".
