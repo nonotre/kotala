@@ -19,10 +19,18 @@ import {
 import { colunaDoItem, COLUNAS, type Coluna, type EstadoItem, type EstadoPedido } from "../../src/nucleo/orquestrador/estados.ts";
 import { linhaDoTempo } from "../../src/nucleo/rastreio.ts";
 import { acharRecompra } from "../../src/agentes/memoria/index.ts";
+import { contratoDoItemEmEspera } from "../../src/agentes/memoria/contrato.ts";
 import type { Comparacao, Linha } from "../../src/agentes/comparador/calculo.ts";
 
 export { COLUNAS, type Coluna };
 export type { Comparacao, Linha };
+
+/** Item em "aguardando_recompra": o contrato proposto, ou a última compra para repetir. */
+async function escolhaEmEspera(item: typeof itemPedido.$inferSelect) {
+  if (item.estado !== "aguardando_recompra") return { recompra: null, contrato: null };
+  const contrato = await contratoDoItemEmEspera(item);
+  return { recompra: contrato ? null : await acharRecompra(item), contrato };
+}
 
 const hora = (d: Date) => d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
 
@@ -214,7 +222,8 @@ export async function detalhePedido(id: number) {
         : [];
       return {
         item,
-        recompra: item.estado === "aguardando_recompra" ? await acharRecompra(item) : null,
+        // X2: a espera pode ser de um contrato anual (o evento da proposta diz); aí não é recompra.
+        ...(await escolhaEmEspera(item)),
         mapa: m ? { ...m, comparacao: m.dados as Comparacao } : null,
         cotacoes: cots,
         referencias: refs.map((x) => ({ ...x.r, cnpjAtivo: x.verificado === true })),

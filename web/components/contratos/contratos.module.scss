@@ -1,0 +1,37 @@
+// Contratos anuais. Só tokens do Carbon.
+@use '@carbon/react/scss/theme';
+@use '@carbon/react/scss/spacing';
+@use '@carbon/react/scss/type';
+@use '@carbon/react/scss/breakpoint' as *;
+
+.apoio {
+  @include type.type-style('helper-text-01');
+
+  display: block;
+  color: theme.$text-secondary;
+}
+
+.ajuda {
+  @include type.type-style('body-compact-01');
+
+  color: theme.$text-secondary;
+}
+
+.numero {
+  font-variant-numeric: tabular-nums;
+}
+
+.periodo {
+  white-space: nowrap;
+}
+
+// Dois campos lado a lado no modal; um embaixo do outro no celular.
+.linhaCampos {
+  display: grid;
+  gap: spacing.$spacing-05;
+  grid-template-columns: 1fr;
+
+  @include breakpoint(md) {
+    grid-template-columns: 1fr 1fr;
+  }
+}

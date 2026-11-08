@@ -98,6 +98,9 @@ async function anexosDoEmail(anexos: Anexo[]) {
   return { lista, faltaram };
 }
 
+/** Q1: o mapa de cotação vai com o PDF anexado (nome gerado por nomeArquivoMapa, em agentes/comparador/pdf.ts). */
+const ehMapa = (anexos: Anexo[] | undefined) => !!anexos?.some((a) => a.mediaType === "application/pdf" && a.nome?.startsWith("mapa-pedido-"));
+
 /** E-mail não tem botão: as opções viram lista de texto, e a resposta é pelo Telegram. */
 const opcoesEmTexto = (botoes: { rotulo: string }[]) => ["", "Opções:", ...botoes.map((b) => `- ${b.rotulo}`), "Para escolher, responda pela conversa no Telegram."].join("\n");
 
@@ -118,7 +121,9 @@ export function adaptadorEmail(op: OpcoesEmail = {}): AdaptadorCanal {
             ? `Lembrete de cotação · ${EMPRESA.nome}`
             : opcoes.tipo === "pedido_compra"
               ? `Pedido de compra${opcoes.itemPedidoId ? ` · cotação ${opcoes.itemPedidoId}` : ""} · ${EMPRESA.nome}`
-            : `Mensagem de ${EMPRESA.nome}`;
+              : ehMapa(opcoes.anexos)
+                ? `Mapa de cotação${opcoes.pedidoId ? ` · pedido ${opcoes.pedidoId}` : ""} · ${EMPRESA.nome}`
+                : `Mensagem de ${EMPRESA.nome}`;
       // O convite já traz o link e o aviso no corpo.
       const { lista, faltaram } = await anexosDoEmail(opcoes.anexos ?? []);
       const completo =

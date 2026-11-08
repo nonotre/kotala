@@ -95,7 +95,23 @@ export type OfertaComparavel = {
   online?: boolean;
   /** Link do anúncio, quando online. */
   fonte?: string | null;
+  /** R7: frete declarado no anúncio (JSON-LD), com a regra e a hora da coleta; `noCep` diz se a regra cobre o CEP. */
+  freteAnuncio?: FreteAnuncio | null;
 };
+
+/** R7: frete lido da página do anúncio de uma loja fora da VTEX (`oferta.extraido.freteAnuncio`). */
+export type FreteAnuncio = { valor: number; noCep: boolean; fonte: string; coletadoEm: string };
+
+const horaDe = (iso: string) => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+};
+
+/** "frete do anúncio R$ 25,00, coletado às 14:02" (sem a hora quando ela não veio). */
+export function textoFreteAnuncio(f: FreteAnuncio): string {
+  const h = horaDe(f.coletadoEm);
+  return `frete do anúncio ${formatarBRL(f.valor)}${h ? `, coletado às ${h}` : ""}`;
+}
 
 export type ItemComparado = {
   quantidade: number;
@@ -272,6 +288,11 @@ export function comparar(item: ItemComparado, ofertas: OfertaComparavel[], refer
       if (o.frete !== null) {
         frete = o.frete;
         origemFrete = "informado";
+      } else if (o.online && o.freteAnuncio) {
+        // R7: o anúncio declara o frete, mas sem regra que cubra o CEP: vale o valor dele,
+        // ainda "a calcular no site" (o carrinho confirma), e não a mediana dos outros.
+        frete = o.freteAnuncio.valor;
+        origemFrete = "a_calcular";
       } else {
         // Q8: loja online sem frete para o CEP é "a calcular no site". A estimativa fica só
         // para a comparação não favorecer quem não disse o frete; o mapa a mostra separada.
@@ -312,7 +333,14 @@ export function comparar(item: ItemComparado, ofertas: OfertaComparavel[], refer
     alertas.push(...neg.alertas);
     if (o.aumento) alertas.push(`Subiu: ${o.aumento}`);
     if (origemFrete === "estimado") alertas.push("Frete não informado: valor estimado");
-    if (origemFrete === "a_calcular") alertas.push("Frete a calcular no site: a estimativa serve só para comparar");
+    if (origemFrete === "a_calcular") {
+      alertas.push(
+        o.freteAnuncio
+          ? `Frete a calcular no site: ${textoFreteAnuncio(o.freteAnuncio)}, para o Brasil, sem conferir o CEP`
+          : "Frete a calcular no site: a estimativa serve só para comparar",
+      );
+    }
+    if (origemFrete === "informado" && o.online && o.freteAnuncio?.noCep) alertas.push(`Frete do anúncio para o CEP (${textoFreteAnuncio(o.freteAnuncio)}): confirme no carrinho`);
     if (o.prazoPagamentoDias === 0 && !o.conhecido) alertas.push("Pagamento antecipado com fornecedor novo");
     if (o.impostosValor === null && !o.impostosNaoInclusos) alertas.push("Não disse se há impostos ou taxas fora do preço");
     if (!retirada && o.entregaNoLocal === null) alertas.push("Não confirmou a entrega no local");
@@ -410,4 +438,15 @@ export function mudancasDoMapa(anterior: Pick<Comparacao, "validas" | "vencedora
   const vAgora = novo.vencedora?.oferta.fornecedorId;
   if (vAgora && vAntes !== vAgora) partes.push(`agora na frente: ${novo.vencedora!.oferta.fornecedorNome}`);
   return partes;
+}
+
+/** Frete como o mapa mostra: informado, estimado ou "a calcular no site" (Q8), com a estimativa à parte. */
+export function textoFrete(l: Pick<Linha, "origemFrete" | "frete"> & { oferta?: Pick<OfertaComparavel, "freteAnuncio"> }): string {
+  if (l.origemFrete === "nao_se_aplica") return "retirada";
+  const anuncio = l.oferta?.freteAnuncio;
+  // R7: o anúncio declara o frete, mas a regra não cobre o CEP: o valor é dele, a confirmação é no carrinho.
+  if (l.origemFrete === "a_calcular" && anuncio) return `frete a calcular no site (${textoFreteAnuncio(anuncio)}, sem conferir o CEP)`;
+  if (l.origemFrete === "a_calcular") return `frete a calcular no site (estimado ${formatarBRL(l.frete)} só para comparar)`;
+  if (l.origemFrete === "informado" && anuncio?.noCep) return `frete ${formatarBRL(l.frete)} (do anúncio, para o CEP)`;
+  return `frete ${formatarBRL(l.frete)} (${l.origemFrete})`;
 }

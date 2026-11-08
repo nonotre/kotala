@@ -5,7 +5,7 @@
 import { Column, InlineNotification, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Tile } from "@carbon/react";
 import { CheckmarkFilled } from "@carbon/react/icons";
 import type { ReactNode } from "react";
-import { ROTULO_CRITERIO, type Criterio } from "../../../src/agentes/comparador/calculo.ts";
+import { ROTULO_CRITERIO, textoFreteAnuncio, type Criterio } from "../../../src/agentes/comparador/calculo.ts";
 import { Bloco } from "@/components/Bloco";
 import { EstadoVazio } from "@/components/EstadoVazio";
 import { GradePagina } from "@/components/Pagina";
@@ -14,7 +14,9 @@ import { Tabela } from "@/components/Tabela";
 import type { Linha } from "@/lib/dados";
 import type { DadosPedido, ItemDoPedido } from "@/lib/dados-pedido";
 import { brl, nota } from "@/lib/formato";
+import { BaixarMapaPdf } from "./BaixarMapaPdf";
 import { BotaoLink } from "./BotaoLink";
+import { ContratoDoItem } from "./ContratoDoItem";
 import { chatDoFornecedor, Fornecedor, IndiceItens, SecaoItem, textoDias } from "./Item";
 import { Recompra } from "./Recompra";
 import { Status } from "./Status";
@@ -28,7 +30,10 @@ type Verificacao = { nivel?: string; pontos?: number } | null | undefined;
 function textoFrete(l: Linha) {
   if (l.origemFrete === "nao_se_aplica") return "Retirada";
   // Q8: loja online sem frete para o CEP; a estimativa não é frete informado.
+  // R7: o anúncio declara o frete, sem regra que cubra o CEP: o valor é do anúncio, com a hora da coleta.
+  if (l.origemFrete === "a_calcular" && l.oferta.freteAnuncio) return `A calcular no site (${textoFreteAnuncio(l.oferta.freteAnuncio)}, sem conferir o CEP)`;
   if (l.origemFrete === "a_calcular") return `A calcular no site (estimado ${brl(l.frete)} só para comparar)`;
+  if (l.origemFrete === "informado" && l.oferta.freteAnuncio?.noCep) return `${brl(l.frete)} (do anúncio, para o CEP)`;
   return `${brl(l.frete)} (${l.origemFrete})`;
 }
 
@@ -264,7 +269,7 @@ function SobreOMapa({ i }: { i: ItemDoPedido }) {
 function vazioDoItem(i: ItemDoPedido): string {
   if (i.item.estado === "comparando") return "O assistente está montando o mapa.";
   if (i.item.estado === "cotando") return "O mapa aparece quando as propostas chegarem.";
-  if (i.item.estado === "aguardando_recompra") return "Compra repetida: sem mapa até você escolher repetir ou cotar de novo.";
+  if (i.item.estado === "aguardando_recompra") return i.contrato ? "Item com contrato: sem mapa até você escolher pedir direto ou cotar." : "Compra repetida: sem mapa até você escolher repetir ou cotar de novo.";
   if (i.item.estado === "cancelado") return "Item cancelado sem mapa.";
   if (i.item.estado === "sem_proposta") return "Nenhuma proposta chegou para montar o mapa.";
   return "Ainda não há mapa para este item.";
@@ -283,7 +288,10 @@ export function AbaComparacao({ d }: { d: DadosPedido }) {
             <SecaoItem i={i}>
               {c ? (
                 <div className={s.divisao}>
-                  <Bloco titulo={`Mapa de cotações${i.mapa!.rodada > 1 ? `, rodada ${i.mapa!.rodada}` : ""}: ${c.validas.length} ${c.validas.length === 1 ? "proposta válida" : "propostas válidas"}`}>
+                  <Bloco
+                    titulo={`Mapa de cotações${i.mapa!.rodada > 1 ? `, rodada ${i.mapa!.rodada}` : ""}: ${c.validas.length} ${c.validas.length === 1 ? "proposta válida" : "propostas válidas"}`}
+                    acao={<BaixarMapaPdf itemPedidoId={i.item.id} />}
+                  >
                     <SobreOMapa i={i} />
                     {c.alertasGerais.length ? <InlineNotification kind="warning" lowContrast hideCloseButton title="Atenção:" subtitle={c.alertasGerais.join("; ")} statusIconDescription="Aviso" /> : null}
                     {c.validas.length ? <Mapa d={d} i={i} /> : <EstadoVazio compacto titulo="Nenhuma proposta válida neste mapa." />}
@@ -301,6 +309,8 @@ export function AbaComparacao({ d }: { d: DadosPedido }) {
                     <ForaDaComparacao d={d} i={i} />
                   </div>
                 </div>
+              ) : i.contrato ? (
+                <ContratoDoItem i={i} />
               ) : i.recompra ? (
                 <Recompra i={i} />
               ) : (

@@ -3,6 +3,7 @@
 // avisados e a confirmação do fornecedor fecha o item. A IA não fecha compra.
 
 import { acharRecompra } from "../agentes/memoria/index.ts";
+import { conferirContrato, contratoPropostoAoItem, dataCurta } from "../agentes/memoria/contrato.ts";
 import { MAX_RODADAS, planejarNegociacao, preferenciaNaoAtendida } from "../agentes/negociador/index.ts";
 import { dias, MOTIVOS_CANCELAMENTO, quantidade, type MotivoCancelamento } from "../texto.ts";
 import { and, eq, ne } from "drizzle-orm";
@@ -43,7 +44,7 @@ const nomeComSelo = (l: Linha) => `${l.oferta.fornecedorNome}${l.oferta.simulado
 // ---------- Botões do comprador: item:<id>:<acao>[:<ofertaId>] ----------
 
 export async function aoBotaoDoComprador(contato: Contato, dado: string): Promise<boolean> {
-  const m = /^item:(\d+):(aprovar|confirmar|outras|reprovar|buscar|ampliar|voltar|motivos|negociar|excluir|cancelar|repetir|repetir_ok|cotar_novo)(?::([0-9a-f-]{36}|[a-z_]+))?$/.exec(dado);
+  const m = /^item:(\d+):(aprovar|confirmar|outras|reprovar|buscar|ampliar|voltar|motivos|negociar|excluir|cancelar|repetir|repetir_ok|cotar_novo|contrato|contrato_ok)(?::([0-9a-f-]{36}|[a-z_]+))?$/.exec(dado);
   if (!m) return false;
   const itemPedidoId = Number(m[1]);
   const acao = m[2]!;
@@ -65,14 +66,28 @@ export async function aoBotaoDoComprador(contato: Contato, dado: string): Promis
     }
     return true;
   }
-  // X2: repetir ou cotar de novo só valem quando o item espera essa escolha.
-  if (acao === "repetir" || acao === "repetir_ok" || acao === "cotar_novo") {
+  // X2: repetir, pedir pelo contrato ou cotar de novo só valem quando o item espera essa escolha.
+  if (acao === "repetir" || acao === "repetir_ok" || acao === "cotar_novo" || acao === "contrato" || acao === "contrato_ok") {
     if (d.item.estado !== "aguardando_recompra") {
       await enviar(contato.id, `Pedido ${d.pedido.id}: este item não está esperando essa escolha agora.`, ctx);
       return true;
     }
+    // Contrato anual: a espera é do contrato (o evento da proposta diz qual).
+    const contratoId = await contratoPropostoAoItem(itemPedidoId);
     if (acao === "cotar_novo") {
-      await avancarItem(itemPedidoId, "cotar_de_novo", { agente: "Comprador", acao: "Preferiu cotar de novo.", motivo: "Decisão do comprador." }).catch(ignorarCorrida);
+      await avancarItem(
+        itemPedidoId,
+        "cotar_de_novo",
+        contratoId
+          ? { agente: "Comprador", acao: "Preferiu cotar mesmo com contrato vigente.", motivo: "Decisão do comprador: cotar mesmo assim.", dados: { tipo: "contrato_recusado", contratoId } }
+          : { agente: "Comprador", acao: "Preferiu cotar de novo.", motivo: "Decisão do comprador." },
+      ).catch(ignorarCorrida);
+      return true;
+    }
+    if (contratoId || acao === "contrato" || acao === "contrato_ok") {
+      // "Repetir" que chega com o item esperando o contrato (pelo assistente, por exemplo) vira o primeiro toque do contrato.
+      const id = acao === "contrato" || acao === "contrato_ok" ? (ofertaId ?? contratoId) : contratoId;
+      await decidirContrato(contato, d, id, acao === "contrato_ok" ? "pedir" : "confirmar");
       return true;
     }
     const r = await acharRecompra(d.item);
@@ -233,6 +248,73 @@ export async function aoBotaoDoComprador(contato: Contato, dado: string): Promis
   return true;
 }
 
+// ---------- X2: contrato anual (pedir direto, em dois toques) ----------
+
+type Dados = NonNullable<Awaited<ReturnType<typeof dados>>>;
+
+/**
+ * Primeiro toque ("confirmar"): mostra o que vai ser pedido e pede a confirmação.
+ * Segundo ("pedir"): confere de novo o contrato, grava a oferta pelo preço do contrato
+ * e aprova; o pedido de compra sai ao fornecedor do contrato pelo caminho de sempre.
+ * Contrato que deixou de valer entre os toques: avisa e cota normal.
+ */
+async function decidirContrato(contato: Contato, d: Dados, contratoId: string | null | undefined, passo: "confirmar" | "pedir") {
+  const ctx = { pedidoId: d.pedido.id, itemPedidoId: d.item.id };
+  const r = contratoId && /^[0-9a-f-]{36}$/.test(contratoId) ? await conferirContrato(contratoId, d.item) : ({ tipo: "nao_vale", motivo: "o contrato não foi encontrado" } as const);
+  if (r.tipo !== "pedir_direto") {
+    await enviar(contato.id, `Pedido ${d.pedido.id}: não dá para pedir pelo contrato (${r.motivo}). Vou cotar ${d.item.descricao} normalmente.`, ctx);
+    await avancarItem(d.item.id, "cotar_de_novo", { agente: "Acompanhamento do pedido", acao: "O contrato não vale mais: segue a cotação.", motivo: `Motivo: ${r.motivo}.`, dados: { tipo: "contrato_invalido", contratoId: contratoId ?? null } }).catch(ignorarCorrida);
+    return;
+  }
+  const c = r.contrato;
+  const nome = `${c.fornecedorNome}${c.simulado ? " (simulado)" : ""}`;
+  const total = c.precoUnitario * Number(d.item.quantidade);
+  if (passo === "confirmar") {
+    await enviar(
+      contato.id,
+      `Confirma pedir direto ${quantidade(d.item.quantidade, d.item.unidade)} de ${d.item.descricao} a ${nome}, pelo contrato vigente até ${dataCurta(c.fim)}, a ${formatarBRL(c.precoUnitario)} por ${d.item.unidade} (${formatarBRL(total)} de produto)? O pedido de compra vai ao fornecedor do contrato, sem cotação.`,
+      { ...ctx, botoes: [{ rotulo: "Sim, pedir direto", dado: `item:${d.item.id}:contrato_ok:${c.id}`, estilo: "sucesso" }, { rotulo: "Cotar mesmo assim", dado: `item:${d.item.id}:cotar_novo` }] },
+    );
+    return;
+  }
+  const [o] = await db
+    .insert(oferta)
+    .values({
+      itemPedidoId: d.item.id,
+      fornecedorId: c.fornecedorId,
+      rodada: d.item.rodada,
+      itemOferecido: d.item.descricao,
+      itemExato: true,
+      precoUnitario: c.precoUnitario.toFixed(2),
+      totalProduto: total.toFixed(2),
+      // Sem coluna nova: a oferta do contrato usa o formato do histórico, marcada em `extraido`.
+      formato: "historico",
+      pagamento: "conforme o contrato",
+      extraido: { contrato: { id: c.id, precoUnitario: c.precoUnitario, unidade: c.unidade, fim: c.fim.toISOString(), observacao: c.observacao } },
+    })
+    .returning();
+  await avancarItem(
+    d.item.id,
+    "repetir_compra",
+    {
+      agente: "Comprador",
+      acao: `Pediu direto pelo contrato com ${c.fornecedorNome}.`,
+      motivo: `Contrato vigente até ${dataCurta(c.fim)}, a ${formatarBRL(c.precoUnitario)} por ${c.unidade}.`,
+      fornecedorIds: [c.fornecedorId],
+      dados: { tipo: "contrato_pedido", contratoId: c.id },
+    },
+    { fornecedorEscolhidoId: c.fornecedorId, ofertaEscolhidaId: o!.id },
+  ).catch(ignorarCorrida);
+}
+
+/** O contrato gravado na oferta pedida por ele (`oferta.extraido.contrato`); null nas outras. */
+export function contratoDaOferta(o: { formato: string; extraido: unknown }): { id: string; precoUnitario: number; fim: Date; observacao: string | null } | null {
+  if (o.formato !== "historico") return null;
+  const c = (o.extraido as { contrato?: { id?: unknown; precoUnitario?: unknown; fim?: unknown; observacao?: unknown } } | null)?.contrato;
+  if (!c || typeof c.id !== "string" || typeof c.precoUnitario !== "number" || typeof c.fim !== "string") return null;
+  return { id: c.id, precoUnitario: c.precoUnitario, fim: new Date(c.fim), observacao: typeof c.observacao === "string" ? c.observacao : null };
+}
+
 // ---------- Aprovado: pedido de compra ao vencedor e aviso aos demais ----------
 
 async function enviarPedidoDeCompra(m: MudancaItem) {
@@ -255,7 +337,7 @@ async function enviarPedidoDeCompra(m: MudancaItem) {
     return;
   }
 
-  const texto = textoPedidoDeCompra({ item: d.item, pedido: d.pedido, oferta: o, custo: l?.custo ?? null, comprador: await nomeDoComprador(d.pedido) });
+  const texto = textoPedidoDeCompra({ item: d.item, pedido: d.pedido, oferta: o, custo: l?.custo ?? null, comprador: await nomeDoComprador(d.pedido), contrato: contratoDaOferta(o) });
   await enviar(ct.id, texto, {
     itemPedidoId: d.item.id,
     tipo: "pedido_compra",
@@ -301,17 +383,23 @@ export function textoPedidoDeCompra(p: {
   oferta: Pick<typeof oferta.$inferSelect, "itemOferecido" | "formato" | "precoUnitario" | "frete" | "prazoDias" | "pagamento" | "prazoPagamentoDias">;
   custo: number | null;
   comprador: string | null;
+  /** X2: pedido direto pelo contrato anual (preço e fim do contrato). */
+  contrato?: { precoUnitario: number; fim: Date; observacao?: string | null } | null;
 }): string {
-  const { item, pedido: ped, oferta: o } = p;
-  const preferido = preferenciaNaoAtendida(ped.pagamentoPreferido, o.pagamento);
+  const { item, pedido: ped, oferta: o, contrato: ct } = p;
+  const preferido = ct ? null : preferenciaNaoAtendida(ped.pagamentoPreferido, o.pagamento);
   return [
     `Pedido de compra da ${EMPRESA.nome} (CNPJ ${EMPRESA.cnpj}), referente à cotação ${item.id}:`,
     `${quantidade(item.quantidade, item.unidade)} de ${o.itemOferecido}`,
     p.custo !== null ? `Total ${formatarBRL(p.custo)}, como na sua proposta.` : "",
-    o.formato === "historico" && o.precoUnitario ? `Mesmo preço da última compra: ${formatarBRL(Number(o.precoUnitario))} por ${item.unidade}${o.frete ? `, frete ${formatarBRL(Number(o.frete))}` : ""}.` : "",
+    ct
+      ? `Pelo nosso contrato vigente até ${dataCurta(ct.fim)}: ${formatarBRL(ct.precoUnitario)} por ${item.unidade}, total do produto ${formatarBRL(ct.precoUnitario * Number(item.quantidade))}.`
+      : o.formato === "historico" && o.precoUnitario
+        ? `Mesmo preço da última compra: ${formatarBRL(Number(o.precoUnitario))} por ${item.unidade}${o.frete ? `, frete ${formatarBRL(Number(o.frete))}` : ""}.`
+        : "",
     ped.modoEntrega === "retirada" ? "Retirada na loja." : `Entrega: ${ped.destino ?? "a combinar"}${ped.janelaRecebimento ? ` (${ped.janelaRecebimento})` : ""}.`,
     o.prazoDias !== null ? `Prazo: ${dias(o.prazoDias)}.` : "",
-    `Pagamento: ${pagamentoCombinado(o)}.`,
+    ct ? `Pagamento e frete: conforme o contrato${ct.observacao ? ` (${ct.observacao})` : ""}.` : `Pagamento: ${pagamentoCombinado(o)}.`,
     // A condição combinada vale; a preferência só vai como pedido, sem mudar o total.
     preferido ? `Se for possível nas mesmas condições, nossa forma de pagamento preferida é ${preferido}.` : "",
     ped.entregas ? `Entregas: ${ped.entregas}.` : "",
@@ -413,8 +501,18 @@ export async function aoRespostaDoVencedor(contato: Contato, itemPedidoId: numbe
       .set({ situacao: "desistiu" })
       .where(and(eq(cotacao.itemPedidoId, itemPedidoId), eq(cotacao.fornecedorId, contato.fornecedorId), eq(cotacao.rodada, d.item.rodada)));
     await enviar(contato.id, "Entendido, obrigado por avisar.", ctx);
-    const [escolhida] = d.item.ofertaEscolhidaId ? await db.select({ formato: oferta.formato }).from(oferta).where(eq(oferta.id, d.item.ofertaEscolhidaId)) : [];
-    if (escolhida?.formato === "historico") {
+    const [escolhida] = d.item.ofertaEscolhidaId ? await db.select({ formato: oferta.formato, extraido: oferta.extraido }).from(oferta).where(eq(oferta.id, d.item.ofertaEscolhidaId)) : [];
+    const pedidoPeloContrato = escolhida ? contratoDaOferta(escolhida) : null;
+    if (pedidoPeloContrato) {
+      // X2: o fornecedor do contrato não atende; o contrato continua (quem encerra é a tela Contratos), e o item é cotado.
+      await enviar(d.pedido.compradorId, `Pedido ${d.pedido.id}: ${nome} não atende este pedido pelo contrato. Vou cotar de novo. Se o contrato não vale mais, encerre-o na tela Contratos.`, { ...ctx, tipo: "aviso" });
+      await avancarItem(
+        itemPedidoId,
+        "recompra_recusada",
+        { agente: "Fornecedor", motivo: "Não atende o pedido pelo contrato.", fornecedorIds: [contato.fornecedorId], dados: { tipo: "contrato_recusado_fornecedor", contratoId: pedidoPeloContrato.id } },
+        { fornecedorEscolhidoId: null, ofertaEscolhidaId: null },
+      ).catch(ignorarCorrida);
+    } else if (escolhida?.formato === "historico") {
       // Recompra recusada: não há mapa a refazer, então volta à busca e cota de novo.
       await enviar(d.pedido.compradorId, `Pedido ${d.pedido.id}: ${nome} não mantém o preço da última compra. Vou cotar de novo.`, { ...ctx, tipo: "aviso" });
       await avancarItem(itemPedidoId, "recompra_recusada", { agente: "Fornecedor", motivo: "Não mantém o preço da última compra.", fornecedorIds: [contato.fornecedorId] }, { fornecedorEscolhidoId: null, ofertaEscolhidaId: null }).catch(ignorarCorrida);

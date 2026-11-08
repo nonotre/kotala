@@ -256,7 +256,9 @@ export function progressoDoPedido(d: DadosPedido): Progresso {
   const validas = itens.reduce((t, i) => t + (i.mapa?.comparacao.validas.length ?? 0), 0);
   const comparando =
     vez?.item.estado === "aguardando_recompra"
-      ? "Compra repetida: falta escolher"
+      ? vez.contrato
+        ? "Contrato: falta escolher"
+        : "Compra repetida: falta escolher"
       : atual < 2 && !itens.some((i) => i.mapa)
         ? ""
         : validas === 0
@@ -313,6 +315,9 @@ export function proximoPasso(d: DadosPedido): ProximoPasso {
   const decidir = com("aguardando_decisao");
   if (decidir) return { quem: "comprador", texto: `Aprovação pendente: ${decidir.item.descricao}.`, botao: ir("decisao", decidir.item.id) };
   const recompra = com("aguardando_recompra");
+  if (recompra?.contrato) {
+    return { quem: "comprador", texto: `Contrato vigente para ${recompra.item.descricao}: pedir direto ao fornecedor do contrato ou cotar.`, botao: ir("comparacao", recompra.item.id, "Pedir direto ou cotar") };
+  }
   if (recompra) return { quem: "comprador", texto: `Recompra disponível para ${recompra.item.descricao}: repetir ou cotar novamente.`, botao: ir("comparacao", recompra.item.id, "Repetir ou cotar de novo") };
   const cotando = com("cotando");
   if (cotando) {

@@ -139,7 +139,8 @@ function Aprovado({ d, i }: { d: DadosPedido; i: ItemDoPedido }) {
 function SemDecisao({ d, i }: { d: DadosPedido; i: ItemDoPedido }) {
   const { item } = i;
   if (item.estado === "aguardando_recompra") {
-    return <EstadoVazio compacto titulo="Compra repetida: escolha repetir ou cotar de novo na etapa Comparação." acao={{ texto: "Ir para Comparação", href: hrefAba(d.pedido.id, "comparacao", item.id) }} />;
+    const titulo = i.contrato ? "Item com contrato: escolha pedir direto ou cotar na etapa Comparação." : "Compra repetida: escolha repetir ou cotar de novo na etapa Comparação.";
+    return <EstadoVazio compacto titulo={titulo} acao={{ texto: "Ir para Comparação", href: hrefAba(d.pedido.id, "comparacao", item.id) }} />;
   }
   if (item.estado === "sem_proposta") {
     return <EstadoVazio compacto titulo="Sem proposta válida: não há o que aprovar." acao={{ texto: "Ver as propostas", href: hrefAba(d.pedido.id, "cotacoes", item.id) }} />;

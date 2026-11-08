@@ -4,7 +4,7 @@
 
 import { registrar } from "../../nucleo/registro.ts";
 import { dias, quantidade } from "../../texto.ts";
-import { referenciasDoItem } from "../busca/internet.ts";
+import { PREFIXO_FRETE_ANUNCIO, referenciasDoItem } from "../busca/internet.ts";
 import { verificarVarios, type Verificacao } from "../verificacao/index.ts";
 import { and, desc, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { db } from "../../nucleo/db/cliente.ts";
@@ -14,14 +14,21 @@ import { enviar, type Botao } from "../../nucleo/mensagens/index.ts";
 import { aoEntrarItem, avancarItem, TransicaoConcorrente, TransicaoInvalida, type MudancaItem } from "../../nucleo/orquestrador/index.ts";
 import { MAX_AMPLIACOES } from "../../config.ts";
 import type { MarcaNegociacao } from "../negociador/index.ts";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { PASTA_ARQUIVOS } from "../../nucleo/arquivos.ts";
+import type { Anexo } from "../../nucleo/db/schema.ts";
+import { entradaPdfDoItem, nomeArquivoMapa, pdfDoMapa } from "./pdf.ts";
 import {
   comparar,
   formatarBRL,
   formatarNota,
   MINIMO_PROPOSTAS_VALIDAS,
   mudancasDoMapa,
+  textoFrete,
   type BuscaAutomatica,
   type Comparacao,
+  type FreteAnuncio,
   type ItemComparado,
   type Linha,
   type OfertaComparavel,
@@ -40,6 +47,7 @@ type ExtraidoLido = {
   totalProduto?: unknown;
   negociacao?: Partial<MarcaNegociacao>;
   aumento?: unknown;
+  freteAnuncio?: Partial<FreteAnuncio>;
 };
 const textos = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && !!x.trim()) : []);
 const numero = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
@@ -50,7 +58,14 @@ function marcaDoExtraido(extraido: unknown): Partial<MarcaNegociacao> | null {
   return m && typeof m.pedidaEm === "string" ? m : null;
 }
 
-export function lerExtraido(extraido: unknown): Pick<OfertaComparavel, "alertasConduta" | "divergencias" | "aConfirmar" | "precoLido" | "negociacao" | "aumento"> {
+/** R7: frete do anúncio gravado por `ofertasDaInternet`; só vale com valor e fonte. */
+function freteAnuncioDoExtraido(e: ExtraidoLido): FreteAnuncio | null {
+  const f = e.freteAnuncio;
+  if (!f || typeof f.valor !== "number" || !Number.isFinite(f.valor) || f.valor < 0 || typeof f.fonte !== "string") return null;
+  return { valor: f.valor, noCep: f.noCep === true, fonte: f.fonte, coletadoEm: typeof f.coletadoEm === "string" ? f.coletadoEm : "" };
+}
+
+export function lerExtraido(extraido: unknown): Pick<OfertaComparavel, "alertasConduta" | "divergencias" | "aConfirmar" | "precoLido" | "negociacao" | "aumento" | "freteAnuncio"> {
   const e = (extraido ?? {}) as ExtraidoLido;
   const marca = marcaDoExtraido(extraido);
   const aConfirmar = textos(e.aConfirmar).filter((x): x is "preco" | "item" => x === "preco" || x === "item");
@@ -60,6 +75,8 @@ export function lerExtraido(extraido: unknown): Pick<OfertaComparavel, "alertasC
     aConfirmar,
     precoLido: aConfirmar.includes("preco") ? (numero(e.precoUnitario) ?? numero(e.totalProduto)) : null,
     aumento: typeof e.aumento === "string" && e.aumento.trim() ? e.aumento : null,
+    // Só quando houver: o resto do mapa trata a ausência como "sem frete do anúncio".
+    ...(freteAnuncioDoExtraido(e) ? { freteAnuncio: freteAnuncioDoExtraido(e) } : {}),
     negociacao: marca
       ? {
           resultado: marca.resultado ?? null,
@@ -214,13 +231,6 @@ export function textoBuscaAutomatica(b: BuscaAutomatica, validas: number): strin
 }
 
 const nomeComSelo = (o: OfertaComparavel) => `${o.fornecedorNome}${o.simulado ? " (simulado)" : o.online ? " (loja online)" : ""}`;
-
-/** Frete como o mapa mostra: informado, estimado ou "a calcular no site" (Q8), com a estimativa à parte. */
-export function textoFrete(l: Pick<Linha, "origemFrete" | "frete">): string {
-  if (l.origemFrete === "nao_se_aplica") return "retirada";
-  if (l.origemFrete === "a_calcular") return `frete a calcular no site (estimado ${formatarBRL(l.frete)} só para comparar)`;
-  return `frete ${formatarBRL(l.frete)} (${l.origemFrete})`;
-}
 
 export function linhaMapa(l: Linha, i: number, verificacoes: Map<string, Verificacao> = new Map()): string {
   const o = l.oferta;
@@ -447,9 +457,37 @@ async function montarMapa(m: MudancaItem) {
   });
 
   if (refeito) await substituirMapaAnterior(p.compradorId, item, cabecalho);
-  await enviar(p.compradorId, texto, { pedidoId: p.id, itemPedidoId: item.id, botoes: botoesDecisao(item.id, c), tipo: "aviso" });
+  const pdf = await pdfDoMapaParaEnviar(item.id, { pedidoId: p.id, itemPedidoId: item.id });
+  await enviar(p.compradorId, texto, { pedidoId: p.id, itemPedidoId: item.id, botoes: botoesDecisao(item.id, c), tipo: "aviso", ...(pdf ? { anexos: [pdf] } : {}) });
   // Só depois do mapa pronto: a resposta do fornecedor encontra o item esperando a decisão.
   await pedirConfirmacaoDePreco(item.id);
+}
+
+/**
+ * Grava o PDF do último mapa do item em dados/arquivos/mapas e devolve o anexo para
+ * enviar() (caminho local: o Telegram sobe o arquivo, o e-mail lê do disco). Null sem mapa.
+ */
+export async function anexoPdfDoMapa(itemPedidoId: number): Promise<Anexo | null> {
+  const e = await entradaPdfDoItem(itemPedidoId);
+  if (!e) return null;
+  const dados = pdfDoMapa(e);
+  const pasta = join(PASTA_ARQUIVOS(), "mapas");
+  await mkdir(pasta, { recursive: true });
+  const nome = nomeArquivoMapa(e.pedido.id, e.item.id, e.rodada);
+  // Um arquivo por versão do mapa: o mapa refeito na mesma rodada não sobrescreve o anterior.
+  const caminho = join(pasta, `${e.mapaEm.getTime()}-${nome}`);
+  await writeFile(caminho, dados);
+  return { tipo: "pdf", mediaType: "application/pdf", ref: caminho, nome, tamanho: dados.length };
+}
+
+/** Q1: o PDF do mapa vai anexado ao mapa. Se falhar, o mapa segue sem ele (e o rastro diz por quê). */
+async function pdfDoMapaParaEnviar(itemPedidoId: number, ctx: { pedidoId: number; itemPedidoId: number }) {
+  try {
+    return await anexoPdfDoMapa(itemPedidoId);
+  } catch (erro) {
+    await registrar(db, { agente: "Comparador", acao: "Não gerou o PDF do mapa.", motivo: erro instanceof Error ? erro.message : String(erro), ...ctx });
+    return null;
+  }
 }
 
 /** Texto do mapa para o chat (Telegram, e-mail, web). Função pura: os testes leem o mesmo texto que o comprador. */
@@ -503,9 +541,11 @@ export function textoReferencias(refs: Awaited<ReturnType<typeof referenciasDoIt
   const linhas = ["", `Referência pública (internet${refs.mediana !== null ? `, mediana ${formatarBRL(refs.mediana)} por ${unidade}` : ""}):`];
   for (const r of refs.aceitas.slice(0, 3)) {
     const preco = r.precoUnitario !== null ? `${formatarBRL(Number(r.precoUnitario))} por ${unidade}` : formatarBRL(Number(r.precoFonte));
+    // R7: frete do anúncio (JSON-LD) não é simulação de carrinho: diz de onde veio.
+    const doAnuncio = !!r.regiaoDoPreco?.startsWith(PREFIXO_FRETE_ANUNCIO);
     const entrega =
       r.entregaNoCep === true && r.frete !== null
-        ? `entrega no CEP por ${formatarBRL(Number(r.frete))}${r.fretePrazoDias !== null ? ` em ${dias(r.fretePrazoDias)}` : ""}`
+        ? `${doAnuncio ? "frete do anúncio para o CEP" : "entrega no CEP por"} ${formatarBRL(Number(r.frete))}${r.fretePrazoDias !== null ? ` em ${dias(r.fretePrazoDias)}` : ""}`
         : (r.regiaoDoPreco ?? "");
     const estoque = `${r.disponivel === false ? " · sem estoque" : ""}${r.cnpjAtivo ? " · CNPJ ativo" : ""}`;
     linhas.push(`- ${r.loja}: ${preco}${r.conversao ? ` (${r.conversao})` : ""}${estoque}${entrega ? ` · ${entrega}` : ""} · coletado às ${hora(r.coletadoEm)}`);
