@@ -14,7 +14,7 @@ before(async () => {
   if (pular) return;
   const { migrate } = await import("drizzle-orm/postgres-js/migrator");
   await migrate(db, { migrationsFolder: "drizzle" });
-  await conexao`truncate item_catalogo, auditoria, arquivo, evento, uso_ia, mensagem, mapa_cotacao, referencia_preco, oferta, cotacao, historico_compra, item_pedido, pedido, contato, fornecedor restart identity cascade`;
+  await conexao`truncate item_catalogo, auditoria, arquivo, evento, uso_ia, mensagem, mapa_cotacao, referencia_preco, oferta, cotacao, historico_compra, item_pedido, pedido, contato, usuario, fornecedor restart identity cascade`;
 });
 after(async () => {
   if (!pular) await conexao.end();

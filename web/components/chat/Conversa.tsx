@@ -67,18 +67,6 @@ function base64(file: File): Promise<string> {
 /** Para começar: tocar manda a frase ao assistente de verdade. */
 const EXEMPLOS = ["preciso de 40 sacos de cimento cp2 até quinta", "20 barras de ferro 3/8", "1 carrada de areia e 2 milheiros de tijolo"];
 
-function enderecoDoNavegador(): string {
-  try {
-    const salvo = localStorage.getItem("kotala-chat");
-    if (salvo) return salvo;
-    const novo = crypto.randomUUID();
-    localStorage.setItem("kotala-chat", novo);
-    return novo;
-  } catch {
-    return crypto.randomUUID();
-  }
-}
-
 async function lerConversa(endereco: string): Promise<MensagemChat[] | null> {
   try {
     const r = await fetch(`/api/chat?endereco=${endereco}`, { cache: "no-store" });
@@ -157,8 +145,8 @@ const escritos = {
   homeScreenBeforeInputElement: <p className={s.dicaInicio}>O mesmo assistente do Telegram, aqui no navegador. Escreva o que precisa comprar, do seu jeito.</p>,
 };
 
-export function Conversa() {
-  const [endereco, setEndereco] = useState<string | null>(null);
+/** O chat de quem entrou: o endereço é o id do usuário (contato "web" dele, ver src/contas.ts). */
+export function Conversa({ endereco }: { endereco: string }) {
   const [historicoPronto, setHistoricoPronto] = useState(false);
   const [chatPronto, setChatPronto] = useState(false);
   const [novas, setNovas] = useState(false);
@@ -175,10 +163,7 @@ export function Conversa() {
   /** Arquivos escolhidos ou colados, esperando o envio, pelo id do campo do chat. */
   const arquivos = useRef(new Map<string, File>());
 
-  useEffect(() => {
-    setEndereco(enderecoDoNavegador());
-    return () => zerarEstado();
-  }, []);
+  useEffect(() => () => zerarEstado(), []);
 
   // ---------- Rolagem ----------
   // Quem está lendo mais acima não é puxado para baixo; aparece "Novas mensagens".

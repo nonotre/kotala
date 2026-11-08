@@ -90,6 +90,10 @@ Ficou como estava, de propósito: o quadro mantém as 4 colunas do site (requisi
 
 Pendente: a Ester especificou um dashboard em `docs/workspaces/ester-workspace/interface-dashboard.md` (KPIs, pizza de saving, curva da % de saving, gasto por setor, status com atraso, tabela por pedido com filtros). Ainda não foi implementado. Quando for, juntar com o que já existe em `web/app/dashboard/` e `web/app/economia/` (e as consultas em `web/lib/`), em vez de criar uma tela paralela.
 
+## Perfil e login (Frente 2, rodada 2, 08/11/2026)
+
+Cada pessoa entra com usuário e senha e tem o seu chat no navegador; quem não tem conta cria na tela de entrada. Os cards mostram o dono (quem pediu), e todos veem todos. As contas `ester` e `liria` já existem, ligadas ao Telegram delas, e a primeira entrada define a senha. Ainda não: espelho do Telegram no chat web, empresa e endereços no banco. Ver [perfil-login.md](perfil-login.md).
+
 ## Para quem vai mexer nas telas
 
 - Código em `web/` (Next 16 e Carbon). Telas em `web/app/`, componentes em `web/components/`, leitura do banco em `web/lib/dados.ts`, ações em `web/lib/acoes.ts` (vão para a API interna dos bots).

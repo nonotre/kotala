@@ -7,6 +7,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTema } from "@/lib/tema";
+import { QuemEntrou, useGuardaSessao } from "./conta/Guarda";
 import { MenuLateral } from "./MenuLateral";
 import s from "./casca.module.scss";
 
@@ -23,7 +24,6 @@ const NOMES_ROTA: Record<string, string> = {
   "/chat": "Conversar",
   "/fornecedores": "Fornecedores",
   "/itens": "Itens",
-  "/economia": "Economia",
   "/dashboard": "Dashboard",
   "/avisos": "Avisos",
   "/convite": "Convite",
@@ -74,6 +74,8 @@ export function Casca({ children, avisos }: { children: ReactNode; avisos: numbe
   const [aberto, setAberto] = useState(false);
   const noPedido = /^\/pedidos\/[^/]+/.test(rota);
   const rotaAnterior = useRef(rota);
+  // Frente 2: sem sessão, vai para /login.
+  useGuardaSessao();
 
   useEffect(() => {
     setAberto(false);
@@ -137,6 +139,7 @@ export function Casca({ children, avisos }: { children: ReactNode; avisos: numbe
           </div>
           <Sino n={avisos} />
           <TrocaTema />
+          <QuemEntrou />
         </HeaderGlobalBar>
       </Header>
       <MenuLateral aberto={aberto} aoFechar={() => setAberto(false)} />

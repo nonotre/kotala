@@ -188,6 +188,13 @@
   }
 }
 
+// Frente 2: responsável pelo card.
+.dono {
+  @include type.type-style('label-01');
+
+  color: theme.$text-secondary;
+}
+
 .cartaoTitulo {
   @include type.type-style('heading-compact-01');
 

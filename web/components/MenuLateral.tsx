@@ -4,6 +4,7 @@ import { SideNav, SideNavDivider, SideNavItems, SideNavLink } from "@carbon/reac
 import { Analytics, Chat, Dashboard, DeliveryParcel, Home, Logout, Partnership, QrCode, Settings } from "@carbon/react/icons";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { sair as sairDaConta } from "./conta/sessao";
 import s from "./casca.module.scss";
 
 type Item = { href: string; rotulo: string; icone: typeof Home };
@@ -65,7 +66,15 @@ export function MenuLateral({ aberto, aoFechar }: Props) {
           {CONSULTA.map(item)}
           <SideNavDivider className={s.contaNoFim} />
           {item({ href: "/configuracoes", rotulo: "Configurações", icone: Settings })}
-          <SideNavLink as={Link} href="/login" renderIcon={Logout} onClick={aoFechar}>
+          <SideNavLink
+            as={Link}
+            href="/login"
+            renderIcon={Logout}
+            onClick={() => {
+              aoFechar();
+              sairDaConta();
+            }}
+          >
             Sair
           </SideNavLink>
         </SideNavItems>

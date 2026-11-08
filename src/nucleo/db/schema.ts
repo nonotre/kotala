@@ -88,6 +88,19 @@ export const fornecedor = pgTable("fornecedor", {
   criadoEm: criadoEm(),
 });
 
+// ---------- Usuário: quem entra nas telas (Frente 2) ----------
+// Login simples, sem pretensão de segurança: senha com hash scrypt, sessão guardada no navegador.
+
+export const usuario = pgTable("usuario", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** Nome de usuário para entrar, sempre minúsculo. */
+  login: text("login").notNull().unique(),
+  nome: text("nome").notNull(),
+  /** "sal:hash" em hex (scrypt). Null = conta criada à mão; a primeira entrada define a senha. */
+  senhaHash: text("senha_hash"),
+  criadoEm: criadoEm(),
+});
+
 // ---------- Contato: quem fala com o sistema, em qual canal ----------
 
 export const contato = pgTable(
@@ -100,6 +113,8 @@ export const contato = pgTable(
     papel: papelContatoEnum("papel").notNull(),
     fornecedorId: uuid("fornecedor_id").references(() => fornecedor.id),
     nome: text("nome"),
+    /** A pessoa por trás deste contato (Telegram ligado à mão, chat web do usuário). Dá o dono dos pedidos. */
+    usuarioId: uuid("usuario_id").references(() => usuario.id),
     /** Aviso curto de privacidade já mostrado (R5). */
     avisoPrivacidadeEm: timestamp("aviso_privacidade_em", { withTimezone: true }),
     parouEm: timestamp("parou_em", { withTimezone: true }),

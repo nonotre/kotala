@@ -47,6 +47,8 @@ export type LinhaPedido = {
   estado: EstadoPedido;
   texto: string;
   canal: string;
+  /** Frente 2: responsável pelo pedido. */
+  dono: string | null;
   criadoEm: string;
   atualizadoEm: string;
   itens: number;
@@ -245,6 +247,7 @@ export async function pedidosOperacao(): Promise<LinhaPedido[]> {
       estado: b.estado,
       texto: b.texto,
       canal: b.canal,
+      dono: b.dono,
       criadoEm: iso(b.criadoEm),
       atualizadoEm: iso(p.atualizadoEm),
       itens: b.itens,

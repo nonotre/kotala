@@ -25,11 +25,11 @@ export function textoPrazo(p: DadosPedido["pedido"]) {
 }
 
 /** `Em andamento · Entrega: Obra Alfa · Setor: Obras · Prazo: até sexta (5 dias) · Obra parada`. */
-function ContextoPedido({ p }: { p: DadosPedido["pedido"] }) {
+function ContextoPedido({ p, dono }: { p: DadosPedido["pedido"]; dono: string | null }) {
   const prazo = textoPrazo(p);
   return (
     <>
-      {ESTADO_PEDIDO[p.estado]} · {textoEntrega(p)}
+      {ESTADO_PEDIDO[p.estado]} · {dono ? `De ${dono}` : "Sem dono"} · {textoEntrega(p)}
       {p.setor ? ` · Setor: ${p.setor}` : ""}
       {prazo ? ` · Prazo: ${prazo}` : ""}
       {p.urgencia !== "normal" ? (
@@ -55,7 +55,7 @@ export function CabecalhoPedido({ d }: { d: DadosPedido }) {
       <CabecalhoPagina
         trilha={[{ rotulo: "Quadro", href: "/quadro" }, { rotulo: "Pedidos", href: "/pedidos" }, { rotulo: `Pedido ${d.pedido.id}` }]}
         titulo={tituloPedido(d)}
-        contexto={<ContextoPedido p={d.pedido} />}
+        contexto={<ContextoPedido p={d.pedido} dono={d.dono} />}
         lado={
           <div className={s.progresso}>
             <ProgressoPedido progresso={progressoDoPedido(d)} />

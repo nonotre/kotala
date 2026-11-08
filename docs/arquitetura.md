@@ -228,7 +228,7 @@ Veio preço, é proposta: a regra está em código (`limpar` no Extrator), entã
 | Pedidos | `/pedidos` | Lista de pedidos |
 | Pedido | `/pedidos/[id]` | O que foi pedido e o que o assistente considerou; por item: fornecedores consultados e situação, mapa de cotação (Q1) com custo total, frete com a origem, prazo, pagamento, confiança e nota, motivos de corte, recomendação e pesos; aprovar (com confirmação), cotar de novo, buscar mais; referência pública com link; linha do tempo (N5) com filtros e prompt e resposta de cada chamada de IA |
 | Fornecedores | `/fornecedores` | Confiança de cada fornecedor (Q8) com os motivos e alertas; homologar e bloquear (lista de bloqueio, com motivo obrigatório): bloqueado não entra em busca nem recompra |
-| Economia (X4) | `/economia` | Compras confirmadas, comparação com a referência pública e com a proposta mais cara, tempo até a confirmação e trabalho feito (cotações, mensagens, chamadas de IA), sempre dizendo contra o que compara |
+| Dashboard (X4) | `/dashboard` | Desenho da Ester (`docs/workspaces/ester-workspace/interface-dashboard.md`): KPIs (pedidos emitidos, total gasto, saving em R$ e %, pedidos em atraso); pizza saving × gasto sobre o valor antes da negociação; curva normal da % de saving por pedido com o histograma atrás; custo por setor; status das requisições com o atraso em vermelho; tabela por pedido (média do mapa × compra). Filtros de período, setor e status; clique em fatia ou barra filtra. `/economia` redireciona para cá |
 | Conversar (E3) | `/chat` | Chat web com o mesmo assistente do Telegram |
 | Convite (Q5) | `/convite` | QR para a banca virar fornecedor pelo celular (link do bot do fornecedor, perguntado ao Telegram no servidor) |
 
@@ -266,6 +266,10 @@ O fornecedor não se cadastra: recebe um e-mail com um link pessoal do bot (`t.m
 - **Convite manual:** `npm run convidar -- pessoa@exemplo.com "Nome da empresa"` cria o fornecedor, o contato de e-mail e o código, e manda o convite pelo `enviar()` (rastreio e PARAR valem). Usa o banco principal e manda e-mail de verdade. Na tela, a mesma função (`convidarPorEmail` em `src/fluxo/fornecedor.ts`) entra depois.
 - **Depois do convite:** o contato de e-mail conta como canal ativo, então o convidado entra nas próximas cotações. Sem Telegram ligado, a cotação vai por e-mail com o link no rodapé; respostas por e-mail ainda não são lidas (E2).
 - **Configuração:** `SMTP_USER` e `SMTP_PASS` (Gmail com senha de app), `EMAIL_PERMITIDOS`, `EMAIL_REMETENTE_NOME`.
+
+## Contas e login (Frente 2, rodada 2)
+
+Tabela `usuario` e coluna `contato.usuario_id` (migração `0015`). Login simples com usuário e senha (`src/contas.ts`, hash scrypt); a sessão fica só no navegador (`web/components/conta/sessao.ts`) e a casca manda para `/login` quem não entrou. Cada usuário tem um contato `web` (endereço = id do usuário), que é o chat dele no navegador. O dono de um pedido sai de `pedido.comprador_id → contato.usuario_id`. O Telegram da Ester e da Liria foi ligado à mão por `scripts/ligar-telegram.ts`. Detalhes e pendências em [perfil-login.md](perfil-login.md).
 
 ## Segurança
 

@@ -60,7 +60,7 @@ export function AvisoDemonstracao() {
           lowContrast
           hideCloseButton
           title={`${AVISO_DEMONSTRACAO}.`}
-          subtitle="O kotala ainda não guarda conta, empresas nem endereços no servidor. O que você mudar aqui fica só neste navegador, com dados fictícios."
+          subtitle="A sua conta já fica no servidor; empresas e endereços ainda não. O que você mudar aqui fica só neste navegador, com dados fictícios."
           statusIconDescription="Informação"
           className={s.avisoLargo}
         />

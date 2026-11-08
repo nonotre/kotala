@@ -1,0 +1,123 @@
+// Dashboard de economia. Só tokens do Carbon.
+@use '@carbon/react/scss/theme';
+@use '@carbon/react/scss/spacing';
+@use '@carbon/react/scss/type';
+@use '@carbon/react/scss/breakpoint';
+
+// ---------- Filtros no topo ----------
+.filtros {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(spacing.$spacing-13, 1fr));
+  gap: spacing.$spacing-03;
+
+  @include breakpoint.breakpoint-down(md) {
+    grid-template-columns: 1fr;
+    inline-size: 100%;
+  }
+}
+
+.ativos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: spacing.$spacing-02;
+  padding-inline: spacing.$spacing-05;
+}
+
+// ---------- KPIs ----------
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-02;
+  block-size: 100%;
+}
+
+.kpiRotulo {
+  @include type.type-style('label-01');
+
+  color: theme.$text-secondary;
+}
+
+.kpiValor {
+  @include type.type-style('heading-05');
+
+  color: theme.$text-primary;
+  font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
+}
+
+.kpiNota {
+  @include type.type-style('helper-text-01');
+
+  color: theme.$text-secondary;
+}
+
+// Atraso: o card inteiro chama atenção.
+.kpiAlerta {
+  background: var(--cds-notification-background-error, #{theme.$layer-01});
+  box-shadow: inset spacing.$spacing-02 0 0 theme.$support-error;
+
+  .kpiValor {
+    color: theme.$text-error;
+  }
+}
+
+// ---------- Cores de resultado ----------
+.positivo {
+  color: theme.$support-success;
+}
+
+.negativo {
+  color: theme.$text-error;
+}
+
+// ---------- Gráficos ----------
+.graficoCarregando {
+  block-size: 320px;
+  background: theme.$skeleton-background;
+}
+
+// ---------- Tabela ----------
+.tabela {
+  max-inline-size: 100%;
+  overflow-x: auto;
+
+  table {
+    @include breakpoint.breakpoint-down(lg) {
+      min-inline-size: calc(6 * #{spacing.$spacing-13});
+    }
+  }
+}
+
+.linhaClicavel {
+  cursor: pointer;
+}
+
+.pedido {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: spacing.$spacing-02;
+}
+
+.apoio {
+  @include type.type-style('helper-text-01');
+
+  display: block;
+  color: theme.$text-secondary;
+}
+
+.numero {
+  font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
+  white-space: nowrap;
+}
+
+.etiquetas {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: spacing.$spacing-02;
+}
+
+.trabalho {
+  @include type.type-style('body-01');
+
+  color: theme.$text-secondary;
+}

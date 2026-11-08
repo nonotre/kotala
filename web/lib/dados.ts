@@ -2,7 +2,7 @@
 // do processo dos bots (lib/acoes.ts). Usa o mesmo schema e as mesmas consultas
 // do núcleo, em ../src.
 
-import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../../src/nucleo/db/cliente.ts";
 import {
   contato,
@@ -15,7 +15,6 @@ import {
   oferta,
   pedido,
   referenciaPreco,
-  usoIa,
 } from "../../src/nucleo/db/schema.ts";
 import { colunaDoItem, COLUNAS, type Coluna, type EstadoItem, type EstadoPedido } from "../../src/nucleo/orquestrador/estados.ts";
 import { linhaDoTempo } from "../../src/nucleo/rastreio.ts";
@@ -26,6 +25,9 @@ export { COLUNAS, type Coluna };
 export type { Comparacao, Linha };
 
 const hora = (d: Date) => d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+
+/** Frente 2: dono do pedido, o usuário ligado ao contato que pediu. Null quando o contato não tem usuário. */
+const donoDoPedido = sql<string | null>`(select u.nome from contato c join usuario u on u.id = c.usuario_id where c.id = ${pedido.compradorId})`;
 
 export type Etiqueta = { texto: string; tipo: "atencao" | "info" | "ok" | "alerta" | "urgente" };
 
@@ -40,6 +42,8 @@ export type Cartao = {
   coluna: Coluna;
   etiquetas: Etiqueta[];
   atualizadoEm: Date;
+  /** Frente 2: quem é o responsável pelo card. */
+  dono: string | null;
 };
 
 function etiquetasDo(
@@ -98,7 +102,7 @@ function etiquetasDo(
 /** R10: todos os itens, em 4 colunas. Cancelados ficam ocultos, a não ser que peça para ver. */
 export async function quadro(mostrarCanceladas = false): Promise<Record<Coluna, Cartao[]>> {
   const linhas = await db
-    .select({ item: itemPedido, pedido, escolhido: fornecedor.nome })
+    .select({ item: itemPedido, pedido, escolhido: fornecedor.nome, dono: donoDoPedido })
     .from(itemPedido)
     .innerJoin(pedido, eq(pedido.id, itemPedido.pedidoId))
     .leftJoin(fornecedor, eq(fornecedor.id, itemPedido.fornecedorEscolhidoId))
@@ -128,7 +132,7 @@ export async function quadro(mostrarCanceladas = false): Promise<Record<Coluna, 
     : [];
 
   const saida = Object.fromEntries(COLUNAS.map((c) => [c, [] as Cartao[]])) as Record<Coluna, Cartao[]>;
-  for (const { item, pedido: p, escolhido } of linhas) {
+  for (const { item, pedido: p, escolhido, dono } of linhas) {
     const c = contagens.find((x) => x.itemId === item.id && x.rodada === item.rodada);
     const m = mapas.find((x) => x.itemId === item.id)?.dados as Comparacao | undefined;
     const alertas = (m?.validas ?? []).reduce((t, l) => t + l.alertas.length, 0) + (m?.alertasGerais.length ?? 0);
@@ -150,6 +154,7 @@ export async function quadro(mostrarCanceladas = false): Promise<Record<Coluna, 
         negociando: !!item.negociacao && item.negociacao.rodada === item.rodada,
       }),
       atualizadoEm: item.atualizadoEm,
+      dono,
     });
   }
   return saida;
@@ -157,7 +162,7 @@ export async function quadro(mostrarCanceladas = false): Promise<Record<Coluna, 
 
 export async function listaPedidos() {
   return db
-    .select({ id: pedido.id, estado: pedido.estado, texto: pedido.textoOriginal, criadoEm: pedido.criadoEm, canal: pedido.canalOrigem, itens: sql<number>`(select count(*)::int from item_pedido where pedido_id = ${pedido.id})` })
+    .select({ id: pedido.id, estado: pedido.estado, texto: pedido.textoOriginal, criadoEm: pedido.criadoEm, canal: pedido.canalOrigem, dono: donoDoPedido, itens: sql<number>`(select count(*)::int from item_pedido where pedido_id = ${pedido.id})` })
     .from(pedido)
     .orderBy(desc(pedido.id))
     .limit(100);
@@ -165,8 +170,9 @@ export async function listaPedidos() {
 
 /** Pedido completo: itens, cotações, mapa, referência pública e linha do tempo. */
 export async function detalhePedido(id: number) {
-  const [p] = await db.select().from(pedido).where(eq(pedido.id, id));
-  if (!p) return null;
+  const [linha] = await db.select({ pedido, dono: donoDoPedido }).from(pedido).where(eq(pedido.id, id));
+  if (!linha) return null;
+  const p = linha.pedido;
   const itens = await db.select().from(itemPedido).where(eq(itemPedido.pedidoId, id)).orderBy(asc(itemPedido.ordem));
   const porItem = await Promise.all(
     itens.map(async (item) => {
@@ -200,7 +206,7 @@ export async function detalhePedido(id: number) {
     }),
   );
   const tempo = await linhaDoTempo(id);
-  return { pedido: p, itens: porItem, linhaDoTempo: tempo };
+  return { pedido: p, dono: linha.dono, itens: porItem, linhaDoTempo: tempo };
 }
 
 /** Q8: fornecedores com o julgamento de confiança. */
@@ -216,53 +222,6 @@ export async function listaFornecedores() {
     propostas: propostas.find((p) => p.id === f.id)?.n ?? 0,
     compras: compras.find((c) => c.id === f.id)?.n ?? 0,
   }));
-}
-
-/** X4: quanto o assistente devolveu, sempre com a referência declarada. */
-export async function economia() {
-  const confirmados = await db
-    .select({ item: itemPedido, pedido })
-    .from(itemPedido)
-    .innerJoin(pedido, eq(pedido.id, itemPedido.pedidoId))
-    .where(eq(itemPedido.estado, "confirmado"))
-    .orderBy(desc(itemPedido.atualizadoEm));
-
-  const linhas = [];
-  for (const { item, pedido: p } of confirmados) {
-    const [m] = await db.select().from(mapaCotacao).where(eq(mapaCotacao.itemPedidoId, item.id)).orderBy(desc(mapaCotacao.criadoEm)).limit(1);
-    const c = m?.dados as Comparacao | undefined;
-    const escolhida = c?.validas.find((l) => l.oferta.id === item.ofertaEscolhidaId) ?? null;
-    const maisCara = c?.validas.length ? c.validas.reduce((a, b) => ((b.custo ?? 0) > (a.custo ?? 0) ? b : a)) : null;
-    const [ref] = await db
-      .select({ mediana: sql<string | null>`percentile_cont(0.5) within group (order by ${referenciaPreco.precoUnitario})`, n: sql<number>`count(*)::int` })
-      .from(referenciaPreco)
-      .where(and(eq(referenciaPreco.itemPedidoId, item.id), eq(referenciaPreco.aceita, true), ne(referenciaPreco.disponivel, false), sql`${referenciaPreco.precoUnitario} is not null`));
-    const qtd = Number(item.quantidade);
-    const medianaRef = ref?.mediana ? Number(ref.mediana) : null;
-    linhas.push({
-      itemId: item.id,
-      pedidoId: p.id,
-      descricao: item.descricao,
-      quantidade: qtd,
-      unidade: item.unidade,
-      fornecedor: escolhida?.oferta.fornecedorNome ?? null,
-      simulado: escolhida?.oferta.simulado ?? false,
-      custo: escolhida?.custo ?? null,
-      produto: escolhida?.produto ?? null,
-      maisCaraCusto: maisCara?.custo ?? null,
-      maisCaraNome: maisCara?.oferta.fornecedorNome ?? null,
-      validas: c?.validas.length ?? 0,
-      referenciaProduto: medianaRef !== null ? Math.round(medianaRef * qtd * 100) / 100 : null,
-      referenciaLojas: ref?.n ?? 0,
-      minutos: Math.round((item.atualizadoEm.getTime() - p.criadoEm.getTime()) / 60_000),
-      produtoAntesNegociar: escolhida?.oferta.produtoAnterior ?? null,
-    });
-  }
-
-  const [ia] = await db.select({ chamadas: sql<number>`count(*)::int`, tokens: sql<number>`coalesce(sum(coalesce(${usoIa.tokensEntrada},0) + coalesce(${usoIa.tokensSaida},0)),0)::int`, falhas: sql<number>`count(*) filter (where not ${usoIa.ok})::int` }).from(usoIa);
-  const [msgs] = await db.select({ entrada: sql<number>`count(*) filter (where ${mensagem.direcao} = 'entrada')::int`, saida: sql<number>`count(*) filter (where ${mensagem.direcao} = 'saida')::int` }).from(mensagem);
-  const [cots] = await db.select({ n: sql<number>`count(*)::int` }).from(cotacao);
-  return { linhas, ia: ia!, mensagens: msgs!, cotacoes: cots?.n ?? 0 };
 }
 
 /** E3: conversa do chat web de um navegador: as 300 mensagens mais recentes, em ordem. */

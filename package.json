@@ -26,7 +26,8 @@
     "convidar": "node --env-file=.env scripts/convidar.ts",
     "anexo:testar": "node --env-file=.env scripts/testar-anexo.ts",
     "seguranca:testar": "node --env-file=.env scripts/testar-seguranca.ts",
-    "voz:testar": "node --env-file=.env scripts/testar-voz.ts"
+    "voz:testar": "node --env-file=.env scripts/testar-voz.ts",
+    "mock:dashboard": "node --env-file=.env scripts/mock-dashboard.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.113",

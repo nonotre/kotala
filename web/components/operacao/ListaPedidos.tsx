@@ -80,7 +80,7 @@ function textoItens(n: number) {
 
 /** Itens, obra, prazo, setor e urgência, numa linha só. */
 function LinhaDeApoio({ l }: { l: LinhaPedido }) {
-  const partes = [textoItens(l.itens), l.destino, l.prazoTexto, l.setor].filter(Boolean);
+  const partes = [l.dono ?? "Sem dono", textoItens(l.itens), l.destino, l.prazoTexto, l.setor].filter(Boolean);
   return (
     <>
       {partes.join(" · ")}

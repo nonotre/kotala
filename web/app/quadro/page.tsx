@@ -26,6 +26,7 @@ export default async function PaginaQuadro({ searchParams }: { searchParams: Pro
           estadoPedido: x.estadoPedido,
           coluna: x.coluna,
           etiquetas: x.etiquetas,
+          dono: x.dono,
         }),
       ),
     ]),

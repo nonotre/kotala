@@ -7,7 +7,8 @@ import { Bloco } from "@/components/Bloco";
 import { EstadoVazio } from "@/components/EstadoVazio";
 import { CorpoPagina, GradePagina, Pagina } from "@/components/Pagina";
 import { AvisoDemonstracao, CabecalhoConta, Campo, plural } from "./Comum";
-import { CONTA_EXEMPLO, useConta } from "./demo";
+import { useConta } from "./demo";
+import { SuaConta } from "./SuaConta";
 import s from "./conta.module.scss";
 
 /** Visão geral: o que mais pesa na cotação é onde a compra chega. O resto é consulta. */
@@ -20,6 +21,11 @@ export function VisaoGeral() {
     <Pagina>
       <CabecalhoConta ativa="visao" />
       <CorpoPagina>
+        <GradePagina>
+          <Column sm={4} md={8} lg={16}>
+            <SuaConta />
+          </Column>
+        </GradePagina>
         <AvisoDemonstracao />
         <GradePagina>
           <Column sm={4} md={8} lg={16}>
@@ -83,10 +89,6 @@ export function VisaoGeral() {
             >
               <dl className={s.campos}>
                 <Campo rotulo="Empresa em uso" largo>{empresa.nome}</Campo>
-                <Campo rotulo="Sua conta" largo>
-                  {CONTA_EXEMPLO.nome}
-                  <span className={s.apoioLinha}>{CONTA_EXEMPLO.email}</span>
-                </Campo>
                 <Campo rotulo="Quem acessa" largo>{plural(pessoas, "pessoa", "pessoas")}</Campo>
               </dl>
             </Bloco>

@@ -106,7 +106,7 @@ export const pedidoCompleto = cache(async (id: number) => {
     };
   });
 
-  return { pedido: d.pedido, itens, linhaDoTempo: d.linhaDoTempo, fornecedores };
+  return { pedido: d.pedido, dono: d.dono, itens, linhaDoTempo: d.linhaDoTempo, fornecedores };
 });
 
 export type DadosPedido = NonNullable<Awaited<ReturnType<typeof pedidoCompleto>>>;
