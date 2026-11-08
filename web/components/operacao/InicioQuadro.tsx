@@ -1,11 +1,10 @@
 "use client";
-// Início: as cotações à esquerda, em quadro (?vista=quadro, padrão) ou em lista (?vista=lista),
-// e o painel de conversas fixo à direita (abaixo de lg, embaixo). A conversa aberta fica em ?c=.
+// Início: as cotações, em quadro (?vista=quadro, padrão) ou em lista (?vista=lista). As conversas com o
+// assistente voltaram a ser uma tela própria (Conversar, /chat), a pedido do dono.
 
 import { Column } from "@carbon/react";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
-import { TelaConversas } from "@/components/chat/TelaConversas";
+import { useState } from "react";
 import { GradePagina, Pagina } from "@/components/Pagina";
 import type { AvisoSerial, LinhaPedido } from "@/lib/dados-operacao";
 import { useGuardaVista } from "@/lib/ultima-vista";
@@ -34,11 +33,9 @@ type Props = {
   /** Só vem a base da vista aberta. */
   quadro?: DadosQuadro;
   linhas?: LinhaPedido[];
-  /** Link do bot do comprador no Telegram, para as conversas de lá. */
-  linkTelegram: string | null;
 };
 
-export function InicioQuadro({ vista, filtroInicial, mostrarCanceladas, avisos, quadro, linhas, linkTelegram }: Props) {
+export function InicioQuadro({ vista, filtroInicial, mostrarCanceladas, avisos, quadro, linhas }: Props) {
   const c = useSearchParams().get("c");
   // O filtro mora aqui para sobreviver à troca de vista: quem vai ao quadro e volta à lista a acha como deixou.
   // A lista grava o filtro no endereço sem tirar o resto (a conversa aberta, em `c`).
@@ -73,12 +70,6 @@ export function InicioQuadro({ vista, filtroInicial, mostrarCanceladas, avisos, 
             </Column>
           </GradePagina>
         </div>
-        <aside className={s.conversas} aria-label="Conversas">
-          {/* useSearchParams pede um Suspense em volta. */}
-          <Suspense>
-            <TelaConversas compacto linkTelegram={linkTelegram} />
-          </Suspense>
-        </aside>
       </div>
     </Pagina>
   );

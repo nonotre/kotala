@@ -116,3 +116,24 @@ test("R14b: resposta escrita à pergunta do prazo", async () => {
   assert.equal(escolhaEscrita("preciso de 10 sacos de cimento"), null);
   assert.equal(escolhaEscrita("estende ou encerra, tanto faz"), null);
 });
+
+test("Conversar: só as conversas da conta, Telegram à parte, e Nova conversa cria um chat novo dela", { skip: pular }, async () => {
+  const { db, schema } = m!;
+  const { conversasDoUsuario } = await import("../web/lib/dados-conversas.ts");
+  const { novaConversa } = await import("../web/lib/conversas.ts");
+  const [u] = await db.insert(schema.usuario).values({ login: `conv-${crypto.randomUUID()}`, nome: "Ana" }).returning();
+  const [outro] = await db.insert(schema.usuario).values({ login: `conv-${crypto.randomUUID()}`, nome: "Beto" }).returning();
+  await db.insert(schema.contato).values({ canal: "web", endereco: u!.id, papel: "comprador", usuarioId: u!.id });
+  await db.insert(schema.contato).values({ canal: "telegram", endereco: `tg-${crypto.randomUUID()}`, papel: "comprador", usuarioId: u!.id });
+  await db.insert(schema.contato).values({ canal: "web", endereco: outro!.id, papel: "comprador", usuarioId: outro!.id });
+  let l = await conversasDoUsuario(u!.id);
+  assert.equal(l.telegram.length, 1);
+  assert.equal(l.web.length, 1);
+  assert.equal(l.web[0]!.endereco, u!.id);
+  const r = await novaConversa(u!.id);
+  assert.ok(r.ok);
+  l = await conversasDoUsuario(u!.id);
+  assert.equal(l.web.length, 2);
+  assert.ok(l.web.some((w) => r.ok && w.contatoId === r.contatoId));
+  assert.ok(!l.web.some((w) => w.endereco === outro!.id), "nunca a conversa de outra pessoa");
+});

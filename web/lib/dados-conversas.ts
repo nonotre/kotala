@@ -1,5 +1,5 @@
-// Leitura das conversas dos compradores para a tela Conversas. Só leitura, como lib/dados.ts:
-// a tela escreve só na conversa do próprio navegador, por enviarChat() (lib/acoes.ts).
+// Leitura das conversas para a tela Conversar: só as da conta de quem entrou (conversasDoUsuario).
+// A tela escreve só nas conversas do site da própria pessoa, por enviarChat() (lib/acoes.ts).
 //
 // O endereço de um contato web é o que dá direito a escrever na conversa dele (é o que enviarChat recebe),
 // por isso nunca sai daqui: a lista leva só o final, e "meu" é marcado aqui, comparando com o endereço
@@ -78,69 +78,6 @@ function trechoDe(m: { direcao: "entrada" | "saida"; texto: string; anexos: { ti
   return m.direcao === "saida" ? `Assistente: ${t}` : t;
 }
 
-/**
- * As conversas dos compradores no chat web e no Telegram, da mais recente para a mais antiga.
- * Só entram as que têm mensagem, menos a de quem entrou (`meuEndereco`, o id do usuário), que entra sempre.
- */
-export async function listaConversas(meuEndereco?: string): Promise<ListaConversas> {
-  // A última mensagem de cada contato comprador (DISTINCT ON usa o índice contato_id, criado_em).
-  const ultimas = await db
-    .selectDistinctOn([mensagem.contatoId], {
-      contatoId: mensagem.contatoId,
-      canal: contato.canal,
-      endereco: contato.endereco,
-      nome: contato.nome,
-      usuarioId: contato.usuarioId,
-      nomeUsuario: usuario.nome,
-      direcao: mensagem.direcao,
-      texto: mensagem.texto,
-      anexos: mensagem.anexos,
-      criadoEm: mensagem.criadoEm,
-    })
-    .from(mensagem)
-    .innerJoin(contato, eq(contato.id, mensagem.contatoId))
-    .leftJoin(usuario, eq(usuario.id, contato.usuarioId))
-    .where(and(eq(contato.papel, "comprador"), inArray(contato.canal, [...CANAIS_CONVERSA])))
-    .orderBy(mensagem.contatoId, desc(mensagem.criadoEm));
-
-  const meu = meuEndereco && ehEnderecoWeb(meuEndereco) ? meuEndereco : null;
-  const saida: ListaConversas = { web: [], telegram: [] };
-  for (const u of ultimas.sort((a, b) => b.criadoEm.getTime() - a.criadoEm.getTime())) {
-    const canal = u.canal as CanalConversa;
-    saida[canal].push({
-      contatoId: u.contatoId,
-      canal,
-      nome: nomeDo(u),
-      meu: canal === "web" && u.endereco === meu,
-      seu: !!meu && (u.usuarioId === meu || (canal === "web" && u.endereco === meu)),
-      trecho: trechoDe(u),
-      ultimaEm: u.criadoEm.toISOString(),
-    });
-  }
-
-  // O Telegram ligado à conta (o espelho) aparece mesmo antes da primeira mensagem, e vem primeiro na lista dele.
-  if (meu && ehUuid(meu) && !saida.telegram.some((i) => i.seu)) {
-    const ligados = await db
-      .select({ id: contato.id, nome: contato.nome, endereco: contato.endereco, nomeUsuario: usuario.nome })
-      .from(contato)
-      .innerJoin(usuario, eq(usuario.id, contato.usuarioId))
-      .where(and(eq(contato.canal, "telegram"), eq(contato.papel, "comprador"), eq(contato.usuarioId, meu)));
-    for (const t of ligados) saida.telegram.push({ contatoId: t.id, canal: "telegram", nome: nomeDo(t), meu: false, seu: true, trecho: null, ultimaEm: null });
-  }
-  saida.telegram.sort((a, b) => Number(b.seu) - Number(a.seu));
-
-  // A de quem entrou sem mensagens ainda (o contato pode existir, com nome, ou nem existir).
-  if (meu && !saida.web.some((i) => i.meu)) {
-    const [c] = await db
-      .select({ id: contato.id, nome: contato.nome, endereco: contato.endereco })
-      .from(contato)
-      .where(and(eq(contato.canal, "web"), eq(contato.endereco, meu), eq(contato.papel, "comprador")));
-    if (c) saida.web.unshift({ contatoId: c.id, canal: "web", nome: nomeDo(c), meu: true, seu: true, trecho: null, ultimaEm: null });
-  }
-
-  return { web: saida.web.slice(0, MAXIMO_NA_LISTA), telegram: saida.telegram.slice(0, MAXIMO_NA_LISTA) };
-}
-
 /** Uma conversa de comprador (web ou Telegram), pelo id do contato: as 300 mensagens mais recentes, em ordem. */
 export async function conversaDoContato(contatoId: string): Promise<ConversaAberta | null> {
   if (!ehUuid(contatoId)) return null;
@@ -176,5 +113,42 @@ export async function conversaDoContato(contatoId: string): Promise<ConversaAber
       anexos: (m.anexos ?? []).map((a) => ({ tipo: a.tipo, nome: a.nome ?? null })),
       naoEntregue: m.direcao === "saida" && (m.situacao === "falhou" || m.situacao === "bloqueada_parar"),
     })),
+  };
+}
+
+// ---------- As conversas de quem entrou (tela Conversar) ----------
+
+/** Uma conversa do usuário no site: dá para escrever nela, pelo endereço (que só vai ao próprio dono). */
+export type ConversaWebDoUsuario = ItemConversa & { endereco: string };
+
+export type ConversasDoUsuario = { telegram: ItemConversa[]; web: ConversaWebDoUsuario[] };
+
+/**
+ * Só as conversas ligadas à conta (contato.usuario_id): o Telegram dela (o espelho, só leitura) e as
+ * conversas do site, da mais recente para a mais antiga, inclusive as ainda sem mensagem.
+ */
+export async function conversasDoUsuario(usuarioId: string): Promise<ConversasDoUsuario> {
+  if (!ehUuid(usuarioId)) return { telegram: [], web: [] };
+  const contatos = await db
+    .select({ id: contato.id, canal: contato.canal, nome: contato.nome, endereco: contato.endereco, criadoEm: contato.criadoEm, nomeUsuario: usuario.nome })
+    .from(contato)
+    .innerJoin(usuario, eq(usuario.id, contato.usuarioId))
+    .where(and(eq(contato.usuarioId, usuarioId), eq(contato.papel, "comprador"), inArray(contato.canal, [...CANAIS_CONVERSA])));
+  if (!contatos.length) return { telegram: [], web: [] };
+  const ultimas = await db
+    .selectDistinctOn([mensagem.contatoId], { contatoId: mensagem.contatoId, direcao: mensagem.direcao, texto: mensagem.texto, anexos: mensagem.anexos, criadoEm: mensagem.criadoEm })
+    .from(mensagem)
+    .where(inArray(mensagem.contatoId, contatos.map((c) => c.id)))
+    .orderBy(mensagem.contatoId, desc(mensagem.criadoEm));
+  const ultimaDe = new Map(ultimas.map((u) => [u.contatoId, u]));
+  const quando = (c: (typeof contatos)[number]) => (ultimaDe.get(c.id)?.criadoEm ?? c.criadoEm).getTime();
+  const ordenados = [...contatos].sort((a, b) => quando(b) - quando(a));
+  const item = (c: (typeof contatos)[number]): ItemConversa => {
+    const u = ultimaDe.get(c.id);
+    return { contatoId: c.id, canal: c.canal as CanalConversa, nome: nomeDo(c), meu: c.canal === "web", seu: true, trecho: u ? trechoDe(u) : null, ultimaEm: u ? u.criadoEm.toISOString() : null };
+  };
+  return {
+    telegram: ordenados.filter((c) => c.canal === "telegram").map(item),
+    web: ordenados.filter((c) => c.canal === "web").map((c) => ({ ...item(c), endereco: c.endereco })),
   };
 }

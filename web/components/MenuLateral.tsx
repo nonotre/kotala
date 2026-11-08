@@ -1,7 +1,7 @@
 "use client";
 
 import { SideNav, SideNavDivider, SideNavItems, SideNavLink } from "@carbon/react";
-import { Analytics, DataBase, Home, Logout, QrCode, Security, Settings } from "@carbon/react/icons";
+import { Analytics, Chat, DataBase, Home, Logout, QrCode, Security, Settings } from "@carbon/react/icons";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { sair as sairDaConta } from "./conta/sessao";
@@ -9,8 +9,11 @@ import s from "./casca.module.scss";
 
 type Item = { href: string; rotulo: string; icone: typeof Home };
 
-// O trabalho todo mora no Início: as cotações (quadro e lista) e as conversas.
-const TRABALHO: Item[] = [{ href: "/", rotulo: "Início", icone: Home }];
+// O trabalho: as cotações no Início (quadro e lista) e as conversas com o assistente em Conversar.
+const TRABALHO: Item[] = [
+  { href: "/", rotulo: "Início", icone: Home },
+  { href: "/chat", rotulo: "Conversar", icone: Chat },
+];
 
 const CONSULTA: Item[] = [
   { href: "/fornecedores", rotulo: "Base de Dados", icone: DataBase },
@@ -20,13 +23,14 @@ const CONSULTA: Item[] = [
 ];
 
 /** Endereços antigos que redirecionam para o Início. */
-const ANTIGOS_DO_INICIO = ["/pedidos", "/quadro", "/conversas", "/chat"];
+const ANTIGOS_DO_INICIO = ["/pedidos", "/quadro"];
 
 function ativo(rota: string, href: string) {
   // Uma cotação é aberta a partir do Início, e a ligação por voz é de uma cotação.
   if (href === "/") return rota === "/" || ANTIGOS_DO_INICIO.includes(rota) || rota.startsWith("/pedidos/") || rota.startsWith("/voz/");
   // Base de Dados: as abas Fornecedores e Itens, e a ficha de cada fornecedor.
   if (href === "/fornecedores") return rota === "/fornecedores" || rota.startsWith("/fornecedores/") || rota === "/itens";
+  if (href === "/chat") return rota === "/chat" || rota === "/conversas";
   return rota === href || rota.startsWith(`${href}/`);
 }
 

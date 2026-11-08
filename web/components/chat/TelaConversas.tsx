@@ -1,20 +1,18 @@
 "use client";
-// Conversas: a lista à esquerda e a conversa aberta à direita. Abaixo de md, uma de cada vez.
-// `compacto` (a lateral do Início): sempre uma de cada vez. Abre na conversa deste navegador, e o botão
-// "Conversas" do topo mostra a lista.
-// A conversa de quem entrou é a única em que dá para escrever (o chat da Carbon, com envio);
-// as outras, do chat web e do Telegram, abrem só para ler. O Telegram ligado à conta (Frente 2) aparece
-// como "Seu Telegram": é o espelho dele. A escolha fica na URL (?c=<contato>), junto com o que a tela
-// já tinha nela, para dar para mandar o link. Todos veem as conversas de todos, como os cards.
+// Conversar (/chat): a coluna de conversas à esquerda e a conversa aberta à direita; abaixo de md, uma de
+// cada vez. Só as conversas da conta de quem entrou (Frente 2): primeiro o Telegram ligado a ela (o espelho,
+// só leitura, com "Continuar no Telegram"), depois as conversas do site, em que se escreve. "Nova conversa"
+// abre um chat novo e limpo com o assistente; as anteriores ficam na lista. A escolha fica na URL (?c=<contato>).
 
-import { SkeletonText, Tag } from "@carbon/react";
-import { ArrowLeft, ListBulleted } from "@carbon/react/icons";
+import { Button, SkeletonText, Tag } from "@carbon/react";
+import { Add, ArrowLeft } from "@carbon/react/icons";
 import NextLink from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, useTransition } from "react";
 import { useSessao } from "@/components/conta/sessao";
 import { useCelular } from "@/components/useCelular";
-import type { ItemConversa, ListaConversas } from "@/lib/dados-conversas";
+import { novaConversa } from "@/lib/conversas";
+import type { ConversasDoUsuario, ItemConversa } from "@/lib/dados-conversas";
 import { ChatWeb } from "./ChatWeb";
 import { ConversaLeitura } from "./ConversaLeitura";
 import { horaCompleta, horaRelativa } from "./tempo";
@@ -22,15 +20,13 @@ import s from "./conversas.module.scss";
 
 /** A lista muda devagar: a conversa aberta já tem a própria consulta, mais rápida. */
 const INTERVALO_LISTA_MS = 5000;
-/** Na URL, a conversa deste navegador antes de ela existir no banco. */
-const ESTE = "este";
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function useLista(endereco: string | null) {
-  const [lista, setLista] = useState<ListaConversas | null>(null);
+function useLista(usuarioId: string | null) {
+  const [lista, setLista] = useState<ConversasDoUsuario | null>(null);
   const [falhou, setFalhou] = useState(false);
+  const [versao, setVersao] = useState(0);
   useEffect(() => {
-    if (!endereco) return;
+    if (!usuarioId) return;
     let vivo = true;
     // Com a guia escondida, a consulta para; a primeira vai sempre.
     let primeira = true;
@@ -38,9 +34,9 @@ function useLista(endereco: string | null) {
       if (!primeira && document.visibilityState !== "visible") return;
       primeira = false;
       try {
-        const r = await fetch(`/api/conversas?endereco=${encodeURIComponent(endereco)}`, { cache: "no-store" });
+        const r = await fetch(`/api/conversas?usuario=${encodeURIComponent(usuarioId)}`, { cache: "no-store" });
         if (!r.ok) throw new Error(String(r.status));
-        const nova = (await r.json()) as ListaConversas;
+        const nova = (await r.json()) as ConversasDoUsuario;
         if (vivo) {
           setLista(nova);
           setFalhou(false);
@@ -55,67 +51,50 @@ function useLista(endereco: string | null) {
       vivo = false;
       clearInterval(t);
     };
-  }, [endereco]);
-  return { lista, falhou };
+  }, [usuarioId, versao]);
+  return { lista, falhou, recarregar: () => setVersao((v) => v + 1) };
 }
 
-type PropsItem = { item: ItemConversa; href: string; aberto: boolean; aoEscolher?: () => void };
-/** Para onde vai o foco depois da troca de lista e conversa feita aqui; na conversa, só quando o `c` já for o dela. */
-type Foco = { alvo: "lista" } | { alvo: "conversa"; contato: string | null };
+/** Nome da conversa do site na lista: a data da última mensagem (o trecho dela vai embaixo). */
+function nomeDaConversa(i: ItemConversa, n: number, total: number): string {
+  if (total === 1) return "Conversa com o assistente";
+  return i.ultimaEm ? `Conversa de ${new Date(i.ultimaEm).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}` : `Conversa ${total - n}`;
+}
 
-function Item({ item, href, aberto, aoEscolher }: PropsItem) {
+function Item({ item, nome, href, aberto, marca }: { item: ItemConversa; nome: string; href: string; aberto: boolean; marca?: string }) {
   return (
     <li>
-      {/* Sem rolar a página: no Início, quem escolhe uma conversa na lateral não perde o lugar nas cotações. */}
-      <NextLink href={href} scroll={false} onClick={aoEscolher} className={s.item} aria-current={aberto ? "page" : undefined}>
+      <NextLink href={href} scroll={false} className={s.item} aria-current={aberto ? "page" : undefined}>
         <span className={s.itemTopo}>
-          <span className={s.itemNome}>{item.nome}</span>
+          <span className={s.itemNome}>{nome}</span>
           {item.ultimaEm ? (
             <time className={s.itemHora} dateTime={item.ultimaEm} title={horaCompleta(item.ultimaEm)}>
               {horaRelativa(item.ultimaEm)}
             </time>
           ) : null}
         </span>
-        {item.meu ? (
-          <Tag type="blue" size="sm" className={s.itemMarca}>
-            Você
-          </Tag>
-        ) : item.seu ? (
+        {marca ? (
           <Tag type="cyan" size="sm" className={s.itemMarca}>
-            Seu Telegram
+            {marca}
           </Tag>
         ) : null}
-        <span className={s.itemTrecho}>{item.trecho ?? "Nenhuma mensagem ainda. Escreva aqui."}</span>
+        <span className={s.itemTrecho}>{item.trecho ?? (item.canal === "web" ? "Nenhuma mensagem ainda. Escreva aqui." : "Nenhuma mensagem ainda.")}</span>
       </NextLink>
     </li>
   );
 }
 
-/** Item da conversa deste navegador antes de ela existir no banco (nada foi escrito ainda). */
-const MEU_VAZIO: ItemConversa = { contatoId: "", canal: "web", nome: "Você", meu: true, seu: true, trecho: null, ultimaEm: null };
-
-type Props = {
-  linkTelegram: string | null;
-  /** Para uma coluna estreita: lista e conversa alternadas em qualquer largura, e o chat em modo painel. */
-  compacto?: boolean;
-};
-
-export function TelaConversas({ linkTelegram, compacto = false }: Props) {
+export function TelaConversas({ linkTelegram }: { linkTelegram: string | null }) {
   const busca = useSearchParams();
   const rota = usePathname();
+  const router = useRouter();
   const c = busca.get("c");
   const celular = useCelular();
-  // O endereço do chat web de quem entrou é o id do usuário (src/contas.ts).
   const sessao = useSessao();
-  const { lista, falhou } = useLista(sessao?.id ?? null);
-  // No modo compacto, a lista é aberta pelo botão do topo e vale só para a conversa em que foi aberta:
-  // mudou o `c` (escolheu outra, ou o voltar do navegador), a lista fecha. `false` é fechada.
-  const [listaAbertaEm, setListaAbertaEm] = useState<string | null | false>(false);
-  const focarDepois = useRef<Foco | null>(null);
-  const tituloLista = useRef<HTMLHeadingElement>(null);
-  const aberta = useRef<HTMLDivElement>(null);
+  const { lista, falhou, recarregar } = useLista(sessao?.id ?? null);
+  const [criando, iniciar] = useTransition();
+  const [erro, setErro] = useState<string | null>(null);
 
-  /** Mesmo endereço, com outra conversa (ou nenhuma): o resto da URL (vista, filtro) fica como está. */
   const hrefCom = (contato: string | null) => {
     const p = new URLSearchParams(busca.toString());
     if (contato) p.set("c", contato);
@@ -124,156 +103,134 @@ export function TelaConversas({ linkTelegram, compacto = false }: Props) {
     return q ? `${rota}?${q}` : rota;
   };
 
-  const meu = lista?.web.find((i) => i.meu) ?? MEU_VAZIO;
-  const outrasWeb = lista?.web.filter((i) => !i.meu) ?? [];
-  // No compacto, a deste navegador é a que abre sem escolha: o endereço dela não leva `c`.
-  const hrefMeu = compacto ? hrefCom(null) : hrefCom(meu.contatoId || ESTE);
-  const total = lista ? lista.web.length + lista.telegram.length : null;
+  const web = lista?.web ?? [];
+  const telegram = lista?.telegram ?? [];
+  // Sem escolha, abre a conversa do site mais recente.
+  const aberta = c ? [...web, ...telegram].find((i) => i.contatoId === c) : web[0];
+  const abertaWeb = aberta?.canal === "web" ? web.find((w) => w.contatoId === aberta.contatoId) : undefined;
+  const vista = celular && !c ? "lista" : "conversa";
 
-  // Qual conversa abre. Sem escolha, a deste navegador (abaixo de md, a lista).
-  // Um id só é a deste navegador depois que a lista disse qual é: até lá, espera.
-  const ehMeu = !c || c === ESTE || (!!meu.contatoId && c === meu.contatoId);
-  const esperandoLista = !ehMeu && !lista && UUID.test(c ?? "");
-  const vista = compacto ? (listaAbertaEm !== false && listaAbertaEm === c ? "lista" : "conversa") : celular && !c ? "lista" : "conversa";
+  const criar = () =>
+    iniciar(async () => {
+      if (!sessao) return;
+      setErro(null);
+      const r = await novaConversa(sessao.id);
+      if (!r.ok) {
+        setErro(r.erro);
+        return;
+      }
+      recarregar();
+      router.push(hrefCom(r.contatoId), { scroll: false });
+    });
 
-  // A conversa espera o endereço novo: o chat deste navegador, ao sair, leva o foco junto.
-  useEffect(() => {
-    const f = focarDepois.current;
-    if (f?.alvo === "lista" && vista === "lista") {
-      focarDepois.current = null;
-      tituloLista.current?.focus();
-    }
-    if (f?.alvo === "conversa" && vista === "conversa" && c === f.contato) {
-      focarDepois.current = null;
-      aberta.current?.focus();
-    }
-  }, [vista, c]);
-
-  const abrirLista = () => {
-    focarDepois.current = { alvo: "lista" };
-    setListaAbertaEm(c);
-  };
-  const escolher = (contato: string | null) => () => {
-    focarDepois.current = { alvo: "conversa", contato };
-    setListaAbertaEm(false);
-  };
-
-  // No compacto, o botão do topo abre a lista. Na conversa deste navegador, aberta sem escolha, ele leva a contagem;
-  // numa conversa escolhida na lista, é o caminho de volta a ela.
-  const voltar = compacto ? (
-    <button type="button" className={s.voltar} onClick={abrirLista}>
-      {c ? <ArrowLeft size={20} aria-hidden="true" /> : <ListBulleted size={20} aria-hidden="true" />}
-      Conversas
-      {!c && total ? (
-        <span className={s.contagem}>
-          <span className={s.somenteLeitor}>, </span>
-          {total}
-        </span>
-      ) : null}
-    </button>
-  ) : (
+  const voltar = (
     <NextLink href={hrefCom(null)} className={s.voltar}>
       <ArrowLeft size={20} aria-hidden="true" />
       Conversas
     </NextLink>
   );
-  const Titulo = compacto ? "h2" : "h1";
-  const TituloSecao = compacto ? "h3" : "h2";
 
   let painel = null;
-  if (vista === "conversa") {
-    if (ehMeu) {
-      painel = (
-        <div className={s.painel}>
-          <header className={s.painelTopo}>
-            {voltar}
-            <div className={s.painelTitulos}>
-              <h2 className={s.painelTitulo}>{meu.nome}</h2>
-              <p className={s.painelContexto}>Seu chat com o assistente: você escreve aqui</p>
-            </div>
-          </header>
-          <div className={s.painelCorpo}>
-            <ChatWeb modo={compacto ? "painel" : "pagina"} />
-          </div>
+  if (!lista) {
+    painel = (
+      <div className={s.painel} aria-hidden="true">
+        <div className={s.mensagensCarregando}>
+          <SkeletonText paragraph lineCount={4} />
         </div>
-      );
-    } else if (esperandoLista) {
-      painel = (
-        <div className={s.painel} aria-hidden="true">
-          <div className={s.mensagensCarregando}>
-            <SkeletonText paragraph lineCount={4} />
+      </div>
+    );
+  } else if (abertaWeb) {
+    painel = (
+      <div className={s.painel}>
+        <header className={s.painelTopo}>
+          {celular ? voltar : null}
+          <div className={s.painelTitulos}>
+            <h2 className={s.painelTitulo}>{nomeDaConversa(abertaWeb, web.indexOf(abertaWeb), web.length)}</h2>
+            <p className={s.painelContexto}>Seu chat com o assistente: você escreve aqui</p>
           </div>
+        </header>
+        <div className={s.painelCorpo}>
+          <ChatWeb endereco={abertaWeb.endereco} />
         </div>
-      );
-    } else {
-      painel = (
-        <ConversaLeitura
-          contatoId={c ?? ""}
-          linkTelegram={linkTelegram}
-          seu={!!lista?.telegram.some((i) => i.contatoId === c && i.seu)}
-          voltar={voltar}
-          verConversas={compacto ? { aoClicar: abrirLista } : { href: hrefCom(null) }}
-          hrefDeste={hrefMeu}
-          aoIrParaDeste={compacto ? escolher(null) : undefined}
-        />
-      );
-    }
+      </div>
+    );
+  } else if (aberta) {
+    painel = (
+      <ConversaLeitura
+        contatoId={aberta.contatoId}
+        linkTelegram={linkTelegram}
+        seu
+        voltar={celular ? voltar : undefined}
+        verConversas={{ href: hrefCom(null) }}
+        hrefDeste={hrefCom(web[0]?.contatoId ?? null)}
+      />
+    );
+  } else {
+    painel = (
+      <div className={s.painel}>
+        <p className={s.painelVazio}>Nenhuma conversa aberta. Comece uma pelo botão &quot;Nova conversa&quot;.</p>
+      </div>
+    );
   }
 
   return (
-    <div className={s.tela} data-vista={vista} data-compacto={compacto ? "" : undefined}>
+    <div className={s.tela} data-vista={vista}>
       <nav className={s.lista} aria-labelledby="titulo-conversas">
-        {/* No compacto, recebe o foco quando o botão "Conversas" abre a lista. */}
-        <Titulo id="titulo-conversas" ref={tituloLista} tabIndex={-1} className={s.somenteLeitor}>
-          Conversas
-        </Titulo>
+        <div className={s.listaTopo}>
+          <h1 id="titulo-conversas" className={s.listaTitulo}>
+            Conversas
+          </h1>
+          <Button kind="primary" size="sm" renderIcon={Add} onClick={criar} disabled={criando || !sessao}>
+            Nova conversa
+          </Button>
+        </div>
+        {erro ? (
+          <p className={s.nota} role="alert">
+            {erro}
+          </p>
+        ) : null}
         {falhou ? (
           <p className={s.nota} role="status">
             Não deu para atualizar a lista. Tentando de novo…
           </p>
         ) : null}
 
-        <section className={s.secao} aria-labelledby="secao-web">
-          <TituloSecao id="secao-web" className={s.secaoTitulo}>
-            Conversas
-          </TituloSecao>
-          <ul className={s.itens}>
-            <Item item={meu} href={hrefMeu} aberto={(compacto || vista === "conversa") && ehMeu} aoEscolher={compacto ? escolher(null) : undefined} />
-            {outrasWeb.map((i) => (
-              <Item key={i.contatoId} item={i} href={hrefCom(i.contatoId)} aberto={c === i.contatoId} aoEscolher={compacto ? escolher(i.contatoId) : undefined} />
-            ))}
-          </ul>
-          {!lista && !falhou ? (
-            <div className={s.listaCarregando} aria-hidden="true">
-              <SkeletonText paragraph lineCount={3} />
-            </div>
-          ) : null}
-        </section>
-
-        <section className={s.secao} aria-labelledby="secao-telegram">
-          <TituloSecao id="secao-telegram" className={s.secaoTitulo}>
-            Conversas Telegram
-          </TituloSecao>
-          {lista?.telegram.length ? (
+        {telegram.length ? (
+          <section className={s.secao} aria-labelledby="secao-telegram">
+            <h2 id="secao-telegram" className={s.secaoTitulo}>
+              Telegram
+            </h2>
             <ul className={s.itens}>
-              {lista.telegram.map((i) => (
-                <Item key={i.contatoId} item={i} href={hrefCom(i.contatoId)} aberto={c === i.contatoId} aoEscolher={compacto ? escolher(i.contatoId) : undefined} />
+              {telegram.map((i) => (
+                <Item key={i.contatoId} item={i} nome="Seu Telegram" marca="Só leitura" href={hrefCom(i.contatoId)} aberto={aberta?.contatoId === i.contatoId} />
               ))}
             </ul>
-          ) : lista ? (
-            <p className={s.nota}>Nenhum comprador falou com o bot do Telegram ainda.</p>
+          </section>
+        ) : null}
+
+        <section className={s.secao} aria-labelledby="secao-web">
+          <h2 id="secao-web" className={s.secaoTitulo}>
+            No site
+          </h2>
+          {lista ? (
+            web.length ? (
+              <ul className={s.itens}>
+                {web.map((i, n) => (
+                  <Item key={i.contatoId} item={i} nome={nomeDaConversa(i, n, web.length)} href={hrefCom(i.contatoId)} aberto={aberta?.contatoId === i.contatoId} />
+                ))}
+              </ul>
+            ) : (
+              <p className={s.nota}>Nenhuma conversa no site ainda.</p>
+            )
           ) : (
             <div className={s.listaCarregando} aria-hidden="true">
-              <SkeletonText paragraph lineCount={2} />
+              <SkeletonText paragraph lineCount={3} />
             </div>
           )}
         </section>
       </nav>
 
-      {/* No compacto, recebe o foco quando uma conversa é escolhida na lista. */}
-      <div ref={aberta} className={s.aberta} tabIndex={compacto ? -1 : undefined}>
-        {painel}
-      </div>
+      <div className={s.aberta}>{painel}</div>
     </div>
   );
 }

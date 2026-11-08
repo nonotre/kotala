@@ -2,6 +2,14 @@
 
 Registro curto das decisões que mudam o escopo ou o desenho. A mais nova fica no topo.
 
+## 08/11/2026 · Conversar volta a ser uma tela própria
+
+**Situação:** implementado. Pedido do dono, depois da junção da Frente 1.
+
+- O chat sai da lateral do Início e volta a ser a tela Conversar (`/chat`, no menu). O Início fica só com as cotações (quadro e lista).
+- Cada pessoa vê só as conversas da própria conta: à esquerda, o Telegram ligado a ela primeiro (o espelho, só leitura, com "Continuar no Telegram") e depois as conversas do site; à direita, a conversa aberta.
+- "Nova conversa" abre um chat novo e limpo com o assistente (um contato web novo, ligado à conta); as anteriores ficam na lista. Botão de pedido só vale na conversa que o criou (o fluxo confere o dono), então os pedidos de outra conversa aparecem com o link da tela.
+
 ## 08/11/2026 · Revisão do chat da Ester (revisaodochat.md)
 
 **Situação:** implementado no `main` (sem teste com a IA real de ponta a ponta).

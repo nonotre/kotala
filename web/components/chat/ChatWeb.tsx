@@ -21,8 +21,10 @@ const Conversa = dynamic(() => import("./Conversa").then((m) => m.Conversa), {
  * usuário tem o seu chat; trocar de conta troca a conversa). Ocupa a altura do elemento pai.
  * `painel` é a versão compacta, para uma coluna lateral.
  */
-export function ChatWeb({ modo = "pagina" }: { modo?: ModoConversa }) {
+export function ChatWeb({ modo = "pagina", endereco }: { modo?: ModoConversa; endereco?: string }) {
   const sessao = useSessao();
   if (!sessao) return null;
-  return <Conversa key={sessao.id} endereco={sessao.id} modo={modo} />;
+  // Sem endereço, a conversa principal da pessoa (o endereço é o id do usuário); com ele, uma das "Nova conversa".
+  const e = endereco ?? sessao.id;
+  return <Conversa key={e} endereco={e} modo={modo} />;
 }

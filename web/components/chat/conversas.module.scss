@@ -450,3 +450,19 @@ $largura-conversa: calc(#{spacing.$spacing-13} * 4);
   flex: 1 1 16rem;
   color: theme.$text-secondary;
 }
+
+// Conversar: o topo da coluna, com o título e o botão "Nova conversa".
+.listaTopo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: spacing.$spacing-03;
+  padding: spacing.$spacing-05;
+}
+
+.listaTitulo {
+  @include type.type-style('heading-03');
+
+  margin: 0;
+}

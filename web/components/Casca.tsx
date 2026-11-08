@@ -25,6 +25,7 @@ const NOMES_ROTA: Record<string, string> = {
   "/itens": "Base de Dados, Itens",
   "/conduta": "Alertas de conduta",
   "/economia": "Economia",
+  "/chat": "Conversar",
   "/dashboard": "Dashboard",
   "/avisos": "Avisos",
   "/convite": "Convite",
