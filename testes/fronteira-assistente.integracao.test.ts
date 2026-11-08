@@ -65,3 +65,24 @@ test("item fora da base ganha categoria pelas palavras; base vence a dedução; 
   assert.equal(categoriaDoItem({ itemChave: null, descricao: "Coisa estranha qualquer" }), null);
   assert.equal(categoriaDoItem({ itemChave: null, descricao: "Clips de papel", categoria: "Limpeza" }), "Limpeza", "a gravada vale mais");
 });
+
+test("aviso de conduta vai ao usuário gestor (Telegram antes do web), nunca ao próprio comprador", { skip: pular }, async () => {
+  const { db, schema } = m!;
+  const { contatosDosGestores } = await import("../src/agentes/guardrail/rastro.ts");
+  const { eq } = await import("drizzle-orm");
+  // Outros testes podem ter deixado gestores: começa sem nenhum.
+  await db.update(schema.usuario).set({ papel: "comprador" }).where(eq(schema.usuario.papel, "gestor"));
+  const antes = process.env.GESTOR_CONTATO_ID;
+  process.env.GESTOR_CONTATO_ID = "";
+  try {
+    assert.deepEqual(await contatosDosGestores(), []);
+    const [u] = await db.insert(schema.usuario).values({ login: `gestor-${crypto.randomUUID()}`, nome: "Gestora", papel: "gestor" }).returning();
+    const [web] = await db.insert(schema.contato).values({ canal: "web", endereco: `g-web-${crypto.randomUUID()}`, papel: "comprador", usuarioId: u!.id }).returning();
+    assert.deepEqual(await contatosDosGestores(), [web!.id]);
+    const [tg] = await db.insert(schema.contato).values({ canal: "telegram", endereco: `g-tg-${crypto.randomUUID()}`, papel: "comprador", usuarioId: u!.id }).returning();
+    assert.deepEqual(await contatosDosGestores(), [tg!.id]);
+  } finally {
+    process.env.GESTOR_CONTATO_ID = antes;
+    await db.update(schema.usuario).set({ papel: "comprador" }).where(eq(schema.usuario.papel, "gestor"));
+  }
+});

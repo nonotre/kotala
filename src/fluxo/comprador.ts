@@ -112,6 +112,7 @@ export function textoConfirmacao(p: {
   id: number;
   setor?: string | null;
   entregas?: string | null;
+  pagamento?: string | null;
   itens: ItemResumo[];
   destino: string | null;
   cep?: string | null;
@@ -140,7 +141,8 @@ export function textoConfirmacao(p: {
     : "não informado";
   linhas.push(`Prazo: ${prazo}`);
   if (p.entregas) linhas.push(`Entregas: ${p.entregas}`);
-  if (p.urgencia === "obra_parada") linhas.push("Obra parada: o prazo pesa mais que o preço.");
+  if (p.pagamento) linhas.push(`Pagamento preferido: ${p.pagamento}`);
+  if (p.urgencia === "obra_parada") linhas.push("Operação parada: o prazo pesa mais que o preço.");
   else if (p.urgencia === "urgente") linhas.push("Urgente.");
   if (p.suposicoes.length) {
     linhas.push("", "Considerei:");
@@ -208,6 +210,7 @@ export async function interpretarEResponder(pedidoId: number, opcoes: { lida?: L
         setor: p.setor,
         prazoTexto: p.prazoTexto,
         entregas: p.entregas,
+        pagamento: p.pagamentoPreferido,
       }
     : undefined;
   let lida = opcoes.lida;
@@ -352,6 +355,7 @@ export async function interpretarEResponder(pedidoId: number, opcoes: { lida?: L
     urgencia: i.urgencia,
     setor: i.setor ?? p.setor,
     entregas: i.entregas ?? p.entregas,
+    pagamentoPreferido: i.pagamento ?? p.pagamentoPreferido,
     faltando: i.faltando,
     suposicoes: i.suposicoes,
     perguntasFeitas: p.perguntasFeitas + (perguntar ? 1 : 0),
@@ -380,6 +384,7 @@ export async function interpretarEResponder(pedidoId: number, opcoes: { lida?: L
     cep: i.cep,
     setor: i.setor ?? p.setor,
     entregas: i.entregas ?? p.entregas,
+    pagamento: i.pagamento ?? p.pagamentoPreferido,
     prazoTexto: i.prazoTexto,
     prazoMaxDias: i.prazoDias,
     urgencia: i.urgencia,
@@ -526,6 +531,7 @@ async function mostrarConfirmacao(pedidoId: number, antes = "") {
     cep: p.cep,
     setor: p.setor,
     entregas: p.entregas,
+    pagamento: p.pagamentoPreferido,
     prazoTexto: p.prazoTexto,
     prazoMaxDias: p.prazoMaxDias,
     urgencia: p.urgencia,

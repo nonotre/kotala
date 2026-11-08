@@ -35,12 +35,14 @@ test("confirmação mostra itens, prazo, suposições e perguntas", () => {
     janelaRecebimento: null,
     suposicoes: ["Saco de 50 kg"],
     perguntas: ["Quantas carradas de areia?"],
+    pagamento: "pix",
   });
   assert.match(t, /1\. 40 sacos de Cimento CP II/);
   assert.match(t, /2\. \? carrada de Areia média \(aceita similar\)/);
   assert.match(t, /Entrega: não informado/);
   assert.match(t, /até sexta \(6 dias\)/);
-  assert.match(t, /Obra parada/);
+  assert.match(t, /Operação parada/);
+  assert.match(t, /Pagamento preferido: pix/);
   assert.match(t, /- Saco de 50 kg/);
   assert.match(t, /Antes de cotar, me diga:\n- Quantas carradas de areia\?/);
 });
