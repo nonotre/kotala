@@ -92,7 +92,7 @@ export function htmlCotacao(d: Dados, nomeFornecedor: string): Html {
     "",
   );
   if (item.prazoRespostasEm) partes.push(`Recebo propostas até ${quando(item.prazoRespostasEm).replace(/^(às|em) /, "")}. Depois de mandar, ainda dá para ajustar a proposta por aqui até esse horário.`);
-  partes.push("Pode responder do seu jeito, em texto ou PDF. Para não receber mais mensagens, escreva PARAR.");
+  partes.push("Pode responder do seu jeito, em texto ou PDF. Para sair desta cotação, escreva PARAR; para não receber mais nenhuma, ENCERRAR CONTATO.");
   return junta(partes);
 }
 

@@ -3,7 +3,7 @@
 // (Cotador) e confirmação do pedido de compra (R11).
 
 import { randomBytes } from "node:crypto";
-import { and, desc, eq, gte, isNotNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
 import { cotacaoAbertaDo, encerrarSeTodosResponderam, reenviarCotacaoAberta, responderDuvida } from "../agentes/cotador/index.ts";
 import { respostaPedidoDeDados } from "../agentes/cotador/dados-empresa.ts";
 import { repassarMotivoAoComprador } from "../agentes/cotador/prazo.ts";
@@ -44,7 +44,7 @@ import type { AnexoIa } from "../nucleo/ia/index.ts";
 import {
   baixarAnexo,
   enviar,
-  marcarParouContato,
+  aoPararNaCotacao,
   vincularMensagem,
   type Contato,
   type MensagemRecebida,
@@ -59,7 +59,7 @@ import { quando } from "../texto.ts";
 
 export const AVISO_PRIVACIDADE_FORNECEDOR =
   "Olá! Sou o assistente automatizado de cotações de compras da empresa. Ao se cadastrar, você recebe pedidos de cotação por aqui, " +
-  "sem compromisso de compra. Guardo o nome da empresa e as mensagens desta conversa só para as cotações. Para sair, escreva PARAR.";
+  "sem compromisso de compra. Guardo o nome da empresa e as mensagens desta conversa só para as cotações. Para sair de uma cotação, escreva PARAR; para não receber mais nenhuma, ENCERRAR CONTATO.";
 
 /** "papelaria, limpeza, hidráulica", tirado das categorias (as do nicho da empresa primeiro). */
 const exemplosDeCategoria = () => exemplosDoNicho().categorias.slice(0, 3).join(", ");
@@ -331,7 +331,7 @@ export function textoConvite(nome: string, link: string): string {
     link,
     "",
     "O link é pessoal: liga a conversa à sua empresa, sem cadastro.",
-    "Guardamos só o nome da empresa, este e-mail e as mensagens das cotações. Se não tiver interesse, basta ignorar este e-mail. Para parar depois, escreva PARAR no Telegram.",
+    "Guardamos só o nome da empresa, este e-mail e as mensagens das cotações. Se não tiver interesse, basta ignorar este e-mail. Para não receber mais nada depois, escreva ENCERRAR CONTATO no Telegram.",
   ].join("\n");
 }
 
@@ -401,7 +401,7 @@ async function ligarPeloConvite(contato: Contato, f: typeof fornecedor.$inferSel
   await enviar(
     contato.id,
     `Olá, ${f.nome}! Sou o assistente automatizado de cotações da ${EMPRESA.nome}. Esta conversa ficou ligada à sua empresa pelo link do convite. ` +
-      "Guardo o nome da empresa e as mensagens desta conversa só para as cotações, sem compromisso de compra. Para sair, escreva PARAR.",
+      "Guardo o nome da empresa e as mensagens desta conversa só para as cotações, sem compromisso de compra. Para sair de uma cotação, escreva PARAR; para não receber mais nenhuma, ENCERRAR CONTATO.",
   );
   // Cotação que já tinha ido por e-mail chega também aqui, onde dá para responder.
   if (!(await reenviarCotacaoAberta(f.id, contato.id))) {
@@ -706,8 +706,10 @@ async function processarResposta(
       await responderDuvida(c.id, contatoId, e.duvida ?? entrada.texto, entrada.texto);
       return;
     case "parar":
-      await marcarParouContato(contatoId);
-      await db.update(cotacao).set({ situacao: "parou" }).where(eq(cotacao.id, c.id));
+      // Liria: PARAR no meio de uma cotação sai só dela; "encerrar contato" é que sai de vez.
+      await db.update(cotacao).set({ situacao: "desistiu" }).where(eq(cotacao.id, c.id));
+      await registrar(db, { agente: "Fornecedor", acao: "Saiu desta cotação (PARAR).", motivo: entrada.texto.slice(0, 200), ...ctx, fornecedorIds: [c.fornecedorId] });
+      await enviar(contatoId, TEXTO_SAIU_DA_COTACAO, { ...ctx, tipo: "resposta" });
       await encerrarSeTodosResponderam(l.item.id);
       return;
     case "recusa":
@@ -994,7 +996,7 @@ async function situacaoDelicada(
   const item = `${l.item.descricao} (cotação ${l.item.id})`;
   const respostas = {
     responsavel: `Sou o assistente automatizado de compras da ${EMPRESA.nome}. Vou avisar o comprador responsável para falar com você. Se puder, mande a proposta por aqui enquanto isso.`,
-    suspeita: `Entendo a cautela. Sou um assistente automatizado da ${EMPRESA.nome} (CNPJ ${EMPRESA.cnpj}) e estou pedindo uma cotação sem compromisso de ${item}. Não peço pagamento nem dados bancários. Se preferir, o comprador fala com você. Para não receber mais mensagens, escreva PARAR.`,
+    suspeita: `Entendo a cautela. Sou um assistente automatizado da ${EMPRESA.nome} (CNPJ ${EMPRESA.cnpj}) e estou pedindo uma cotação sem compromisso de ${item}. Não peço pagamento nem dados bancários. Se preferir, o comprador fala com você. Para não receber mais mensagens, escreva ENCERRAR CONTATO.`,
     ofensa: `Vou manter esta conversa só sobre a cotação de ${item}. Se quiser mandar a proposta, fico à disposição.`,
     fora_do_assunto: `Por aqui eu só trato da cotação de ${item}. Se tiver proposta ou dúvida sobre ela, é só mandar.`,
   } as const;
@@ -1250,4 +1252,47 @@ async function respostaConfirmacaoDePreco(contatoId: string, fornecedorId: strin
     return true;
   }
   return false;
+}
+
+// ---------- PARAR numa cotação (Liria, erros_chat.md) ----------
+
+export const TEXTO_SAIU_DA_COTACAO =
+  "Certo, você saiu desta cotação e não recebe mais mensagens sobre ela. As próximas cotações continuam chegando por aqui; para não receber mais nenhuma, escreva ENCERRAR CONTATO.";
+
+/**
+ * PARAR de fornecedor com cotação aberta: sai só das cotações em andamento (situação "desistiu",
+ * fora do mapa) e continua recebendo as próximas. Sem cotação aberta, devolve false e o PARAR
+ * vale para tudo, como antes. "Encerrar contato" sai de vez (nucleo/mensagens).
+ */
+export async function sairDasCotacoesAbertas(c: Contato, mensagemId: string): Promise<boolean> {
+  if (!c.fornecedorId) return false;
+  const abertas = await db
+    .select({ id: cotacao.id, itemPedidoId: cotacao.itemPedidoId, pedidoId: itemPedido.pedidoId })
+    .from(cotacao)
+    .innerJoin(itemPedido, and(eq(itemPedido.id, cotacao.itemPedidoId), eq(itemPedido.rodada, cotacao.rodada)))
+    .where(and(eq(cotacao.fornecedorId, c.fornecedorId), inArray(cotacao.situacao, ["aguardando", "respondeu"]), inArray(itemPedido.estado, ["cotando", "comparando", "aguardando_decisao"])));
+  if (!abertas.length) return false;
+  await db.update(cotacao).set({ situacao: "desistiu" }).where(inArray(cotacao.id, abertas.map((a) => a.id)));
+  await vincularMensagem(mensagemId, { itemPedidoId: abertas[0]!.itemPedidoId });
+  for (const a of abertas) {
+    await registrar(db, {
+      agente: "Fornecedor",
+      acao: "Saiu desta cotação (PARAR).",
+      motivo: "Respondeu PARAR com a cotação aberta: sai só dela e continua recebendo as próximas.",
+      pedidoId: a.pedidoId,
+      itemPedidoId: a.itemPedidoId,
+      fornecedorIds: [c.fornecedorId],
+    });
+  }
+  await enviar(c.id, TEXTO_SAIU_DA_COTACAO, { itemPedidoId: abertas[0]!.itemPedidoId, tipo: "resposta" });
+  for (const id of new Set(abertas.map((a) => a.itemPedidoId))) await encerrarSeTodosResponderam(id);
+  return true;
+}
+
+let saidaLigada = false;
+/** Chamado por ligarFluxos(). */
+export function ligarSaidaDaCotacao() {
+  if (saidaLigada) return;
+  saidaLigada = true;
+  aoPararNaCotacao(sairDasCotacoesAbertas);
 }

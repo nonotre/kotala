@@ -7,7 +7,7 @@ import { ligarCotador } from "../agentes/cotador/index.ts";
 import { aoReceber } from "../nucleo/mensagens/index.ts";
 import { aoMensagemDoComprador, ligarComprador } from "./comprador.ts";
 import { ligarDecisao } from "./decisao.ts";
-import { aoMensagemDoFornecedor } from "./fornecedor.ts";
+import { aoMensagemDoFornecedor, ligarSaidaDaCotacao } from "./fornecedor.ts";
 
 let ligado = false;
 
@@ -19,5 +19,6 @@ export function ligarFluxos() {
   ligarComparador(); // comparando → mapa → aguardando_decisao
   ligarDecisao(); // aprovado → pedido de compra
   ligarComprador(); // lembrete de pedido parado em "confirma?"
+  ligarSaidaDaCotacao(); // PARAR de fornecedor com cotação aberta sai só dela
   aoReceber((m) => (m.contato.papel === "comprador" ? aoMensagemDoComprador(m) : aoMensagemDoFornecedor(m)));
 }

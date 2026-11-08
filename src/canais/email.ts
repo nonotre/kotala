@@ -71,7 +71,7 @@ async function rodapeFornecedor(endereco: string, usuarioBot: string | undefined
   }
   linhas.push(
     "Respostas a este e-mail ainda não são lidas.",
-    `Mensagem automática do assistente de compras da ${EMPRESA.nome}. Se não quiser receber, escreva PARAR no Telegram ou ignore este e-mail.`,
+    `Mensagem automática do assistente de compras da ${EMPRESA.nome}. Se não quiser receber mais nada, escreva ENCERRAR CONTATO no Telegram ou ignore este e-mail.`,
   );
   return linhas.join("\n");
 }

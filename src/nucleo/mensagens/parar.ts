@@ -1,6 +1,8 @@
 // Reconhece pedido de descadastro. Puro, para testar sem banco.
 
-const PALAVRAS = ["parar", "pare", "para de mandar", "stop", "sair", "descadastrar", "cancelar inscricao", "nao quero mais receber"];
+/** Sair de vez, em qualquer caso (Liria, erros_chat.md: "Encerrar contato"). */
+const DEFINITIVAS = ["encerrar contato", "encerrar o contato", "descadastrar", "cancelar inscricao", "nao quero mais receber", "sair da lista"];
+const PALAVRAS = ["parar", "pare", "para de mandar", "stop", "sair", ...DEFINITIVAS];
 
 function normalizar(texto: string) {
   return texto
@@ -21,5 +23,14 @@ export function ehPedidoDeParar(texto: string): boolean {
   const t = normalizar(texto);
   if (!t || t.split(" ").length > 6) return false;
   if (t === "/stop" || t === "/parar") return true;
-  return PALAVRAS.some((p) => t === p || t.startsWith(`${p} `) || t.endsWith(` ${p}`));
+  return casa(t, PALAVRAS);
 }
+
+/** "Encerrar contato" e afins: sair de vez, mesmo o fornecedor com cotação aberta (PARAR sai só dela). */
+export function ehEncerrarContato(texto: string): boolean {
+  const t = normalizar(texto);
+  if (!t || t.split(" ").length > 6) return false;
+  return t === "/stop" || casa(t, DEFINITIVAS);
+}
+
+const casa = (t: string, lista: string[]) => lista.some((p) => t === p || t.startsWith(`${p} `) || t.endsWith(` ${p}`));

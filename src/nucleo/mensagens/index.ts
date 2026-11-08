@@ -9,9 +9,20 @@ import { contato, fornecedor, mensagem, type Anexo, type Canal } from "../db/sch
 import { registrar } from "../registro.ts";
 import { arquivoGuardado, salvarArquivo } from "../arquivos.ts";
 import { htmlParaTexto } from "../../texto.ts";
-import { ehPedidoDeParar } from "./parar.ts";
+import { ehEncerrarContato, ehPedidoDeParar } from "./parar.ts";
 
-export { ehPedidoDeParar } from "./parar.ts";
+export { ehEncerrarContato, ehPedidoDeParar } from "./parar.ts";
+
+/**
+ * PARAR de fornecedor com cotação aberta: quem o fluxo registrar aqui tira ele só dessas
+ * cotações e devolve true; false (nada aberto) deixa o PARAR valer para tudo, como antes.
+ * "Encerrar contato" nunca passa por aqui.
+ */
+type SaidaDaCotacao = (c: Contato, mensagemId: string) => Promise<boolean>;
+let saidaDaCotacao: SaidaDaCotacao | null = null;
+export function aoPararNaCotacao(fn: SaidaDaCotacao) {
+  saidaDaCotacao = fn;
+}
 export type { Anexo, Canal } from "../db/schema.ts";
 
 export type MensagemEntrada = {
@@ -141,6 +152,9 @@ export async function receber(e: MensagemEntrada): Promise<ResultadoRecebimento>
   if (!gravada) return { tipo: "repetida" };
 
   if (ehPedidoDeParar(e.texto)) {
+    if (c.papel === "fornecedor" && !ehEncerrarContato(e.texto) && saidaDaCotacao && (await saidaDaCotacao(c, gravada.id))) {
+      return { tipo: "recebida", contato: c, mensagemId: gravada.id };
+    }
     await marcarParou(c);
     return { tipo: "parou", contato: { ...c, parouEm: new Date() } };
   }

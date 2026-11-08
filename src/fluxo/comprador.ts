@@ -160,6 +160,35 @@ export function textoConfirmacao(p: {
   return linhas.join("\n");
 }
 
+/** U1 (Ester): formas de pagamento oferecidas ao comprador antes de cotar. A primeira é o padrão da empresa (R13). */
+export const FORMAS_PAGAMENTO = ["À vista no recebimento", "Pix", "Boleto 28 dias", "Cartão"] as const;
+
+/**
+ * U1: sem forma de pagamento no pedido, pergunta com botões na confirmação. Não segura a cotação:
+ * sem escolha, vale o padrão da empresa. Só entra quando não há outra pergunta com botões na mesma
+ * mensagem (ela volta na confirmação seguinte).
+ */
+function perguntaPagamento(pedidoId: number, preferido: string | null, outrosBotoes: number): { texto: string; botoes: Botao[] } {
+  if (preferido?.trim() || outrosBotoes > 0) return { texto: "", botoes: [] };
+  return {
+    texto: "\n\nComo prefere pagar? A forma vai na solicitação de proposta; sem escolha, vale à vista no recebimento.",
+    botoes: FORMAS_PAGAMENTO.map((rotulo, n) => ({ rotulo, dado: `pedido:${pedidoId}:pag:${n}` })),
+  };
+}
+
+async function escolherPagamento(pedidoId: number, indice: number, compradorId: string) {
+  const [p] = await db.select().from(pedido).where(eq(pedido.id, pedidoId));
+  const forma = FORMAS_PAGAMENTO[indice];
+  if (!p || p.compradorId !== compradorId || !forma) return;
+  if (p.estado !== "aguardando_confirmacao") {
+    await enviar(compradorId, `O pedido ${pedidoId} não está esperando confirmação.`, { pedidoId });
+    return;
+  }
+  await db.update(pedido).set({ pagamentoPreferido: forma.toLowerCase() }).where(eq(pedido.id, pedidoId));
+  await registrar(db, { agente: "Comprador", acao: `Escolheu o pagamento: ${forma}.`, motivo: "Resposta à pergunta da forma de pagamento (U1).", pedidoId });
+  await mostrarConfirmacao(pedidoId);
+}
+
 function botoesConfirmacao(pedidoId: number, comPerguntas: boolean): Botao[] {
   return [
     { rotulo: comPerguntas ? "Confirmar assim" : "Confirmar", dado: dadoBotao(pedidoId, "confirmar") },
@@ -399,7 +428,11 @@ export async function interpretarEResponder(pedidoId: number, opcoes: { lida?: L
   const deImagem = /\[(Foto|Print de loja)\]/.test([p.textoOriginal, ...p.correcoes].join("\n"));
   const marcas = deImagem ? perguntasDeMarca(pedidoId, i.itens) : { texto: "", botoes: [] };
   const botoesAtributo = botoesDeAtributos(pedidoId, atributos);
-  await enviar(p.compradorId, texto + escolha.texto + marcas.texto, { pedidoId, botoes: [...botoesAtributo, ...marcas.botoes, ...escolha.botoes, ...botoesConfirmacao(pedidoId, perguntar)] });
+  const pag = perguntaPagamento(pedidoId, i.pagamento ?? p.pagamentoPreferido, botoesAtributo.length + marcas.botoes.length + escolha.botoes.length);
+  await enviar(p.compradorId, texto + escolha.texto + marcas.texto + pag.texto, {
+    pedidoId,
+    botoes: [...botoesAtributo, ...marcas.botoes, ...escolha.botoes, ...pag.botoes, ...botoesConfirmacao(pedidoId, perguntar)],
+  });
 }
 
 const MAX_PERGUNTAS = 3;
@@ -542,7 +575,8 @@ async function mostrarConfirmacao(pedidoId: number, antes = "") {
     perguntas: [],
   });
   const escolha = escolhasDaBase(pedidoId, itens);
-  await enviar(p.compradorId, antes + texto + escolha.texto, { pedidoId, botoes: [...escolha.botoes, ...botoesConfirmacao(pedidoId, false)] });
+  const pag = perguntaPagamento(pedidoId, p.pagamentoPreferido, escolha.botoes.length);
+  await enviar(p.compradorId, antes + texto + escolha.texto + pag.texto, { pedidoId, botoes: [...escolha.botoes, ...pag.botoes, ...botoesConfirmacao(pedidoId, false)] });
 }
 
 
@@ -938,6 +972,11 @@ export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: Me
     if (marca) {
       await vincularMensagem(mensagemId, { pedidoId: Number(marca[1]) });
       return escolherMarca(Number(marca[1]), Number(marca[2]), marca[3] as "so" | "similar", contato.id);
+    }
+    const pag = /^pedido:(\d+):pag:(\d)$/.exec(entrada.botao);
+    if (pag) {
+      await vincularMensagem(mensagemId, { pedidoId: Number(pag[1]) });
+      return escolherPagamento(Number(pag[1]), Number(pag[2]), contato.id);
     }
     const attr = /^pedido:(\d+):attr:(\d+):([a-z_]+):(\d+)$/.exec(entrada.botao);
     if (attr) {
