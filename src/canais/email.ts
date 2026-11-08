@@ -5,17 +5,19 @@
 // Qualquer outro endereço falha no envio, e enviar() grava a falha com o motivo.
 
 import { and, eq } from "drizzle-orm";
+import { readFile } from "node:fs/promises";
 import nodemailer from "nodemailer";
 import { EMPRESA } from "../config.ts";
+import { arquivoGuardado } from "../nucleo/arquivos.ts";
 import { db } from "../nucleo/db/cliente.ts";
 import { contato, fornecedor } from "../nucleo/db/schema.ts";
-import type { AdaptadorCanal } from "../nucleo/mensagens/index.ts";
+import type { AdaptadorCanal, Anexo } from "../nucleo/mensagens/index.ts";
 
 /** Fonte gravada no fornecedor criado pelo convite manual (a banca, o time). */
 export const FONTE_CONVITE_MANUAL = "Convite manual por e-mail";
 
 export type Transporte = {
-  sendMail(m: { from: string; to: string; subject: string; text: string }): Promise<{ messageId?: string }>;
+  sendMail(m: { from: string; to: string; subject: string; text: string; attachments?: { filename: string; content: Buffer; contentType?: string }[] }): Promise<{ messageId?: string }>;
 };
 
 export const normalizarEmail = (e: string) => e.trim().toLowerCase();
@@ -81,6 +83,24 @@ export type OpcoesEmail = {
   usuarioBot?: string;
 };
 
+/** Anexo de saída: caminho local ou arquivo já guardado (recebido pelo Telegram). Sem conteúdo, fica de fora. */
+async function anexosDoEmail(anexos: Anexo[]) {
+  const lista: NonNullable<Parameters<Transporte["sendMail"]>[0]["attachments"]> = [];
+  const faltaram: string[] = [];
+  for (const a of anexos) {
+    const nome = a.nome ?? a.ref.split("/").pop() ?? "anexo";
+    let dados: Uint8Array | null = null;
+    if (a.ref.startsWith("/")) dados = await readFile(a.ref).catch(() => null);
+    else dados = (await arquivoGuardado("telegram", a.ref))?.dados ?? null;
+    if (dados) lista.push({ filename: nome, content: Buffer.from(dados), contentType: a.mediaType });
+    else faltaram.push(nome);
+  }
+  return { lista, faltaram };
+}
+
+/** E-mail não tem botão: as opções viram lista de texto, e a resposta é pelo Telegram. */
+const opcoesEmTexto = (botoes: { rotulo: string }[]) => ["", "Opções:", ...botoes.map((b) => `- ${b.rotulo}`), "Para escolher, responda pela conversa no Telegram."].join("\n");
+
 export function adaptadorEmail(op: OpcoesEmail = {}): AdaptadorCanal {
   return {
     canal: "email",
@@ -98,8 +118,13 @@ export function adaptadorEmail(op: OpcoesEmail = {}): AdaptadorCanal {
             ? `Lembrete de cotação · ${EMPRESA.nome}`
             : `Mensagem de ${EMPRESA.nome}`;
       // O convite já traz o link e o aviso no corpo.
-      const corpo = opcoes.tipo === "convite" ? texto : texto + (await rodapeFornecedor(endereco, op.usuarioBot));
-      const r = await t.sendMail({ from: remetente(), to: normalizarEmail(endereco), subject: assunto, text: corpo });
+      const { lista, faltaram } = await anexosDoEmail(opcoes.anexos ?? []);
+      const completo =
+        texto +
+        (opcoes.botoes?.length ? opcoesEmTexto(opcoes.botoes) : "") +
+        (faltaram.length ? `\n\nNão consegui anexar: ${faltaram.join(", ")}.` : "");
+      const corpo = opcoes.tipo === "convite" ? completo : completo + (await rodapeFornecedor(endereco, op.usuarioBot));
+      const r = await t.sendMail({ from: remetente(), to: normalizarEmail(endereco), subject: assunto, text: corpo, ...(lista.length ? { attachments: lista } : {}) });
       return { idExterno: r.messageId };
     },
   };
