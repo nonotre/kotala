@@ -2,6 +2,7 @@
 // MensagemEntrada e chama receber(); toda saída passa por enviar(), que é o
 // único lugar que fala com os canais e o único que confere o PARAR.
 
+import { mascararDadosPessoais } from "../../agentes/guardrail/index.ts";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "../db/cliente.ts";
 import { contato, fornecedor, mensagem, type Anexo, type Canal } from "../db/schema.ts";
@@ -128,7 +129,9 @@ export async function receber(e: MensagemEntrada): Promise<ResultadoRecebimento>
       canal: e.canal,
       direcao: "entrada",
       contatoId: c.id,
-      texto: e.texto,
+      // S: CPF, cartão e senha do comprador não ficam guardados; o roteador ainda recebe o texto
+      // original em memória, para a triagem avisar que o dado não é necessário.
+      texto: c.papel === "comprador" ? mascararDadosPessoais(e.texto).texto : e.texto,
       anexos: e.anexos ?? [],
       idExterno: e.idExterno,
       situacao: "recebida",

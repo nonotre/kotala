@@ -203,7 +203,7 @@ export const itemPedido = pgTable(
     justificativaMenosDeTres: text("justificativa_menos_de_tres"),
     /** I3: levas de busca automática já feitas na rodada atual (volta a 0 em rodada nova). */
     ampliacoes: integer("ampliacoes").notNull().default(0),
-    /** Categoria do item (ids de src/dominio/categorias.json), gravada na confirmação. Null = deduzir da base. */
+    /** Nome da categoria (o de src/dominio/categorias.json, como em fornecedor.categorias), gravado na confirmação. Null = deduzir. */
     categoria: text("categoria"),
     criadoEm: criadoEm(),
     atualizadoEm: atualizadoEm(),

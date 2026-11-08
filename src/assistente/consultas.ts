@@ -134,7 +134,7 @@ function resumoItem(p: LinhaPedido, i: LinhaItem): ItemResumo {
     coluna: cancelado ? "Cancelado" : colunaDoItem(p.estado, i.estado),
     // Sem carregarCatalogo() (só os bots carregam) os itens ITM-1001+ do catálogo não são
     // achados na base em memória e ficam com null; nada aqui depende de o catálogo estar carregado.
-    categoria: categoriaDoItem({ itemChave: i.itemChave, descricao: i.descricao }),
+    categoria: categoriaDoItem({ itemChave: i.itemChave, descricao: i.descricao, categoria: i.categoria }),
     href: `/pedidos/${p.id}#item-${i.id}`,
   };
 }

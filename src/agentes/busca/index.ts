@@ -10,6 +10,8 @@ import { aoEntrarItem, avancarItem, type MudancaItem } from "../../nucleo/orques
 import { registrar } from "../../nucleo/registro.ts";
 import { TODAS_PERSONAS, personaVende } from "../../simulador/personas.ts";
 import { casarComBase, itemDaBase } from "../interpretador/base-itens.ts";
+import { SEM_CATEGORIA } from "../interpretador/catalogo.ts";
+import { categoriaProvavel } from "../../dominio/categorias.ts";
 import { buscarNaInternet, ofertasDaInternet } from "./internet.ts";
 import { acharRecompra, textoRecompra } from "../memoria/index.ts";
 import { enviar } from "../../nucleo/mensagens/index.ts";
@@ -20,13 +22,18 @@ export { buscarNaInternet, referenciasDoItem } from "./internet.ts";
 const personaPorChave = new Map(TODAS_PERSONAS.map((p) => [p.chave, p]));
 const ordemPersona = new Map(TODAS_PERSONAS.map((p, i) => [p.chave, i]));
 
-/** Categoria do item na base (E6), pelo código ou pelo nome. */
-export function categoriaDoItem(item: { itemChave: string | null; descricao: string }): string | null {
-  if (item.itemChave?.startsWith("ITM-")) return itemDaBase(item.itemChave)?.categoria ?? null;
+/**
+ * Categoria do item: a gravada na confirmação (item_pedido.categoria); senão a da base (E6), pelo
+ * código ou pelo nome; senão a deduzida pelas palavras das categorias (src/dominio/). Null = vai a todos.
+ */
+export function categoriaDoItem(item: { itemChave: string | null; descricao: string; categoria?: string | null }): string | null {
+  if (item.categoria) return item.categoria;
+  const daBase = (c: string | undefined) => (c && c !== SEM_CATEGORIA ? c : null);
+  if (item.itemChave?.startsWith("ITM-")) return daBase(itemDaBase(item.itemChave)?.categoria) ?? categoriaProvavel(item.descricao);
   const c = casarComBase(item.descricao);
-  if (c.tipo === "unico") return c.item.categoria;
-  if (c.tipo === "varios") return c.opcoes[0]!.categoria;
-  return null;
+  if (c.tipo === "unico") return daBase(c.item.categoria) ?? categoriaProvavel(item.descricao);
+  if (c.tipo === "varios") return daBase(c.opcoes[0]!.categoria) ?? categoriaProvavel(item.descricao);
+  return categoriaProvavel(item.descricao);
 }
 
 const semAcento = (t: string) => t.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().trim();
@@ -35,7 +42,7 @@ const mesmaCategoria = (a: string, b: string) => semAcento(a) === semAcento(b);
 export type Candidato = { fornecedorId: string; nome: string; origem: "real" | "simulado"; chave?: string | null; motivoCorte?: string };
 
 /** Fornecedores com canal ativo, com o motivo de cada corte. */
-export async function candidatos(item: { descricao: string; itemChave: string | null }): Promise<Candidato[]> {
+export async function candidatos(item: { descricao: string; itemChave: string | null; categoria?: string | null }): Promise<Candidato[]> {
   const { descricao } = item;
   const categoria = categoriaDoItem(item);
   const linhas = await db

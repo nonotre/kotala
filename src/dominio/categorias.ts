@@ -95,6 +95,12 @@ export function detectarCategorias(texto: string): Categoria[] {
     .map((x) => x.c);
 }
 
+/** Nome da categoria provável do item (o mesmo de fornecedor.categorias), ou null quando só `geral` serve. */
+export function categoriaProvavel(texto: string): string | null {
+  const c = detectarCategorias(texto).find((x) => x.id !== "geral");
+  return c?.nome ?? null;
+}
+
 /** A categoria mais provável do texto; `geral` quando nada bate. */
 export function detectarCategoria(texto: string): Categoria {
   return detectarCategorias(texto)[0] ?? categoriaPorId("geral")!;
