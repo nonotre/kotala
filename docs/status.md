@@ -90,6 +90,21 @@ Ficou como estava, de propósito: o quadro mantém as 4 colunas do site (requisi
 
 O dashboard que a Ester especificou (`docs/workspaces/ester-workspace/interface-dashboard.md` e `dashboard.md`) está pronto em `/dashboard`, com o que ficou da antiga tela de economia; ver a junção abaixo.
 
+## Revisão 80 da Ester (08/11/2026)
+
+Erros dos testes da Ester (pedidos 29 a 33) e do documento dela (`docs/workspaces/ester-workspace/revisao80.md`), corrigidos na causa e com teste. Detalhes: [revisao80-melhorias.md](revisao80-melhorias.md).
+
+| Relato | O que mudou | Onde |
+|---|---|---|
+| "Classe A e branco" e "3/4 de polegada" anotados, mas fora do resumo; correções repetidas sem efeito visível | Resumo com toda especificação de qualquer item e "(não aceita similar)"; depois de cada correção, "Anotei: ..." ou "nada mudou"; pergunta "anotou?" recebe conferência; o Assistente vê a especificação | `fluxo/comprador.ts`, `assistente/consultas.ts`, `assistente/instrucoes.ts` |
+| "10% no valor total da proposta" lido como condicionado | Condição só com algo que o comprador precise fazer; "total da proposta" vale para produto e frete; mapa com bruto, % e valor com desconto | `agentes/negociador`, `agentes/extrator`, `agentes/comparador/calculo.ts` |
+| Resposta ao pedido de compra virava "cotação encerrada"; compra fechou sem o desconto | Leitura da resposta (confirma, não atende, muda condição, dúvida, outro); condição nova vai ao comprador com Aceitar e Manter; pedido de compra sem jargão | `fluxo/pos-pedido.ts` (novo), `fluxo/decisao.ts`, `fluxo/fornecedor.ts` |
+| "confirmar" depois do pedido de compra: "está em cotação" | Estado de cada item em palavras, sem IA | `fluxo/comprador.ts`, `assistente/roteador.ts` |
+| Loja online com tubo de 3 m em 1º num pedido de 6 m | Anúncio com medida diferente da pedida (comprimento, mm, polegada, V, W) sai da busca | `agentes/busca/filtro.ts` |
+| Jargão nas suposições ("Adotado risco regulado para EPI"), "15 dias (15 dias)" | Filtrados | `agentes/interpretador`, `fluxo/comprador.ts` |
+
+E-mail de teste: com `EMAIL_FORNECEDOR_TESTE` (no `.env`: <e-mail removido> e <e-mail removido>), cotação, negociação, lembrete e pedido de compra a qualquer fornecedor também saem como cópia para esse endereço; nunca para o fornecedor. Cenários novos no simulador: `desconto-total`, `pos-pedido`, `especificacao`.
+
 ## Perfil e login (Frente 2, rodada 2, 08/11/2026)
 
 Cada pessoa entra com usuário e senha e tem o seu chat no navegador; quem não tem conta cria na tela de entrada. Os cards mostram o dono (quem pediu), e todos veem todos. As contas `ester` e `liria` já existem, ligadas ao Telegram delas, e a primeira entrada define a senha. Na lista de Conversas (lateral do Início), quem tem Telegram ligado vê "Seu Telegram", só para ler, com o botão que abre o bot. Depois, no Bloco 4: sessão no servidor, empresas e locais no banco, "Só os meus", avisos por pessoa e /vincular. Ver [perfil-login.md](perfil-login.md).

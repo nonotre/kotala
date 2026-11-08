@@ -135,6 +135,8 @@ function resumoItem(p: LinhaPedido, i: LinhaItem): ItemResumo {
     // Sem carregarCatalogo() (só os bots carregam) os itens ITM-1001+ do catálogo não são
     // achados na base em memória e ficam com null; nada aqui depende de o catálogo estar carregado.
     categoria: categoriaDoItem({ itemChave: i.itemChave, descricao: i.descricao, categoria: i.categoria }),
+    ...(i.especificacao && Object.keys(i.especificacao).length ? { especificacao: i.especificacao } : {}),
+    aceitaSimilar: i.aceitaSimilar,
     href: `/pedidos/${p.id}#item-${i.id}`,
   };
 }

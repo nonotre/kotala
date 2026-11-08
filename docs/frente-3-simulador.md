@@ -45,6 +45,9 @@ Cenários (`npm run simulador -- --lista`):
 | `servico` | — | **Esperado falhar:** pedido de serviço ainda responde "ainda cotamos só produtos". |
 | `duas-mensagens` | I1 | **Esperado falhar (bug):** proposta e frete em duas mensagens quase juntas. Ver os achados abaixo. |
 | `a-vista` | R13 | **Esperado falhar (bug):** "à vista no recebimento" sai com o alerta de pagamento antecipado. Ver os achados abaixo. |
+| `desconto-total` | Revisão 80 | "10% no valor total da proposta" (com a leitura errada da IA, como condição) entra no custo, sobre produto e frete; a linha mostra bruto, % e valor com desconto; sem alerta de condicionado. Ver [revisao80-melhorias.md](revisao80-melhorias.md). |
+| `pos-pedido` | Revisão 80 | O vencedor responde ao pedido de compra que o desconto condicionado vale: nunca "cotação encerrada"; o comprador recebe antes e depois com Aceitar e Manter; aceita; o pedido atualizado sai e o fornecedor confirma pelo total novo; "confirmar" do comprador recebe o estado certo. |
+| `especificacao` | Revisão 80 | O resumo mostra classe e cor; "vc anotou a cor?" recebe conferência; "não aceito similar" diz o que mudou; sem jargão nas suposições. |
 
 "Esperado falhar" não reprova a rodada; se o cenário passar, o relatório marca "passou (inesperado)", sinal de que o recurso entrou ou o bug foi corrigido e a marca pode sair.
 

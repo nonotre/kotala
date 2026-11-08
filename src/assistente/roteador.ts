@@ -15,7 +15,7 @@ import { aoMensagemDoComprador, definirRespondedorDeConsulta, garantirAvisoPriva
 import { aoMensagemDoFornecedor } from "../fluxo/fornecedor.ts";
 import { esperandoRecadoDoComprador } from "../fluxo/transbordo.ts";
 import { db } from "../nucleo/db/cliente.ts";
-import { mensagem, pedido } from "../nucleo/db/schema.ts";
+import { itemPedido, mensagem, pedido } from "../nucleo/db/schema.ts";
 import { aoReceber, enviar, type MensagemRecebida } from "../nucleo/mensagens/index.ts";
 import { registrar } from "../nucleo/registro.ts";
 import { responder } from "./agente.ts";
@@ -23,7 +23,7 @@ import { escaparHtml } from "../texto.ts";
 import { PREFIXO_LINK, type MensagemHistorico } from "./tipos.ts";
 
 /** Os mesmos "sim" que o fluxo do comprador aceita como confirmação (fluxo/comprador.ts). */
-const CONFIRMACAO = /^(sim|ok|okay|confirm[oa]|confirmado|pode( seguir| cotar)?|isso|certo|fechado|beleza|blz|manda)[!.\s]*$/i;
+const CONFIRMACAO = /^(sim|ok|okay|confirm[oa]|confirmar|confirmado|pode( seguir| cotar)?|isso|certo|fechado|beleza|blz|manda)[!.\s]*$/i;
 
 /**
  * Canais em que o Assistente atende tudo (perguntas, pedidos sobre a cotação, negociar, cotar com mais),
@@ -46,7 +46,19 @@ async function vaiDiretoAoFluxo({ contato, entrada }: MensagemRecebida): Promise
     .from(pedido)
     .where(and(eq(pedido.compradorId, contato.id), inArray(pedido.estado, ["interpretando", "aguardando_confirmacao"])))
     .limit(1);
-  return !!p;
+  if (p) return true;
+  // Revisão 80: "confirmar" com pedido de compra enviado: o fluxo diz o estado de cada item (o Assistente
+  // respondia "ainda não consigo responder isso"). Se a última mensagem do Assistente foi uma pergunta
+  // ("quer que eu inclua 3/4?"), o "sim" é resposta a ela e fica com o Assistente.
+  const [ultima] = await db.select({ texto: mensagem.texto }).from(mensagem).where(and(eq(mensagem.contatoId, contato.id), eq(mensagem.direcao, "saida"))).orderBy(desc(mensagem.criadoEm)).limit(1);
+  if (ultima && /\?\s*$/.test(ultima.texto.trim())) return false;
+  const [enviado] = await db
+    .select({ id: itemPedido.id })
+    .from(itemPedido)
+    .innerJoin(pedido, eq(pedido.id, itemPedido.pedidoId))
+    .where(and(eq(pedido.compradorId, contato.id), eq(itemPedido.estado, "pedido_enviado")))
+    .limit(1);
+  return !!enviado;
 }
 
 /** Últimas mensagens da conversa, só texto. O toque em botão não guarda o rótulo no banco, então vira "(tocou num botão)". */

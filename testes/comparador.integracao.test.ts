@@ -111,7 +111,7 @@ test("mapa lê extraido: desconto obtido, conduta, preço a confirmar e quem man
   assert.equal(await m.contarPropostasValidas(itemId), 3);
   await montar(itemId);
   const mapa = enviadas.at(-1)!.texto;
-  assert.match(mapa, /Desconto obtido: R\$\s80,00 \(de R\$\s1\.600,00 para R\$\s1\.520,00\)/);
+  assert.match(mapa, /Desconto obtido: R\$\s80,00 \([\d,]+%\) · valor bruto R\$\s[\d.,]+ · com desconto R\$\s[\d.,]+/);
   assert.match(mapa, /Pedi desconto: manteve o preço/);
   assert.match(mapa, /Pedi desconto: não respondeu/);
   assert.match(mapa, /Atenção: Ofereceu comissão ou vantagem ao comprador/);

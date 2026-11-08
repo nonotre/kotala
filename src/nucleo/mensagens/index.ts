@@ -60,6 +60,8 @@ export type OpcoesEnvio = {
   formato?: "html";
   /** idExterno de uma mensagem anterior a editar no lugar de mandar outra (se o canal souber). */
   substitui?: string;
+  /** Cópia de teste por e-mail (EMAIL_FORNECEDOR_TESTE): para quem a mensagem foi de verdade. */
+  copiaDe?: string;
 };
 
 /** Cada canal implementa isto (Telegram, WhatsApp simulado, e-mail, web...). */
@@ -248,11 +250,48 @@ export async function enviar(contatoId: string, texto: string, opcoes: OpcoesEnv
       .insert(mensagem)
       .values({ ...base, situacao: "enviada", idExterno })
       .returning({ id: mensagem.id });
+    if (c.papel === "fornecedor" && c.canal !== "email") void copiaPorEmailDeTeste(c, simples, opcoes);
     return { situacao: "enviada", mensagemId: m!.id };
   } catch (e) {
     const erro = e instanceof Error ? e.message : String(e);
     const [m] = await db.insert(mensagem).values({ ...base, situacao: "falhou", erro }).returning({ id: mensagem.id });
     return { situacao: "falhou", mensagemId: m!.id, erro };
+  }
+}
+
+/** Tipos de mensagem a fornecedor que ganham cópia por e-mail de teste (o resto é conversa miúda). */
+const TIPOS_COPIA_EMAIL = new Set<TipoEnvio>(["cotacao", "negociacao", "pedido_compra", "lembrete", "nao_venceu", "encerrada", "completar_proposta", "confirmar_preco"]);
+
+/**
+ * Teste do envio de e-mail (pedido do dono, 08/11/2026): com EMAIL_FORNECEDOR_TESTE, toda cotação,
+ * negociação e pedido de compra a qualquer fornecedor (simulado ou real, por qualquer canal) também
+ * sai por e-mail para esse endereço, com o nome do fornecedor no assunto. Nunca vai ao e-mail do
+ * fornecedor: a trava de canais/email.ts continua valendo. Falha aqui não atrapalha o envio principal.
+ */
+async function copiaPorEmailDeTeste(c: Contato, texto: string, opcoes: OpcoesEnvio) {
+  // Vários endereços, separados por vírgula (o time e a Ester recebem a mesma cópia).
+  const destinos = (process.env.EMAIL_FORNECEDOR_TESTE ?? "").split(",").map((e) => e.trim()).filter(Boolean);
+  const email = adaptadores.get("email");
+  if (!destinos.length || !email || !opcoes.tipo || !TIPOS_COPIA_EMAIL.has(opcoes.tipo)) return;
+  const [f] = c.fornecedorId
+    ? await db.select({ nome: fornecedor.nome, origem: fornecedor.origem, cnpj: fornecedor.cnpj }).from(fornecedor).where(eq(fornecedor.id, c.fornecedorId)).catch(() => [])
+    : [];
+  const quem = `${f?.nome ?? c.nome ?? "fornecedor"}${f?.origem === "simulado" ? " (simulado)" : ""}`;
+  // Cabeçalho que diz de cara qual fornecedor recebeu (o assunto também começa pelo nome dele).
+  const cabecalho = [
+    "==============================",
+    `FORNECEDOR: ${quem}`,
+    ...(f?.cnpj ? [`CNPJ: ${f.cnpj}`] : []),
+    `Canal da conversa: ${c.canal === "simulado" ? "simulado (na tela)" : c.canal}`,
+    "Cópia de teste: o fornecedor recebeu esta mensagem pelo canal acima.",
+    "==============================",
+  ].join("\n");
+  for (const destino of destinos) {
+    try {
+      await email.enviar(destino, `${cabecalho}\n\n${texto}`, { ...opcoes, formato: undefined, copiaDe: quem });
+    } catch (erro) {
+      console.error("[e-mail de teste]", destino, erro instanceof Error ? erro.message : erro);
+    }
   }
 }
 

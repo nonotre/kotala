@@ -10,6 +10,8 @@ export type Termos = {
   conteudoKg: number | null;
   /** Conteúdo por embalagem em qualquer unidade (5 L, 500 folhas, 100 m). Vale mais que conteudoKg. */
   conteudo?: Conteudo | null;
+  /** Revisão 80: medidas do pedido (comprimento, bitola, polegada, voltagem, potência); título que contradiz é cortado. */
+  medidas?: Medida[];
 };
 
 import { conteudoNoTitulo, converterUnidade, normalizarUnidade, rotuloConteudo, type Conteudo } from "../../dominio/unidades.ts";
@@ -53,9 +55,71 @@ export function contem(titulo: string, palavra: string): boolean {
   return false;
 }
 
+// ---------- Revisão 80: medida do anúncio diferente da pedida ----------
+// O pedido 33 (tubo de PVC 25 mm × 6 m, sem similar) recebeu em 1º um anúncio de tubo de 3 m: o
+// unitário parecia metade do preço. Medida escrita no título que contradiz a do pedido corta o anúncio.
+
+/** Grupo da medida, pela unidade como foi escrita: metros com metros, milímetros com milímetros. */
+type GrupoMedida = "m" | "mm" | "pol" | "V" | "W";
+export type Medida = { grupo: GrupoMedida; valor: number; texto: string };
+
+const fracao = (t: string) => {
+  const m = /^(\d+)\s*\/\s*(\d+)$/.exec(t.trim());
+  if (m) return Number(m[1]) / Number(m[2]);
+  const misto = /^(\d+)\s+(\d+)\s*\/\s*(\d+)$/.exec(t.trim());
+  if (misto) return Number(misto[1]) + Number(misto[2]) / Number(misto[3]);
+  return Number(t.replace(",", "."));
+};
+
+/** Medidas escritas num texto: "6m", "6 metros", "25mm", "2,5 cm", "3/4\"", "1 1/2 pol", "220V", "1200W". */
+export function medidasNoTexto(texto: string): Medida[] {
+  const t = texto.replace(/[″”]/g, '"');
+  const out: Medida[] = [];
+  const add = (grupo: GrupoMedida, valor: number, txt: string) => {
+    if (Number.isFinite(valor) && valor > 0) out.push({ grupo, valor: Math.round(valor * 1000) / 1000, texto: txt.trim() });
+  };
+  for (const m of t.matchAll(/(\d+(?:[.,]\d+)?)\s*(mm|cm|mts?|m|metros?)(?![a-z²³])/gi)) {
+    if (m[0] === "3M") continue; // a marca 3M, não 3 metros
+    const v = Number(m[1]!.replace(",", "."));
+    const u = m[2]!.toLowerCase();
+    if (u === "mm") add("mm", v, m[0]);
+    else if (u === "cm") add("mm", v * 10, m[0]);
+    else add("m", v, m[0]);
+  }
+  for (const m of t.matchAll(/(\d+\s+\d+\s*\/\s*\d+|\d+\s*\/\s*\d+|\d+(?:[.,]\d+)?)\s*(?:"|pol(?:egadas?)?\b|de polegada)/gi)) add("pol", fracao(m[1]!), m[0]);
+  if (!/bivolt/i.test(t)) for (const m of t.matchAll(/\b(110|127|220|380)\s*v\b/gi)) add("V", Number(m[1]), m[0]);
+  for (const m of t.matchAll(/(\d+(?:[.,]\d+)?)\s*w\b/gi)) add("W", Number(m[1]!.replace(",", ".")), m[0]);
+  return out;
+}
+
+/** Medidas do pedido: do nome e das especificações ("Comprimento: 6 m", "Polegada: 3/4\""). */
+export function medidasDoPedido(descricao: string, especificacao: Record<string, string> | null | undefined): Medida[] {
+  return medidasNoTexto([descricao, ...Object.values(especificacao ?? {})].join(" ; "));
+}
+
+/**
+ * O anúncio contradiz a medida do pedido: para cada grupo que o pedido diz, se o título traz
+ * medidas desse grupo e nenhuma bate (1% de folga), corta. Título sem a medida não é cortado
+ * (fica para o comprador conferir no link).
+ */
+export function medidaDiferente(titulo: string, pedidas: readonly Medida[]): string | null {
+  if (!pedidas.length) return null;
+  const doTitulo = medidasNoTexto(titulo);
+  for (const grupo of new Set(pedidas.map((m) => m.grupo))) {
+    const p = pedidas.filter((m) => m.grupo === grupo);
+    const t = doTitulo.filter((m) => m.grupo === grupo);
+    if (!t.length) continue;
+    const bate = t.some((a) => p.some((b) => Math.abs(a.valor - b.valor) <= Math.max(0.01, b.valor * 0.01)));
+    if (!bate) return `Medida diferente do pedido (${t[0]!.texto} no anúncio; pedido ${[...new Set(p.map((x) => x.texto))].join(" ou ")})`;
+  }
+  return null;
+}
+
 export function relevante(titulo: string, t: Termos): { ok: boolean; motivo?: string } {
   const proibida = t.proibidas.find((p) => p && contem(titulo, p));
   if (proibida) return { ok: false, motivo: `Outro produto (${proibida})` };
+  const medida = t.medidas?.length ? medidaDiferente(titulo, t.medidas) : null;
+  if (medida) return { ok: false, motivo: medida };
   for (const g of t.grupos) {
     if (!g.some((p) => p && contem(titulo, p))) return { ok: false, motivo: `Não é o item pedido (falta ${g[0]})` };
   }

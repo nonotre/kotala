@@ -10,7 +10,7 @@ import { detectarCategorias, categoriaPorNome } from "../../dominio/categorias.t
 import { itemDaBase } from "../interpretador/base-itens.ts";
 import { verificarVarios } from "../verificacao/index.ts";
 import { planejar } from "./entende.ts";
-import { confianca, converter, mediana, normalizar, ordenar, relevante, type Termos } from "./filtro.ts";
+import { confianca, converter, mediana, normalizar, ordenar, medidasDoPedido, relevante, type Termos } from "./filtro.ts";
 import { formatarBRL } from "../comparador/calculo.ts";
 import { freteDoJsonLd, type FreteDoAnuncio } from "./frete.ts";
 import { baixarPagina, precoDoJsonLd, precoPorIa } from "./pagina.ts";
@@ -123,6 +123,8 @@ export async function buscarNaInternet(itemPedidoId: number): Promise<ResultadoB
   // 1. Entende
   const plano = await planejar({ descricao: item.descricao, unidade: item.unidade, especificacao: item.especificacao }, ctx);
   const consulta = plano.consultas[0]!;
+  // Revisão 80: anúncio com medida diferente da pedida (tubo de 3 m num pedido de 6 m) não entra.
+  plano.termos.medidas = medidasDoPedido(item.descricao, item.especificacao);
 
   const coletas: Coleta[] = [];
   const falhas: string[] = [];

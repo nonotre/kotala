@@ -383,6 +383,25 @@ const CONDICIONAL = [
   new RegExp(String.raw`${CONDICAO}[^.!?\n]{0,60}?${VALOR_DESCONTO}`, "i"),
 ];
 
+/** O campo traz algo que o comprador precisa fazer ou aceitar: forma de pagamento, volume, prazo para fechar. */
+const PISTA_CONDICAO =
+  /\b(se|caso|desde que|contanto|somente|apenas|v[aá]lido|valendo|pagando|pagamento|pagar|pago|vista|pix|dinheiro|cart[aã]o|boleto|antecipad[oa]|acima|a partir|m[ií]nim[oa]|quantidade|volume|lote|unidades|sacos|fech(ar|ando|ado)|hoje|amanh[ãa]|at[ée]|semana|prazo|retirada|retirar|sem frete|fob)\b/i;
+const SO_BASE = /^(n[oa]s?|sobre( o| a)?|em)?\s*(valor\s+)?(total|tudo|geral|proposta|or[cç]amento|pedido|compra|cota[cç][aã]o|itens?)(\s+(da|do|de)\s+(proposta|pedido|compra|cota[cç][aã]o|or[cç]amento))?(\s+tod[oa])?[.!]*$/i;
+export function ehCondicaoDeVerdade(campo: string): boolean {
+  const t = campo.replace(/\d+(?:[.,]\d+)?\s*%/g, "").replace(/\b(de\s+)?desconto\b/gi, "").replace(/\s+/g, " ").trim();
+  if (!t || SO_BASE.test(t)) return false;
+  return PISTA_CONDICAO.test(t);
+}
+
+/**
+ * "10% no valor total da proposta", "5% em tudo", "com o frete": o desconto incide sobre a proposta
+ * inteira, frete junto (regra da Ester, revisão 80). "3% no total" sozinho fica só no produto, como
+ * antes: é a leitura mais comum ("total dos itens"), e a dúvida está aberta em revisao80.md.
+ */
+export function descontoSobreTotal(texto: string): boolean {
+  return /\b(total (da|do) (proposta|pedido|or[cç]amento|compra|cota[cç][aã]o)|em tudo|(da|na) proposta (toda|inteira)|pedido (todo|inteiro)|com o frete|incluindo o frete|frete incluso no desconto|inclusive (no|o) frete)\b/i.test(texto);
+}
+
 /** Desconto que depende de pagamento, volume ou prazo para fechar ("3% se for à vista", "5% se fechar hoje"). Devolve o trecho, ou null. */
 export function descontoCondicional(texto: string): string | null {
   const t = texto.replace(/\s+/g, " ").trim();
@@ -404,7 +423,9 @@ export function condicaoDoDesconto(
 ): string | null {
   if (e.descontoPercentual === null && e.descontoValor === null) return null;
   const campo = e.descontoCondicao?.trim();
-  if (!campo) return descontoCondicional(texto);
+  // Revisão 80 (Ester): "10% no valor total da proposta" diz a base, não uma condição. Campo da IA
+  // sem nada que o comprador precise fazer (pagar, comprar mais, fechar até) não segura o desconto.
+  if (!campo || !ehCondicaoDeVerdade(campo)) return descontoCondicional(texto);
   const valor = e.descontoPercentual !== null ? `${String(e.descontoPercentual).replace(".", ",")}%` : formatarBRL(e.descontoValor!);
   return `${valor} ${campo}`.slice(0, 120);
 }
@@ -430,19 +451,23 @@ export function descontoPorUnidade(texto: string): boolean {
  * unidade se o fornecedor disse. null quando não dá para aplicar com segurança.
  */
 export function aplicarDesconto(
-  c: Pick<CondicaoProposta, "precoUnitario" | "totalProduto">,
+  c: Pick<CondicaoProposta, "precoUnitario" | "totalProduto"> & { frete?: number | null },
   d: { descontoPercentual: number | null; descontoValor: number | null },
   qtd: number | null,
   porUnidade = false,
-): { precoUnitario: number | null; totalProduto: number | null; descricao: string } | null {
+  sobreTotal = false,
+): { precoUnitario: number | null; totalProduto: number | null; frete?: number | null; descricao: string } | null {
   if (d.descontoPercentual !== null) {
     const f = 1 - d.descontoPercentual / 100;
     if (!(f > 0 && f < 1)) return null;
     const total = c.totalProduto ?? (c.precoUnitario !== null && qtd ? c.precoUnitario * qtd : null);
+    // Revisão 80: "10% no valor total da proposta" vale para o frete também (itens + frete).
+    const freteJunto = sobreTotal && typeof c.frete === "number" && c.frete > 0;
     return {
       precoUnitario: c.precoUnitario !== null ? centavos(c.precoUnitario * f) : null,
       totalProduto: total !== null ? centavos(total * f) : null,
-      descricao: `${String(d.descontoPercentual).replace(".", ",")}% sobre o preço`,
+      ...(freteJunto ? { frete: centavos(c.frete! * f) } : {}),
+      descricao: `${String(d.descontoPercentual).replace(".", ",")}% ${freteJunto ? "sobre o total (produto e frete)" : "sobre o preço"}`,
     };
   }
   if (d.descontoValor !== null) {

@@ -49,6 +49,7 @@ import { registrar } from "../nucleo/registro.ts";
 import { EMPRESA, JANELA_CONFIRMACAO_MIN } from "../config.ts";
 import { localPadraoDoContato, TEXTO_OFERTA_VINCULAR } from "../contas.ts";
 import { aoBotaoDoComprador } from "./decisao.ts";
+import { aoBotaoPosPedido, situacaoDoItem } from "./pos-pedido.ts";
 import { aoBotaoDoTransbordo, aoTransbordoDoComprador, ligarTransbordo } from "./transbordo.ts";
 import { atributosFaltando, exemplosDoNicho } from "../dominio/categorias.ts";
 import { dias, fmtNumero, MOTIVOS_CANCELAMENTO, nomePedido, quantidade, quantidadeDe, type MotivoCancelamento } from "../texto.ts";
@@ -99,7 +100,7 @@ export function definirRespondedorDeConsulta(fn: RespondedorConsulta | null) {
 export { plural } from "../texto.ts";
 const quantidadeTexto = quantidade;
 
-const CONFIRMACAO = /^(sim|ok|okay|confirm[oa]|confirmado|pode( seguir| cotar)?|isso|certo|fechado|beleza|blz|manda)[!.\s]*$/i;
+const CONFIRMACAO = /^(sim|ok|okay|confirm[oa]|confirmar|confirmado|pode( seguir| cotar)?|isso|certo|fechado|beleza|blz|manda)[!.\s]*$/i;
 const SAUDACAO = /^(oi+|ol[aá]|opa|e a[ií]|bom dia|boa tarde|boa noite|tudo bem\??|obrigad[oa]|valeu|ok|blz|beleza)[!.\s]*$/i;
 /** "/start", "\start" (com a barra invertida, como no pedido 10) e "start" valem igual; o mesmo para ajuda. */
 export const INICIO = /^[/\\]?start(\s|$)|^[/\\]?ajuda[!.?\s]*$/i;
@@ -120,6 +121,25 @@ function lerBotao(dado: string): { pedidoId: number; acao: Acao; motivo?: Motivo
 
 type ItemResumo = { descricao: string; quantidade: string | number; unidade: string; aceitaSimilar: boolean; itemChave?: string | null; especificacao?: Record<string, string> };
 
+const semAcentoMinusculo = (t: string) => t.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().replace(/\s+/g, " ").trim();
+
+/**
+ * Especificações do item numa linha ("Classe: A · Cor: branco"). Fica de fora o que o nome já diz
+ * (a bitola que já está em "Tubo de PVC 25 mm") e o escopo do serviço (vai na linha do item).
+ */
+export function especificacoesVisiveis(espec: Record<string, string> | null | undefined, descricao: string, servico = false): string {
+  const nome = ` ${semAcentoMinusculo(descricao).replace(/[^a-z0-9/"]+/g, " ")} `;
+  // Já no nome só se o valor aparece como palavra inteira e tem 2+ letras ("25 mm" em "Tubo 25 mm"; "A" nunca).
+  const noNome = (v: string) => {
+    const x = semAcentoMinusculo(v).replace(/[^a-z0-9/"]+/g, " ").trim();
+    return x.length >= 2 && nome.includes(` ${x} `);
+  };
+  return Object.entries(espec ?? {})
+    .filter(([k, v]) => v?.trim() && !(servico && /escopo/i.test(k)) && !noNome(v))
+    .map(([k, v]) => `${k.trim()}: ${v.trim()}`)
+    .join(" · ");
+}
+
 export function textoConfirmacao(p: {
   id: number;
   setor?: string | null;
@@ -139,12 +159,14 @@ export function textoConfirmacao(p: {
   const linhas = [`${nomePedido(p, p.itens)}. Entendi assim:`, ""];
   p.itens.forEach((it, i) => {
     const nome = Number(it.quantidade) > 0 ? quantidadeDe(it.quantidade, it.unidade, it.descricao) : `? ${it.unidade} de ${it.descricao}`;
-    // Item da base: mostra o código e as duas primeiras especificações técnicas.
-    const espec = it.itemChave?.startsWith("ITM-") && it.especificacao ? Object.values(it.especificacao).slice(0, 2).join(", ") : "";
     // Serviço: o escopo aparece na linha; "aceita similar" não se aplica.
     const servico = ehServico(it);
     const escopo = servico ? Object.entries(it.especificacao ?? {}).find(([k]) => /escopo/i.test(k))?.[1] : undefined;
-    linhas.push(`${i + 1}. ${nome}${espec ? ` (${espec})` : ""}${escopo ? ` (escopo: ${escopo})` : ""}${it.aceitaSimilar && !servico ? " (aceita similar)" : ""}`);
+    // Revisão 80 (Ester): toda especificação anotada aparece, de qualquer item ("Classe: A · Cor: branco").
+    // Antes só item da base mostrava, e só duas: o comprador corrigia e via o mesmo resumo, sem saber se foi anotado.
+    const espec = especificacoesVisiveis(it.especificacao, it.descricao, servico);
+    linhas.push(`${i + 1}. ${nome}${escopo ? ` (escopo: ${escopo})` : ""}${servico ? "" : it.aceitaSimilar ? " (aceita similar)" : it.aceitaSimilar === false ? " (não aceita similar)" : ""}`);
+    if (espec) linhas.push(`   ${espec}`);
   });
   linhas.push("");
   const rotuloLocal = soServicos(p.itens) ? "Local do serviço" : "Entrega";
@@ -152,8 +174,10 @@ export function textoConfirmacao(p: {
   linhas.push(entrega);
   if (p.janelaRecebimento) linhas.push(`Recebe: ${p.janelaRecebimento}`);
   linhas.push(`Setor: ${p.setor ?? "não informado"}`);
+  // "15 dias (15 dias)": o parêntese só entra quando acrescenta algo ao que o comprador escreveu.
+  const prazoDias = p.prazoMaxDias !== null ? dias(p.prazoMaxDias) : null;
   const prazo = p.prazoTexto
-    ? `${p.prazoTexto}${p.prazoMaxDias !== null ? ` (${dias(p.prazoMaxDias)})` : ""}`
+    ? `${p.prazoTexto}${prazoDias && semAcentoMinusculo(p.prazoTexto) !== semAcentoMinusculo(prazoDias) ? ` (${prazoDias})` : ""}`
     : "não informado";
   linhas.push(`Prazo: ${prazo}`);
   if (p.entregas) linhas.push(`Entregas: ${p.entregas}`);
@@ -377,6 +401,8 @@ export async function interpretarEResponder(pedidoId: number, opcoes: { lida?: L
   if (i.ehPedido && !i.setor && !p.setor && !i.faltando.some((f) => /setor/i.test(f))) {
     i.faltando = ["Para qual setor é este pedido?", ...i.faltando];
   }
+  // Revisão 80: o que estava anotado antes desta mensagem, para dizer ao comprador o que mudou (ou que nada mudou).
+  const fotoAntes = p.correcoes.length && anteriores.length ? fotoDoPedido(anteriores, p) : null;
   // E6: casa cada item com a base; com uma correspondência, ganha código e especificação técnica.
   const daBase: string[] = [];
   const itens = await definirItens(
@@ -457,16 +483,57 @@ export async function interpretarEResponder(pedidoId: number, opcoes: { lida?: L
     suposicoes: i.suposicoes,
     perguntas: perguntar ? i.faltando : [],
   });
+  // Revisão 80: depois de uma correção ou pergunta, diz primeiro o que mudou. Pergunta ("vc anotou o diâmetro?")
+  // recebe a conferência, e não o mesmo resumo sem explicação.
+  const prefixo = fotoAntes ? textoDoQueMudou(fotoAntes, fotoDoPedido(itens, { setor: i.setor ?? p.setor, prazoTexto: i.prazoTexto, pagamentoPreferido: i.pagamento ?? p.pagamentoPreferido, destino: i.destino, entregas: i.entregas ?? p.entregas }), textoNovo) : "";
   const escolha = escolhasDaBase(pedidoId, itens);
   // Q5: pedido de foto ou print com marca vista: pergunta se a marca é exigida.
   const deImagem = /\[(Foto|Print de loja)\]/.test([p.textoOriginal, ...p.correcoes].join("\n"));
   const marcas = deImagem ? perguntasDeMarca(pedidoId, i.itens) : { texto: "", botoes: [] };
   const botoesAtributo = botoesDeAtributos(pedidoId, atributos);
   const pag = perguntaPagamento(pedidoId, i.pagamento ?? p.pagamentoPreferido, botoesAtributo.length + marcas.botoes.length + escolha.botoes.length);
-  await enviar(p.compradorId, texto + escolha.texto + marcas.texto + pag.texto, {
+  await enviar(p.compradorId, prefixo + texto + escolha.texto + marcas.texto + pag.texto, {
     pedidoId,
     botoes: [...botoesAtributo, ...marcas.botoes, ...escolha.botoes, ...pag.botoes, ...botoesConfirmacao(pedidoId, perguntar)],
   });
+}
+
+type FotoPedido = { itens: Map<string, { quantidade: number; unidade: string; especificacao: Record<string, string>; aceitaSimilar: boolean }>; campos: Record<string, string> };
+
+/** Como o pedido está, para comparar antes e depois de uma mensagem do comprador. */
+export function fotoDoPedido(
+  itens: { descricao: string; quantidade: string | number; unidade: string; especificacao: Record<string, string> | null; aceitaSimilar: boolean }[],
+  p: { setor?: string | null; prazoTexto?: string | null; pagamentoPreferido?: string | null; destino?: string | null; entregas?: string | null },
+): FotoPedido {
+  return {
+    itens: new Map(itens.map((it) => [it.descricao, { quantidade: Number(it.quantidade), unidade: it.unidade, especificacao: it.especificacao ?? {}, aceitaSimilar: it.aceitaSimilar }])),
+    campos: { Setor: p.setor ?? "", Prazo: p.prazoTexto ?? "", Pagamento: p.pagamentoPreferido ?? "", Entrega: p.destino ?? "", Entregas: p.entregas ?? "" },
+  };
+}
+
+/** "vc anotou o diâmetro?", "você entendeu que é classe A?", "colocou a cor?" */
+export const PERGUNTA_CONFERENCIA = /\?\s*$|^\s*(vc|voc[eê]|tu)?\s*(j[aá]\s+)?(anotou|entendeu|colocou|incluiu|considerou|registrou|pegou|viu|mandou|vai mandar|enviou)\b|\b(est[aá]|t[aá]) anotad/i;
+
+/** Primeira linha da resposta a uma correção: o que mudou, ou que nada mudou. */
+export function textoDoQueMudou(antes: FotoPedido, depois: FotoPedido, textoNovo: string): string {
+  const mudou: string[] = [];
+  for (const [desc, d] of depois.itens) {
+    const a = antes.itens.get(desc);
+    if (!a) {
+      mudou.push(`item: ${desc}`);
+      continue;
+    }
+    if (a.quantidade !== d.quantidade || a.unidade !== d.unidade) mudou.push(`quantidade de ${desc}: ${fmtNumero(d.quantidade)} ${d.unidade}`);
+    for (const [k, v] of Object.entries(d.especificacao)) if (semAcentoMinusculo(a.especificacao[k] ?? "") !== semAcentoMinusculo(v)) mudou.push(`${k}: ${v}`);
+    if (a.aceitaSimilar !== d.aceitaSimilar) mudou.push(d.aceitaSimilar ? "aceita similar" : "não aceita similar");
+  }
+  for (const desc of antes.itens.keys()) if (!depois.itens.has(desc)) mudou.push(`saiu: ${desc}`);
+  for (const [k, v] of Object.entries(depois.campos)) if (v && semAcentoMinusculo(antes.campos[k] ?? "") !== semAcentoMinusculo(v)) mudou.push(`${k}: ${v}`);
+  const pergunta = PERGUNTA_CONFERENCIA.test(textoNovo);
+  if (mudou.length) return `${pergunta ? "Conferi e completei" : "Anotei"}: ${mudou.slice(0, 6).join("; ")}.\n\n`;
+  return pergunta
+    ? "Conferi: está tudo anotado como abaixo (especificações na linha de cada item). Se faltar algo, escreva só o que mudar.\n\n"
+    : "Essa mensagem não mudou nada no pedido. Se faltou algo, escreva só o que mudar (ex.: \"cor: branco\").\n\n";
 }
 
 const MAX_PERGUNTAS = 3;
@@ -815,7 +882,14 @@ async function textoConsulta(contatoId: string, texto: string, padrao: string): 
     ? await db.select().from(pedido).where(and(eq(pedido.id, Number(n)), eq(pedido.compradorId, contatoId)))
     : await db.select().from(pedido).where(eq(pedido.compradorId, contatoId)).orderBy(desc(pedido.id)).limit(1);
   if (!p) return padrao;
-  const estado = { interpretando: "em leitura", aguardando_confirmacao: "esperando sua confirmação", em_andamento: "em cotação", concluido: "concluído", cancelado: "cancelado" }[p.estado];
+  const estado = { interpretando: "em leitura", aguardando_confirmacao: "esperando sua confirmação", em_andamento: "em andamento", concluido: "concluído", cancelado: "cancelado" }[p.estado];
+  // Revisão 80: "em cotação" para tudo confundia (o pedido 33 já tinha pedido de compra enviado). Diz o passo de cada item.
+  const itens = p.estado === "em_andamento" ? await db.select().from(itemPedido).where(eq(itemPedido.pedidoId, p.id)).orderBy(asc(itemPedido.ordem)) : [];
+  if (itens.length) {
+    const linhas = itens.map((i) => `- ${situacaoDoItem(i.estado, `${quantidadeDe(i.quantidade, i.unidade, i.descricao)}`)}`);
+    const espera = itens.some((i) => i.estado === "pedido_enviado") ? " Quem confirma agora é o fornecedor; aviso assim que ele responder." : "";
+    return `O pedido ${p.id} está assim:\n${linhas.join("\n")}${espera}`;
+  }
   return `Ainda não consigo responder isso por aqui. O pedido ${p.id} está ${estado}; os detalhes ficam na tela de pedidos.`;
 }
 
@@ -1030,6 +1104,8 @@ export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: Me
     if (ref) await vincularMensagem(mensagemId, ref[1] === "pedido" ? { pedidoId: Number(ref[2]) } : { itemPedidoId: Number(ref[2]) });
     // R14b: prazo vencido com menos de 3 propostas (encerrar ou estender).
     if (await aoBotaoDoPrazo(contato, entrada.botao)) return;
+    // Revisão 80: condição nova do fornecedor depois do pedido de compra (aceitar ou manter).
+    if (await aoBotaoPosPedido(contato.id, entrada.botao)) return;
     if (await aoBotaoDoComprador(contato, entrada.botao)) return;
     const b = lerBotao(entrada.botao);
     if (!b) return;
@@ -1105,6 +1181,15 @@ export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: Me
   if (!pendente && SAUDACAO.test(texto)) {
     await enviar(contato.id, textoBoasVindas());
     return;
+  }
+  // Revisão 80: "confirmar" sem pedido esperando confirmação (ex.: com o pedido de compra já enviado)
+  // não vira pergunta ambígua nem pedido novo: diz em que passo está cada item e quem age agora.
+  if (!pendente && CONFIRMACAO.test(texto)) {
+    const estado = await textoConsulta(contato.id, "", "");
+    if (estado && !estado.startsWith("Ainda não consigo")) {
+      await enviar(contato.id, estado);
+      return;
+    }
   }
   if (pendente?.estado === "aguardando_confirmacao" && CONFIRMACAO.test(texto)) {
     return confirmar(pendente.id, contato.id);

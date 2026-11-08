@@ -249,6 +249,18 @@ export function negociacaoDaLinha(o: OfertaComparavel, produto: number | null): 
     if (diferenca >= 0.01) texto = `Desconto obtido: ${formatarBRL(diferenca)} (de ${formatarBRL(antes)} para ${formatarBRL(produto)})`;
     else if (diferenca <= -0.01) alertas.push(`Subiu o preço depois do pedido de desconto (de ${formatarBRL(antes)} para ${formatarBRL(produto)})`);
   }
+  // Revisão 80 (Ester): o mapa mostra o valor bruto, o percentual e o valor final com desconto (produto + frete).
+  const descFrete = n?.descontoFrete ?? 0;
+  if (antes !== null && produto !== null && (centavos(antes - produto) >= 0.01 || descFrete >= 0.01)) {
+    const frete = o.frete ?? 0;
+    const bruto = centavos(antes + frete + descFrete);
+    const final = centavos(produto + frete);
+    const pct = bruto > 0 ? ((bruto - final) / bruto) * 100 : 0;
+    if (bruto - final >= 0.01) {
+      const pctTxt = pct.toFixed(1).replace(/\.0$/, "").replace(".", ",");
+      return { texto: `Desconto obtido: ${formatarBRL(centavos(bruto - final))} (${pctTxt}%) · valor bruto ${formatarBRL(bruto)} · com desconto ${formatarBRL(final)}${descFrete >= 0.01 ? ` (frete ${formatarBRL(descFrete)} mais barato)` : ""}`, alertas: n?.condicao ? [`Desconto condicionado, não aplicado ao total: "${n.condicao}"`] : alertas };
+    }
+  }
   if (n) {
     if ((n.descontoFrete ?? 0) >= 0.01) texto = `${texto ? `${texto}; ` : "Desconto obtido: "}frete ${formatarBRL(n.descontoFrete!)} mais barato`;
     if (!texto) {

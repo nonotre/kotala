@@ -40,6 +40,9 @@ export type ItemResumo = ComLink & {
    * que disse o que vende só cota a própria categoria. Null quando não se sabe (aí vai a todos).
    */
   categoria: string | null;
+  /** Revisão 80: o que foi anotado do item (classe, cor, bitola...). Sem isto o Assistente dizia "anotei tudo" sem ver. */
+  especificacao?: Record<string, string>;
+  aceitaSimilar?: boolean;
 };
 
 export type ResumoPedido = ComLink & {

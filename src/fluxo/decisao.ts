@@ -399,7 +399,9 @@ export function textoPedidoDeCompra(p: {
         : "",
     ped.modoEntrega === "retirada" ? "Retirada na loja." : `Entrega: ${ped.destino ?? "a combinar"}${ped.janelaRecebimento ? ` (${ped.janelaRecebimento})` : ""}.`,
     o.prazoDias !== null ? `Prazo: ${dias(o.prazoDias)}.` : "",
-    ct ? `Pagamento e frete: conforme o contrato${ct.observacao ? ` (${ct.observacao})` : ""}.` : `Pagamento: ${pagamentoCombinado(o)}.`,
+    ct ? `Pagamento e frete: conforme o contrato${ct.observacao ? ` (${ct.observacao})` : ""}.` : `Pagamento: ${pagamentoCombinado({ ...o, pagamento: semDescontoPendente(o.pagamento) })}.`,
+    // Revisão 80: o desconto com condição não entrou no total; pergunta direto se ele vale, em vez de mandar o jargão interno.
+    !ct && descontoPendente(o.pagamento) ? `Você ofereceu um desconto com condição ("${descontoPendente(o.pagamento)}"), que não está no total acima. Se ele vale para este pedido, me diga e eu levo o total com desconto ao comprador.` : "",
     // A condição combinada vale; a preferência só vai como pedido, sem mudar o total.
     preferido ? `Se for possível nas mesmas condições, nossa forma de pagamento preferida é ${preferido}.` : "",
     ped.entregas ? `Entregas: ${ped.entregas}.` : "",
@@ -409,6 +411,11 @@ export function textoPedidoDeCompra(p: {
     .filter(Boolean)
     .join("\n");
 }
+
+const DESCONTO_PENDENTE = /;?\s*desconto condicionado:\s*"([^"]*)"\s*\(não aplicado ao total\)/i;
+/** Trecho do desconto condicionado guardado no texto do pagamento, ou null. */
+export const descontoPendente = (pagamento: string | null) => DESCONTO_PENDENTE.exec(pagamento ?? "")?.[1] ?? null;
+const semDescontoPendente = (pagamento: string | null) => pagamento?.replace(DESCONTO_PENDENTE, "").trim() || null;
 
 /** Forma de pagamento combinada, como a proposta disse (U1.1); sem dado, pede para combinar. */
 export function pagamentoCombinado(o: { pagamento: string | null; prazoPagamentoDias: number | null }): string {

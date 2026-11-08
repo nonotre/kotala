@@ -15,6 +15,7 @@ import {
   condicaoDaOferta,
   condicaoDoDesconto,
   descontoPorUnidade,
+  descontoSobreTotal,
   deveNegociar,
   escolherAlavancas,
   jaPediuDesconto,
@@ -52,6 +53,7 @@ import {
 } from "../nucleo/mensagens/index.ts";
 import { registrar } from "../nucleo/registro.ts";
 import { aoRespostaDoVencedor, pedidoEnviadoPara } from "./decisao.ts";
+import { respostaAoPedidoDeCompra } from "./pos-pedido.ts";
 import { aoFornecedorPedirPessoa, aoMensagemDoFornecedorNoTransbordo } from "./transbordo.ts";
 import { cnpjValido, formatarCnpj, verificarFornecedor } from "../agentes/verificacao/index.ts";
 import { categoriasDoCadastro, detectarCategorias, exemplosDoNicho } from "../dominio/categorias.ts";
@@ -153,9 +155,15 @@ async function tratarMensagemDoFornecedor({ contato, mensagemId, entrada }: Mens
   if (await respostaConfirmacaoDePreco(contato.id, contato.fornecedorId, mensagemId, texto)) return;
 
   // Confirmação do pedido de compra por texto.
+  const enviadoId = await pedidoEnviadoPara(contato.fornecedorId);
   if (CONFIRMA.test(texto)) {
-    const itemId = await pedidoEnviadoPara(contato.fornecedorId);
-    if (itemId && (await aoRespostaDoVencedor(contato, itemId, true))) return;
+    if (enviadoId && (await aoRespostaDoVencedor(contato, enviadoId, true))) return;
+  }
+  // Revisão 80: outra resposta ao pedido de compra (desconto que passa a valer, prazo novo, dúvida,
+  // documento) é lida e tratada, em vez de cair em "a cotação já foi encerrada". Com cotação aberta
+  // de outro item, a mensagem é da cotação aberta.
+  if (enviadoId && texto && !(await cotacaoAbertaDo(contato.fornecedorId))) {
+    if (await respostaAoPedidoDeCompra(contato, enviadoId, mensagemId, texto)) return;
   }
 
   // Transbordo: recado ao comprador (depois de "me mande a mensagem") ou resposta a um recado dele.
@@ -510,7 +518,7 @@ async function processarResposta(
   const condicao = condicaoDoDesconto(e, entrada.texto);
   let marcaCarregada: MarcaNegociacao | null = marcaDe(anterior?.extraido);
   if (anterior && (e.classificacao === "proposta" || e.classificacao === "outro")) {
-    const completa = completarComAnterior(e, anterior, { quantidade: qtd, condicional: !!condicao, porUnidade: descontoPorUnidade(entrada.texto) });
+    const completa = completarComAnterior(e, anterior, { quantidade: qtd, condicional: !!condicao, porUnidade: descontoPorUnidade(entrada.texto), sobreTotal: descontoSobreTotal(entrada.texto) });
     if (completa) {
       const { negociacao, ...resto } = completa;
       e = resto;
@@ -990,7 +998,7 @@ const numOuNull = (v: string | null) => (v === null ? null : Number(v));
 export function completarComAnterior(
   e: Extracao,
   a: typeof oferta.$inferSelect,
-  contexto: { quantidade?: number; condicional?: boolean; porUnidade?: boolean } = {},
+  contexto: { quantidade?: number; condicional?: boolean; porUnidade?: boolean; sobreTotal?: boolean } = {},
 ): (Extracao & { negociacao?: MarcaNegociacao }) | null {
   const temDesconto = e.descontoPercentual !== null || e.descontoValor !== null;
   const trazAlgo = temDesconto || [e.precoUnitario, e.totalProduto, e.frete, e.prazoDias, e.validadeDias, e.pagamento, e.prazoPagamentoDias, e.impostosValor, e.impostosNaoInclusos, e.entregaNoLocal].some((v) => v !== null);
@@ -998,9 +1006,13 @@ export function completarComAnterior(
   const novoPreco = e.precoUnitario !== null || e.totalProduto !== null;
   let precoUnitario = novoPreco ? e.precoUnitario : numOuNull(a.precoUnitario);
   let totalProduto = novoPreco ? e.totalProduto : numOuNull(a.totalProduto);
+  let frete = e.frete ?? numOuNull(a.frete);
   if (!novoPreco && temDesconto && !contexto.condicional) {
-    const aplicado = aplicarDesconto({ precoUnitario, totalProduto }, e, contexto.quantidade ?? null, contexto.porUnidade);
-    if (aplicado) ({ precoUnitario, totalProduto } = aplicado);
+    const aplicado = aplicarDesconto({ precoUnitario, totalProduto, frete: e.frete === null ? frete : null }, e, contexto.quantidade ?? null, contexto.porUnidade, contexto.sobreTotal);
+    if (aplicado) {
+      ({ precoUnitario, totalProduto } = aplicado);
+      if (aplicado.frete !== undefined) frete = aplicado.frete;
+    }
   }
   const marca = marcaDe(a.extraido);
   return {
@@ -1014,7 +1026,7 @@ export function completarComAnterior(
     quantidadeOfertada: e.quantidadeOfertada ?? numOuNull(a.quantidadeOfertada),
     unidadeOfertada: e.unidadeOfertada ?? a.unidadeOfertada,
     embalagem: e.embalagem ?? a.embalagem,
-    frete: e.frete ?? numOuNull(a.frete),
+    frete,
     impostosValor: e.impostosValor ?? numOuNull(a.impostosValor),
     impostosNaoInclusos: e.impostosNaoInclusos ?? a.impostosNaoInclusos,
     prazoDias: e.prazoDias ?? a.prazoDias,
@@ -1154,7 +1166,7 @@ export async function aplicarDescontoTardio(
   }
 
   const condicao = condicaoDoDesconto(e, texto);
-  const completa = completarComAnterior(e, p.oferta, { quantidade: qtd, condicional: !!condicao, porUnidade: descontoPorUnidade(texto) });
+  const completa = completarComAnterior(e, p.oferta, { quantidade: qtd, condicional: !!condicao, porUnidade: descontoPorUnidade(texto), sobreTotal: descontoSobreTotal(texto) });
   // "Vou ver com o gerente": nada a registrar ainda.
   if (!completa && vaiResponderDepois(texto)) {
     await enviar(

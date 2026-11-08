@@ -158,7 +158,7 @@ test("Q8: loja online sem frete fica 'a calcular no site', com estimativa só pa
 
 test("I1: negociação no mapa (desconto, manteve, não respondeu, subiu, condicional)", () => {
   const o = oferta({});
-  assert.equal(negociacaoDaLinha({ ...o, produtoAnterior: 1600 }, 1520).texto, "Desconto obtido: R$\u00a080,00 (de R$\u00a01.600,00 para R$\u00a01.520,00)");
+  assert.equal(negociacaoDaLinha({ ...o, produtoAnterior: 1600 }, 1520).texto, "Desconto obtido: R$\u00a080,00 (4,8%) · valor bruto R$\u00a01.650,00 · com desconto R$\u00a01.570,00");
   assert.equal(negociacaoDaLinha({ ...o, produtoAnterior: 1600, negociacao: { resultado: "manteve" } }, 1600).texto, "Pedi desconto: manteve o preço");
   assert.equal(negociacaoDaLinha({ ...o, negociacao: { resultado: "sem_resposta" } }, 1600).texto, "Pedi desconto: não respondeu");
   assert.equal(negociacaoDaLinha({ ...o, negociacao: { resultado: null } }, 1600).texto, "Pedi desconto: não respondeu");
@@ -168,7 +168,7 @@ test("I1: negociação no mapa (desconto, manteve, não respondeu, subiu, condic
   const cond = negociacaoDaLinha({ ...o, produtoAnterior: 1600, negociacao: { resultado: "condicional", condicao: "3% à vista" } }, 1600);
   assert.equal(cond.texto, "Pedi desconto: só com condição");
   assert.deepEqual(cond.alertas, ['Desconto condicionado, não aplicado ao total: "3% à vista"']);
-  assert.equal(negociacaoDaLinha({ ...o, produtoAnterior: 1600, negociacao: { resultado: "desconto", descontoFrete: 10 } }, 1600).texto, "Desconto obtido: frete R$\u00a010,00 mais barato");
+  assert.equal(negociacaoDaLinha({ ...o, produtoAnterior: 1600, negociacao: { resultado: "desconto", descontoFrete: 10 } }, 1600).texto, "Desconto obtido: R$\u00a010,00 (0,6%) · valor bruto R$\u00a01.660,00 · com desconto R$\u00a01.650,00 (frete R$\u00a010,00 mais barato)");
   // Sem negociação e sem preço anterior: nada.
   assert.deepEqual(negociacaoDaLinha(o, 1600), { texto: null, alertas: [] });
   // A linha do mapa leva o texto e os alertas.

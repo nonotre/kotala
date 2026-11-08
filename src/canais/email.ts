@@ -25,7 +25,9 @@ export const emailValido = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.tr
 
 const permitidosDoAmbiente = () =>
   new Set(
-    (process.env.EMAIL_PERMITIDOS ?? "")
+    // EMAIL_FORNECEDOR_TESTE: o endereço que recebe a cópia de teste das mensagens a fornecedor.
+    [process.env.EMAIL_PERMITIDOS ?? "", process.env.EMAIL_FORNECEDOR_TESTE ?? ""]
+      .join(",")
       .split(",")
       .map(normalizarEmail)
       .filter(Boolean),
@@ -124,14 +126,16 @@ export function adaptadorEmail(op: OpcoesEmail = {}): AdaptadorCanal {
               : ehMapa(opcoes.anexos)
                 ? `Mapa de cotação${opcoes.pedidoId ? ` · pedido ${opcoes.pedidoId}` : ""} · ${EMPRESA.nome}`
                 : `Mensagem de ${EMPRESA.nome}`;
+      const assuntoFinal = opcoes.copiaDe ? `[${opcoes.copiaDe}] ${assunto} (cópia de teste)` : assunto;
       // O convite já traz o link e o aviso no corpo.
       const { lista, faltaram } = await anexosDoEmail(opcoes.anexos ?? []);
       const completo =
         texto +
         (opcoes.botoes?.length ? opcoesEmTexto(opcoes.botoes) : "") +
         (faltaram.length ? `\n\nNão consegui anexar: ${faltaram.join(", ")}.` : "");
-      const corpo = opcoes.tipo === "convite" ? completo : completo + (await rodapeFornecedor(endereco, op.usuarioBot));
-      const r = await t.sendMail({ from: remetente(), to: normalizarEmail(endereco), subject: assunto, text: corpo, ...(lista.length ? { attachments: lista } : {}) });
+      // A cópia de teste não leva o rodapé do fornecedor (o link pessoal é dele, não de quem testa).
+      const corpo = opcoes.tipo === "convite" || opcoes.copiaDe ? completo : completo + (await rodapeFornecedor(endereco, op.usuarioBot));
+      const r = await t.sendMail({ from: remetente(), to: normalizarEmail(endereco), subject: assuntoFinal, text: corpo, ...(lista.length ? { attachments: lista } : {}) });
       return { idExterno: r.messageId };
     },
   };
