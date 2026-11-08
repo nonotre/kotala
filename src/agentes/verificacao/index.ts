@@ -111,6 +111,7 @@ export async function verificarFornecedor(fornecedorId: string, opcoes: { forcar
     cnpjInexistente,
     consultaIndisponivel,
     presencaVerificavel,
+    categorias: f.categorias,
     compras: h?.compras ?? 0,
     prazosCumpridos: h?.cumpridos ?? 0,
     prazosAvaliados: h?.avaliados ?? 0,

@@ -4,11 +4,15 @@
 export type Termos = {
   /** Cada grupo precisa de pelo menos uma palavra presente no título. */
   grupos: string[][];
-  /** Nenhuma pode aparecer (ex.: rejunte, quando o pedido é areia). */
+  /** Nenhuma pode aparecer (ex.: cartucho, quando o pedido é papel). */
   proibidas: string[];
-  /** Conteúdo por embalagem do pedido (ex.: 50 kg por saco), quando houver. */
+  /** Conteúdo por embalagem do pedido em kg (ex.: 50 kg por saco), quando houver. */
   conteudoKg: number | null;
+  /** Conteúdo por embalagem em qualquer unidade (5 L, 500 folhas, 100 m). Vale mais que conteudoKg. */
+  conteudo?: Conteudo | null;
 };
+
+import { conteudoNoTitulo, converterUnidade, normalizarUnidade, rotuloConteudo, type Conteudo } from "../../dominio/unidades.ts";
 
 export const normalizar = (s: string) =>
   s
@@ -66,26 +70,35 @@ export function kgNoTitulo(titulo: string): number | null {
 
 /** "Kit 10 sacos", "c/ 10", "pacote com 6": quantidade no kit. */
 export function tamanhoDoKit(titulo: string): number | null {
-  const m = /\b(?:kit|pacote|caixa|fardo)\s*(?:com\s*)?(\d{1,4})\b|\bc\/\s?(\d{1,4})\b|\b(\d{1,4})\s*(?:sacos|unidades|pe[cç]as)\b/i.exec(titulo);
+  const m = /\b(?:kit|pacote|caixa|fardo)\s*(?:com\s*)?(\d{1,4})\b|\bc\/\s?(\d{1,4})\b|\b(\d{1,4})\s*(?:sacos|unidades|pe[cç]as|resmas|caixas|pares|rolos|latas|pacotes)\b/i.exec(titulo);
   const n = Number(m?.[1] ?? m?.[2] ?? m?.[3]);
   return Number.isFinite(n) && n > 1 ? n : null;
 }
 
-const UNIDADE_VOLUME = /m3|m³|metro|carrad|caçamba|cacamba|caminh/i;
+/** Pedido em volume (m³) ou em carga de caminhão: o preço de embalagem em kg não serve. */
+const emVolume = (unidade: string) => /^(volume|carga)$/.test(normalizarUnidade(unidade)?.familia ?? "");
+/** Carrada, caçamba: não tem volume fixo, só serve quem vende na mesma unidade. */
+const semVolumeFixo = (unidade: string) => normalizarUnidade(unidade)?.familia === "carga";
 
 export type Conversao = { precoUnitario: number | null; conversao: string | null; corte: string | null };
 
 /** Converte o preço da loja para a unidade do pedido, só quando é seguro. */
 export function converter(preco: number, titulo: string, unidadePedido: string, t: Termos): Conversao {
   const kg = kgNoTitulo(titulo);
-  if (UNIDADE_VOLUME.test(unidadePedido)) {
+  if (emVolume(unidadePedido)) {
     if (kg !== null) return { precoUnitario: null, conversao: null, corte: `Vendido em embalagem de ${kg} kg; o pedido é por ${unidadePedido}` };
-    if (/carrad|caçamba|cacamba|caminh/i.test(unidadePedido) && !/carrad|caçamba|cacamba|caminh/i.test(titulo)) {
+    if (semVolumeFixo(unidadePedido) && !/carrad|ca[cç]amba|caminh/i.test(titulo)) {
       return { precoUnitario: null, conversao: null, corte: "Vendido por m³ ou outra medida; carrada não tem volume fixo" };
     }
   }
-  if (t.conteudoKg !== null && kg !== null && Math.abs(kg - t.conteudoKg) > 0.01) {
-    return { precoUnitario: null, conversao: null, corte: `Outro tamanho (${kg} kg; pedido ${t.conteudoKg} kg)` };
+  // Conteúdo por embalagem (kg, L, folhas, m): outro tamanho não serve. Converte g↔kg, mL↔L, cm↔m.
+  const pedido: Conteudo | null = t.conteudo ?? (t.conteudoKg !== null ? { valor: t.conteudoKg, unidade: "kg" } : null);
+  if (pedido) {
+    const no = conteudoNoTitulo(titulo, normalizarUnidade(pedido.unidade)?.familia);
+    const equivalente = !no ? null : no.unidade === normalizarUnidade(pedido.unidade)?.id ? no.valor : converterUnidade(no.valor, no.unidade, pedido.unidade);
+    if (no && equivalente !== null && Math.abs(equivalente - pedido.valor) > 0.01) {
+      return { precoUnitario: null, conversao: null, corte: `Outro tamanho (${rotuloConteudo(no)}; pedido ${rotuloConteudo(pedido)})` };
+    }
   }
   const kit = tamanhoDoKit(titulo);
   if (kit) {

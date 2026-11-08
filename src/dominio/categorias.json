@@ -1,0 +1,215 @@
+{
+  "_sobre": "Perfil por categoria de compra. Tudo que é de uma área mora aqui, não no código. Regex sem acento (o texto é normalizado antes). O nicho da empresa (EMPRESA_NICHO) só escolhe exemplos, nunca limita pedidos.",
+  "categorias": [
+    {
+      "id": "geral", "nome": "Geral", "curto": "geral", "cadastro": false,
+      "palavras": [],
+      "vazias": ["de", "da", "do", "com", "para", "e", "em", "mm", "kg", "m", "un", "unidade", "tipo", "classe", "serie", "normal", "bruto", "a", "o"],
+      "unidadesAceitas": ["unidade", "caixa", "pacote", "par", "kit", "kg", "L", "m", "hora", "mês"],
+      "jargao": [
+        { "termo": "milheiro", "significa": "1.000 unidades (tijolo, bloco, telha, etiqueta)" },
+        { "termo": "resma", "significa": "pacote de papel, em geral 500 folhas" },
+        { "termo": "CIF, FOB", "significa": "frete incluso (CIF) ou por conta do comprador (FOB)" },
+        { "termo": "parada, urgente", "significa": "parada: a falta do item para a operação; o prazo pesa mais que o preço" }
+      ],
+      "exemplos": ["50 resmas de papel A4 e 20 pares de luva para o escritório até sexta", "2 extintores de 6 kg ABC e 10 caixas de copo descartável", "1 galão de 5 L de desinfetante e 30 toalhas de papel"],
+      "cnae": []
+    },
+    {
+      "id": "agregados", "nome": "Agregados", "curto": "areia e brita",
+      "palavras": ["areia", "brita", "pedra", "pedrisco", "cascalho", "po de pedra", "pedregulho"],
+      "sinonimos": { "brita": ["pedra"], "pedrisco": ["po", "pedra"] },
+      "vazias": ["lavada", "lavado"],
+      "unidadesAceitas": ["m³", "t", "kg", "saco", "L"],
+      "perguntaUnidade": "quantos m³ (ou toneladas)",
+      "atributos": [
+        { "chave": "unidade", "tipo": "unidade", "rotulo": "unidade de medida", "pergunta": "em m³ ou toneladas?" }
+      ],
+      "jargao": [
+        { "termo": "carrada, caçamba, caminhão", "significa": "carga de caminhão basculante; o volume varia (cerca de 5 a 8 m³). Manter a unidade 'carrada' e perguntar o volume só se for essencial" },
+        { "termo": "brita 0, brita 1, pedrisco", "significa": "Pedra britada pela graduação; pedrisco é brita 0" },
+        { "termo": "areia fina, média, grossa", "significa": "Areia lavada pela granulometria" },
+        { "termo": "metro, m3, metro cúbico", "significa": "m³ quando o item é areia, brita ou concreto" }
+      ],
+      "exemplos": ["2 carradas de areia média", "10 m³ de brita 1"],
+      "cnae": ["constru", "areia", "pedra", "brita", "extracao", "mineral", "material"]
+    },
+    {
+      "id": "cimenticios", "nome": "Cimentícios", "curto": "cimento",
+      "palavras": ["cimento", "argamassa", "cimentcola", "rejunte", "concreto", "cal"],
+      "sinonimos": { "cimentcola": ["argamassa", "colante"] },
+      "vazias": ["portland"],
+      "unidadesAceitas": ["saco", "kg", "t", "m³"],
+      "jargao": [
+        { "termo": "cp2, cp 2, cp-ii", "significa": "Cimento Portland CP II (E, F ou Z), saco de 50 kg se não disser outro peso" },
+        { "termo": "cp3, cp 3", "significa": "Cimento Portland CP III, saco de 50 kg" },
+        { "termo": "cp5, cp v, ari", "significa": "Cimento CP V-ARI (alta resistência inicial), saco de 40 ou 50 kg" },
+        { "termo": "ac1, ac2, ac3", "significa": "Argamassa colante AC-I, AC-II ou AC-III, saco de 20 kg" }
+      ],
+      "exemplos": ["40 sacos de cimento CP II"],
+      "cnae": ["constru", "cimento", "argamass", "concreto", "material", "ferrag"]
+    },
+    {
+      "id": "aco", "nome": "Aço e ferragens estruturais", "curto": "aço e vergalhão",
+      "palavras": ["vergalhao", "ferro", "aco", "tela soldada", "estribo", "ca-50", "ca-60"],
+      "sinonimos": { "vergalhao": ["barra", "aco"], "ferro": ["barra", "aco"] },
+      "unidadesAceitas": ["barra", "kg", "t", "painel"],
+      "atributos": [
+        { "chave": "bitola", "rotulo": "bitola", "pergunta": "qual a bitola (ex.: 3/8 ou 10 mm)?", "quando": "vergalhao|ferro|barra", "reconhece": "\\d+/\\d+|\\d+([.,]\\d+)? ?mm|bitola|ca-?\\d{2}" }
+      ],
+      "jargao": [
+        { "termo": "ferro 5/16", "significa": "Vergalhão CA-50 8 mm, barra de 12 m" },
+        { "termo": "ferro 3/8", "significa": "Vergalhão CA-50 10 mm, barra de 12 m" },
+        { "termo": "ferro 1/2", "significa": "Vergalhão CA-50 12,5 mm, barra de 12 m" },
+        { "termo": "ferro 4.2, ca-60", "significa": "Vergalhão CA-60 4,2 mm (estribo), barra de 12 m" }
+      ],
+      "exemplos": ["20 barras de ferro 3/8"],
+      "cnae": ["constru", "aco", "metal", "ferro", "siderurg", "ferrag", "material"]
+    },
+    {
+      "id": "alvenaria", "nome": "Alvenaria e cerâmicos", "curto": "tijolo e bloco",
+      "palavras": ["tijolo", "bloco", "telha", "ceramica", "piso", "revestimento", "azulejo"],
+      "unidadesAceitas": ["unidade", "milheiro", "m²", "caixa"],
+      "jargao": [
+        { "termo": "tijolo baiano", "significa": "Tijolo cerâmico de 8 furos" },
+        { "termo": "bloco 14, bloco 19", "significa": "Bloco de concreto 14x19x39 ou 19x19x39 cm" }
+      ],
+      "exemplos": ["1 milheiro de tijolo baiano"],
+      "cnae": ["constru", "ceramic", "tijolo", "telha", "piso", "revestiment", "material"]
+    },
+    {
+      "id": "ferragens", "nome": "Ferragens", "curto": "ferragens",
+      "palavras": ["prego", "parafuso", "porca", "arruela", "dobradica", "fechadura", "ferramenta", "serra", "broca", "chave de fenda"],
+      "unidadesAceitas": ["kg", "caixa", "unidade", "pacote"],
+      "exemplos": ["5 kg de prego 18x27"],
+      "cnae": ["ferrag", "ferrament", "constru", "metal", "material", "parafuso"]
+    },
+    {
+      "id": "hidraulica", "nome": "Hidráulica", "curto": "hidráulica",
+      "palavras": ["tubo", "cano", "joelho", "registro", "caixa d'agua", "pvc", "torneira", "conexao", "sifao", "cola de pvc"],
+      "sinonimos": { "cano": ["tubo"] },
+      "unidadesAceitas": ["barra", "unidade", "rolo", "lata"],
+      "atributos": [
+        { "chave": "diametro", "rotulo": "diâmetro", "pergunta": "qual o diâmetro (ex.: 25 mm ou 3/4)?", "quando": "tubo|cano|joelho|registro|conexao", "reconhece": "\\d+ ?(mm|pol)|\\d+/\\d+|polegada|diametro|bitola" }
+      ],
+      "jargao": [
+        { "termo": "tubo 100, cano de 100", "significa": "Tubo de PVC esgoto 100 mm, barra de 6 m" }
+      ],
+      "exemplos": ["10 barras de tubo PVC 100 mm"],
+      "cnae": ["constru", "hidraulic", "material", "ferrag", "tubo", "saneament"]
+    },
+    {
+      "id": "eletrico", "nome": "Elétrico", "curto": "elétrico",
+      "palavras": ["cabo", "fio", "disjuntor", "tomada", "interruptor", "eletroduto", "quadro de distribuicao", "conduite"],
+      "sinonimos": { "fio": ["cabo"] },
+      "unidadesAceitas": ["rolo", "m", "unidade", "barra"],
+      "atributos": [
+        { "chave": "bitola", "rotulo": "bitola", "pergunta": "qual a bitola do cabo (ex.: 2,5 mm²)?", "quando": "cabo|fio", "reconhece": "\\d+([.,]\\d+)? ?(mm|awg)|bitola|secao" },
+        { "chave": "metragem", "rotulo": "metragem", "pergunta": "qual a metragem (ex.: rolo de 100 m)?", "quando": "cabo|fio", "reconhece": "\\d+ ?(m|metros?)\\b|metragem|comprimento" }
+      ],
+      "exemplos": ["3 rolos de cabo 2,5 mm² de 100 m"],
+      "cnae": ["eletric", "constru", "material", "ferrag", "iluminac", "eletro"]
+    },
+    {
+      "id": "iluminacao", "nome": "Iluminação", "curto": "iluminação",
+      "palavras": ["luminaria", "lampada", "led", "refletor", "plafon", "painel led"],
+      "sinonimos": { "luminaria": ["led"] },
+      "unidadesAceitas": ["unidade", "caixa"],
+      "exemplos": ["20 luminárias de embutir LED"],
+      "cnae": ["eletric", "iluminac", "constru", "material", "eletro", "ferrag"]
+    },
+    {
+      "id": "isolamento", "nome": "Isolamento térmico", "curto": "isolamento",
+      "palavras": ["isopor", "eps", "la de vidro", "la de rocha", "manta termica", "isolante"],
+      "sinonimos": { "isopor": ["eps"], "eps": ["isopor"] },
+      "unidadesAceitas": ["unidade", "placa", "m²", "rolo"],
+      "cnae": ["isolament", "constru", "plastico", "material", "termic"]
+    },
+    {
+      "id": "epi", "nome": "EPI", "curto": "EPI",
+      "palavras": ["capacete", "luva", "oculos de protecao", "bota", "botina", "protetor auricular", "respirador", "mascara pff2", "colete", "uniforme", "cinto de seguranca"],
+      "sinonimos": { "bota": ["seguranca"] },
+      "unidadesAceitas": ["unidade", "par", "caixa"],
+      "atributos": [
+        { "chave": "tamanho", "rotulo": "tamanho ou numeração", "pergunta": "qual o tamanho ou a numeração?", "quando": "luva|bota|botina|uniforme|camisa", "reconhece": "\\b(pp|p|m|g|gg|xg)\\b|\\b\\d{2}\\b|tamanho|numer" }
+      ],
+      "exemplos": ["20 pares de luva de raspa tamanho G"],
+      "cnae": ["epi", "seguranca", "protecao", "vestuario", "calcado", "ferrag", "constru", "material", "equipament"]
+    },
+    {
+      "id": "extintores", "nome": "Combate a incêndio", "curto": "extintores",
+      "palavras": ["extintor", "mangueira de incendio", "hidrante", "sinalizacao de emergencia", "detector de fumaca"],
+      "unidadesAceitas": ["unidade", "caixa"],
+      "atributos": [
+        { "chave": "tipo", "rotulo": "tipo", "pergunta": "qual o tipo (pó ABC, CO2, água)?", "quando": "extintor", "reconhece": "\\babc\\b|\\bbc\\b|po quimico|pqs|co2|gas carbonico|agua|espuma" },
+        { "chave": "capacidade", "rotulo": "capacidade", "pergunta": "qual a capacidade (ex.: 4 kg ou 6 kg)?", "quando": "extintor", "reconhece": "\\d+([.,]\\d+)? ?(kg|l|litros?)\\b|capacidade" },
+        { "chave": "norma", "rotulo": "norma", "pergunta": "precisa de alguma norma ou selo (ex.: NBR 15808, Inmetro)?", "quando": "extintor", "reconhece": "nbr|norma|inmetro|selo" }
+      ],
+      "exemplos": ["2 extintores de pó ABC de 6 kg, NBR 15808"],
+      "cnae": ["incendio", "seguranca", "extintor", "equipament", "ferrag", "material", "comercio"]
+    },
+    {
+      "id": "tintas", "nome": "Tintas", "curto": "tintas",
+      "palavras": ["tinta", "massa corrida", "selador", "verniz", "esmalte", "textura", "rolo de pintura", "pincel"],
+      "unidadesAceitas": ["lata", "galão", "L", "balde"],
+      "atributos": [
+        { "chave": "cor", "rotulo": "cor", "pergunta": "qual a cor?", "quando": "tinta|esmalte|verniz", "reconhece": "\\bcor\\b|branc|pret|cinz|azul|verde|vermelh|amarel|bege|marfim|palha|gelo|laranja|marrom|concreto|incolor" }
+      ],
+      "exemplos": ["4 latas de 18 L de tinta acrílica branca"],
+      "cnae": ["tinta", "constru", "material", "ferrag", "quimic", "pintura"]
+    },
+    {
+      "id": "madeira", "nome": "Madeira", "curto": "madeira",
+      "palavras": ["madeira", "tabua", "compensado", "mdf", "caibro", "viga", "pinus", "ripa"],
+      "sinonimos": { "compensado": ["chapa"] },
+      "unidadesAceitas": ["unidade", "chapa", "m", "m³"],
+      "cnae": ["madeira", "constru", "movei", "material", "serraria"]
+    },
+    {
+      "id": "escritorio", "nome": "Escritório e papelaria", "curto": "papelaria",
+      "palavras": ["papel a4", "papel sulfite", "sulfite", "resma", "caneta", "lapis", "grampeador", "grampo", "pasta", "envelope", "post-it", "bloco de notas", "fita adesiva", "cartucho", "toner", "caderno", "agenda", "cadeira de escritorio", "papel"],
+      "sinonimos": { "sulfite": ["papel"] },
+      "unidadesAceitas": ["resma", "caixa", "pacote", "unidade", "kit"],
+      "atributos": [
+        { "chave": "formato", "rotulo": "formato", "pergunta": "qual o formato (A4, A3, ofício)?", "quando": "papel|sulfite|resma", "reconhece": "\\ba[0-5]\\b|oficio|carta" },
+        { "chave": "modelo", "rotulo": "modelo da impressora ou do cartucho", "pergunta": "qual o modelo (impressora ou código do cartucho)?", "quando": "toner|cartucho", "reconhece": "\\b[a-z]{0,3}\\d{2,}[a-z]*\\b|modelo|compativel" }
+      ],
+      "jargao": [
+        { "termo": "resma", "significa": "pacote de papel A4 com 500 folhas, se não disser outro" },
+        { "termo": "sulfite, papel branco", "significa": "papel de escritório A4 75 g/m²" }
+      ],
+      "exemplos": ["50 resmas de papel A4 75 g", "10 toners para a impressora HP M404"],
+      "cnae": ["papelaria", "papel", "escritorio", "suprimento", "informatic", "movei", "livro", "material", "comercio atacadista", "comercio varejista"]
+    },
+    {
+      "id": "limpeza", "nome": "Limpeza", "curto": "limpeza",
+      "palavras": ["detergente", "desinfetante", "sabao", "alcool", "agua sanitaria", "cloro", "vassoura", "rodo", "pano", "saco de lixo", "papel higienico", "papel toalha", "toalha de papel", "sabonete", "esponja", "balde", "limpa vidro"],
+      "unidadesAceitas": ["L", "galão", "caixa", "fardo", "unidade", "pacote"],
+      "jargao": [{ "termo": "fardo", "significa": "embalagem fechada com várias unidades (ex.: papel higiênico, 64 rolos)" }],
+      "exemplos": ["5 galões de 5 L de desinfetante", "10 fardos de papel higiênico"],
+      "cnae": ["limpeza", "higiene", "produtos quimicos", "saneante", "domissanitar", "material", "comercio atacadista", "comercio varejista", "supermercado"]
+    },
+    {
+      "id": "informatica", "nome": "Informática", "curto": "informática",
+      "palavras": ["notebook", "computador", "monitor", "teclado", "mouse", "pen drive", "hd", "ssd", "roteador", "switch", "cabo hdmi", "cabo de rede", "cabo usb", "impressora", "nobreak", "webcam", "headset", "memoria ram"],
+      "unidadesAceitas": ["unidade", "kit", "caixa"],
+      "exemplos": ["5 notebooks com 16 GB de memória", "20 cabos HDMI de 2 m"],
+      "cnae": ["informatic", "computador", "equipament", "eletronic", "telecom", "tecnologia", "software", "comercio"]
+    },
+    {
+      "id": "copa", "nome": "Copa e alimentos", "curto": "copa",
+      "palavras": ["cafe", "acucar", "agua mineral", "garrafao", "copo descartavel", "copo", "cha", "leite", "biscoito", "bolacha", "adocante", "guardanapo", "descartavel"],
+      "unidadesAceitas": ["pacote", "caixa", "kg", "L", "garrafão", "fardo", "unidade"],
+      "exemplos": ["10 pacotes de café de 500 g", "20 garrafões de água mineral de 20 L"],
+      "cnae": ["alimento", "bebida", "mercearia", "supermercado", "atacad", "varejist", "comercio", "padaria", "distribui"]
+    },
+    {
+      "id": "manutencao", "nome": "Manutenção e serviços", "curto": "manutenção",
+      "palavras": ["manutencao", "instalacao", "conserto", "reparo", "jardinagem", "dedetizacao", "pintura predial", "ar-condicionado", "ar condicionado", "servico", "mao de obra"],
+      "unidadesAceitas": ["hora", "diária", "mês", "visita", "serviço"],
+      "jargao": [{ "termo": "visita técnica", "significa": "o prestador vai ao local antes de passar o preço" }],
+      "exemplos": ["manutenção de 6 aparelhos de ar-condicionado", "jardinagem mensal"],
+      "cnae": ["manutencao", "reparo", "servico", "instalac", "conserv", "limpeza", "dedetiz", "jardin", "engenharia", "constru"]
+    }
+  ]
+}

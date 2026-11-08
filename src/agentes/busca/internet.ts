@@ -6,6 +6,8 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../../nucleo/db/cliente.ts";
 import { fornecedor, itemPedido, oferta, pedido, referenciaPreco } from "../../nucleo/db/schema.ts";
 import { registrar } from "../../nucleo/registro.ts";
+import { detectarCategorias, categoriaPorNome } from "../../dominio/categorias.ts";
+import { itemDaBase } from "../interpretador/base-itens.ts";
 import { verificarVarios } from "../verificacao/index.ts";
 import { planejar } from "./entende.ts";
 import { confianca, converter, mediana, normalizar, ordenar, relevante, type Termos } from "./filtro.ts";
@@ -13,7 +15,7 @@ import { baixarPagina, precoDoJsonLd, precoPorIa } from "./pagina.ts";
 import { LimiteDeBusca, MAX_CONSULTAS_ITEM, MODO_SNAPSHOT } from "./rede.ts";
 import * as serper from "./serper.ts";
 const { shopping, temSerper, web } = serper;
-import { catalogoVtex, LOJAS_VTEX, simularFrete } from "./vtex.ts";
+import { catalogoVtex, LOJAS_VTEX, lojasParaCategorias, simularFrete } from "./vtex.ts";
 
 /** Sites que bloqueiam leitura automática ou exigem login: não tenta. */
 const NAO_LER = /mercadolivre|mercadolibre|magazineluiza|magalu|casasbahia|americanas|amazon\.|shopee|olx|facebook|instagram|youtube|leroymerlin/i;
@@ -104,7 +106,9 @@ export async function buscarNaInternet(itemPedidoId: number): Promise<ResultadoB
   let aviso: string | null = null;
 
   // 2a. Coleta nas lojas VTEX (sem crédito), com frete real para o CEP.
-  for (const loja of LOJAS_VTEX) {
+  // Só as lojas da categoria do item; sem loja da categoria, segue só o Serper.
+  const categoriasDoItem = [...detectarCategorias([item.descricao, ...Object.values(item.especificacao ?? {})].join(" ")).map((c) => c.id), categoriaPorNome(itemDaBase(item.itemChave ?? "")?.categoria ?? "")?.id].filter((x): x is string => !!x);
+  for (const loja of lojasParaCategorias(categoriasDoItem)) {
     try {
       const produtos = await catalogoVtex(loja, consulta);
       const relevantes = produtos.filter((pr) => relevante(pr.titulo, plano.termos).ok);

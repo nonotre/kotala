@@ -1,14 +1,22 @@
 // Lojas VTEX com API pública: catálogo (preço e estoque) e simulação de
 // carrinho (frete real para o CEP). Sem conta e sem crédito.
 
+import { readFileSync } from "node:fs";
 import { buscarHttp, comCache } from "./rede.ts";
 
 export type LojaVtex = { nome: string; dominio: string };
 
-export const LOJAS_VTEX: LojaVtex[] = [
-  { nome: "Telhanorte", dominio: "www.telhanorte.com.br" },
-  { nome: "Obramax", dominio: "www.obramax.com.br" },
-];
+/** Lojas em src/dominio/lojas.json, cada uma com as categorias que atende ("*" = qualquer item). */
+type LojaDeDominio = LojaVtex & { categorias: string[] | "*" };
+const DADOS = (JSON.parse(readFileSync(new URL("../../dominio/lojas.json", import.meta.url), "utf8")) as { lojas: LojaDeDominio[] }).lojas;
+
+/** Todas as lojas conhecidas (a leitura genérica de páginas as exclui: a API delas já foi consultada). */
+export const LOJAS_VTEX: LojaVtex[] = DADOS.map(({ nome, dominio }) => ({ nome, dominio }));
+
+/** Lojas que atendem alguma das categorias do item. Sem categoria que bata, só as de "*" (em geral nenhuma). */
+export function lojasParaCategorias(ids: string[]): LojaVtex[] {
+  return DADOS.filter((l) => l.categorias === "*" || l.categorias.some((c) => ids.includes(c))).map(({ nome, dominio }) => ({ nome, dominio }));
+}
 
 export type ProdutoVtex = {
   loja: LojaVtex;
