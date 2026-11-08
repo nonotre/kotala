@@ -101,6 +101,22 @@ export const PERSONAS_AREAS: Persona[] = [
 ];
 
 /**
+ * Fornecedores fictícios para os testes da Ester pelo Telegram (08/11/2026): 3 de extintores e 3 de
+ * hidráulica. Ficam no começo da fila da busca, então recebem as cotações desses itens primeiro. Cada
+ * cotação manda o link do Telegram de cada um por e-mail (EMAIL_FORNECEDOR_TESTE); quem abre o link
+ * responde como ele, e a persona automática para. Sem ninguém no link, respondem sozinhos.
+ * Cleiton Extintores: a Ester já tem a proposta pronta dele.
+ */
+export const PERSONAS_TESTE: Persona[] = [
+  { chave: "sim-cleiton", nome: "Cleiton Extintores", regiao: "Mesma cidade", comportamento: "normal", fatorPreco: 1.0, frete: 35, prazoDias: 3, pagamento: "boleto 28 dias", validadeDias: 10, atrasoSeg: 10, areas: ["extintores"], desconto: "percentual", descontoPct: 5 },
+  { chave: "sim-chama", nome: "Chama Zero Equipamentos contra Incêndio", regiao: "Região metropolitana", comportamento: "normal", fatorPreco: 1.08, frete: 0, prazoDias: 5, pagamento: "30 dias no boleto", validadeDias: 15, atrasoSeg: 12, areas: ["extintores"], desconto: "novo_preco", descontoPct: 6 },
+  { chave: "sim-brigada", nome: "Brigada Sul Extintores e Recargas", regiao: "Cidade vizinha", comportamento: "normal", fatorPreco: 0.95, frete: 60, prazoDias: 2, pagamento: "PIX à vista", validadeDias: 7, atrasoSeg: 14, areas: ["extintores"], desconto: "condicionado", descontoPct: 4 },
+  { chave: "sim-fluxo", nome: "Fluxo Certo Hidráulica", regiao: "Mesma cidade", comportamento: "normal", fatorPreco: 1.0, frete: 25, prazoDias: 1, pagamento: "boleto 28 dias", validadeDias: 7, atrasoSeg: 10, areas: ["hidraulica"], desconto: "percentual", descontoPct: 4 },
+  { chave: "sim-aguaviva", nome: "Água Viva Materiais Hidráulicos", regiao: "Região metropolitana", comportamento: "normal", fatorPreco: 0.93, frete: 70, prazoDias: 3, pagamento: "30/60 dias no boleto", validadeDias: 10, atrasoSeg: 12, areas: ["hidraulica"], desconto: "recusa" },
+  { chave: "sim-tubolar", nome: "Tubolar Conexões e Tubos", regiao: "Cidade vizinha", comportamento: "normal", fatorPreco: 1.06, frete: 0, prazoDias: 2, pagamento: "boleto 21 dias", validadeDias: 5, atrasoSeg: 14, areas: ["hidraulica"], desconto: "fechar_hoje", descontoPct: 5 },
+];
+
+/**
  * Personas de situação difícil: preço ambíguo, proposta em duas mensagens, só Pix e PDF.
  * Vendem itens de obra e das outras áreas. Só entram no banco quando pedidas
  * (`semearSimulados({ extras: true })`, `SIM_PERSONAS=todas` no `npm run simular`),
@@ -114,10 +130,10 @@ export const PERSONAS_EXTRAS: Persona[] = [
 ];
 
 /**
- * Todas as personas: as de comportamento especial primeiro (mais úteis na demo), depois as
+ * Todas as personas: as de teste da Ester primeiro (extintores e hidráulica), depois as de comportamento especial (mais úteis na demo), depois as
  * da base, as das outras áreas e as de situação difícil. A ordem decide quem a busca chama primeiro.
  */
-export const TODAS_PERSONAS: Persona[] = [...PERSONAS, ...PERSONAS_BASE, ...PERSONAS_AREAS, ...PERSONAS_EXTRAS];
+export const TODAS_PERSONAS: Persona[] = [...PERSONAS_TESTE, ...PERSONAS, ...PERSONAS_BASE, ...PERSONAS_AREAS, ...PERSONAS_EXTRAS];
 
 /**
  * Vende o item? Pela categoria da base de itens, quando a persona tem categorias; pelas áreas do domínio,

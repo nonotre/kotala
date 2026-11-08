@@ -10,6 +10,7 @@ import {
   PERSONAS_AREAS,
   PERSONAS_BASE,
   PERSONAS_EXTRAS,
+  PERSONAS_TESTE,
   TODAS_PERSONAS,
   linhasOrcamentoPdf,
   ondeEntrega,
@@ -191,6 +192,10 @@ test("as personas difíceis não entram na demo de construção sem pedir", asyn
   const chaves = new Set(PERSONAS_EXTRAS.map((p) => p.chave));
   assert.equal(chaves.size, 4);
   for (const p of PERSONAS_EXTRAS) assert.ok(!PERSONAS.includes(p) && !PERSONAS_BASE.includes(p));
-  // A ordem da busca começa igual: construção, depois a base.
-  assert.deepEqual(TODAS_PERSONAS.slice(0, PERSONAS.length).map((p) => p.chave), PERSONAS.map((p) => p.chave));
+  // A ordem da busca: as de teste da Ester (só extintores e hidráulica), depois construção, depois a base.
+  const n = PERSONAS_TESTE.length;
+  assert.deepEqual(TODAS_PERSONAS.slice(0, n).map((p) => p.chave), PERSONAS_TESTE.map((p) => p.chave));
+  assert.deepEqual(TODAS_PERSONAS.slice(n, n + PERSONAS.length).map((p) => p.chave), PERSONAS.map((p) => p.chave));
+  for (const p of PERSONAS_TESTE) assert.ok(p.areas!.every((a) => a === "extintores" || a === "hidraulica"));
+  assert.ok(PERSONAS_TESTE.some((p) => p.nome === "Cleiton Extintores"));
 });
