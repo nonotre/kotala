@@ -11,7 +11,7 @@ import {
   citarReferencia,
   compraramAntes,
   condicaoDaOferta,
-  descontoCondicional,
+  condicaoDoDesconto,
   descontoPorUnidade,
   deveNegociar,
   escolherAlavancas,
@@ -466,8 +466,8 @@ async function processarResposta(
   // junta com a anterior em vez de trocar por uma proposta sem preço. I1: desconto condicionado
   // ("3% à vista") não muda o preço; o incondicional é aplicado em código.
   const qtd = Number(l.item.quantidade);
-  const temDesconto = e.descontoPercentual !== null || e.descontoValor !== null;
-  const condicao = temDesconto ? descontoCondicional(entrada.texto) : null;
+  // Desconto condicionado: o campo do Extrator manda; a regex é a reserva.
+  const condicao = condicaoDoDesconto(e, entrada.texto);
   let marcaCarregada: MarcaNegociacao | null = marcaDe(anterior?.extraido);
   if (anterior && (e.classificacao === "proposta" || e.classificacao === "outro")) {
     const completa = completarComAnterior(e, anterior, { quantidade: qtd, condicional: !!condicao, porUnidade: descontoPorUnidade(entrada.texto) });

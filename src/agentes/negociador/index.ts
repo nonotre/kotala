@@ -340,6 +340,22 @@ export function descontoCondicional(texto: string): string | null {
   return null;
 }
 
+/**
+ * Desconto condicionado ("5% à vista"): o campo `descontoCondicao` do Extrator manda; a
+ * regex (descontoCondicional) é a reserva quando o campo vem vazio. Devolve o trecho com o
+ * valor e a condição, ou null se não há desconto ou ele não depende de nada.
+ */
+export function condicaoDoDesconto(
+  e: { descontoPercentual: number | null; descontoValor: number | null; descontoCondicao?: string | null },
+  texto: string,
+): string | null {
+  if (e.descontoPercentual === null && e.descontoValor === null) return null;
+  const campo = e.descontoCondicao?.trim();
+  if (!campo) return descontoCondicional(texto);
+  const valor = e.descontoPercentual !== null ? `${String(e.descontoPercentual).replace(".", ",")}%` : formatarBRL(e.descontoValor!);
+  return `${valor} ${campo}`.slice(0, 120);
+}
+
 /** "Vou ver com o gerente e já te falo": não fecha a janela nem gera resposta. */
 export function vaiResponderDepois(texto: string): boolean {
   return /\b(vou (ver|verificar|consultar|falar|checar|conversar)|deixa eu ver|j[aá] te (falo|respondo|retorno|aviso)|te (retorno|respondo|aviso)|retorno (em|daqui|mais tarde|j[aá])|aguard[ea]|um momento|s[oó] um minuto)/i.test(texto);
