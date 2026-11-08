@@ -1,5 +1,7 @@
 # Frentes de trabalho em paralelo
 
+**Rodada 2 fechada em 08/11/2026:** as quatro frentes, o dashboard e a Base de Dados estão no `main`, com os pedidos entre frentes atendidos ou listados como decisão. O resumo do que entrou e do que ficou está em [status.md](status.md#junção-da-rodada-2-08112026). As seções abaixo ficam como registro da rodada.
+
 Rodada 2, aberta em 08/11/2026 a partir do `main` (`d356044`). Quatro frentes em worktrees separadas, juntadas depois com o dashboard, que já está pronto no branch `dashboard-economia`. A rodada anterior (telas, entradas, negociação) já está no `main`; o registro dela fica no histórico deste arquivo. Leia junto com [arquitetura.md](arquitetura.md), [decisoes.md](decisoes.md) e [status.md](status.md).
 
 | Frente | Branch | Pasta | Banco de teste | Porta das telas |

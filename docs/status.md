@@ -1,8 +1,8 @@
 # Estado do projeto
 
-Retrato em 07/11/2026, depois das frentes 1, 2 e 3 e da rodada de complementos. Como cada parte funciona: [arquitetura.md](arquitetura.md). Decisões: [decisoes.md](decisoes.md). Pitch: [pitch.md](pitch.md).
+Retrato em 08/11/2026, depois da junção da rodada 2 (as quatro frentes, o dashboard e a Base de Dados; ver [Junção da rodada 2](#junção-da-rodada-2-08112026)). Como cada parte funciona: [arquitetura.md](arquitetura.md). Decisões: [decisoes.md](decisoes.md). Pitch: [pitch.md](pitch.md).
 
-**Resumo:** dos 42 módulos do escopo V1, 34 prontos, 2 parciais e 6 não feitos (todos das fases de complemento e "só se sobrar"). Fases 0 a 2, pitch e todos os diferenciais (Raro, Épico e Lendário) completos. 85 testes automáticos passando.
+**Resumo:** dos 42 módulos do escopo V1, 35 prontos, 2 parciais e 5 não feitos (todos das fases de complemento e "só se sobrar"). Fases 0 a 2, pitch e todos os diferenciais (Raro, Épico e Lendário) completos. O assistente agora é generalista (compras de uma empresa; construção é só o nicho de exemplo), com guardrails dos dois lados. 316 testes automáticos passando.
 
 ## Módulos
 
@@ -21,15 +21,15 @@ Retrato em 07/11/2026, depois das frentes 1, 2 e 3 e da rodada de complementos. 
 |---|---|
 | R2 Interpretador, R4 Cotador, R6 Extrator, R8 Comparador, R9 Recomendação, R11 Decisão | Pronto |
 | R3 Busca | Pronto: lojas VTEX com frete por CEP, Serper e leitura de páginas, sempre com fonte e hora |
-| R7 Frete e prazo | Parcial: vale o frete informado, ou estimado pela mediana dos outros; o frete real por CEP aparece só na referência pública; falta cálculo por distância |
+| R7 Frete e prazo | Parcial: vale o frete informado, ou estimado pela mediana dos outros; loja online sem frete aparece como "a calcular no site", com total estimado; falta cálculo por distância e frete de lojas fora da VTEX |
 
 ### Fase 2 · Nota da banca (11 prontos, 1 parcial)
 
 | Módulo | Situação |
 |---|---|
 | Q1 Mapa de cotação | Pronto; faltam os cenários "menor custo / mais rápido / conhecido" ("se sobrar tempo" no escopo) |
-| Q2 Três propostas válidas | Parcial: com menos de 3, registra a justificativa e nunca diz "melhor"; não busca mais sozinho (o botão "buscar mais" faz isso) |
-| Q3 Fornecedor simulado | Pronto: 6 personas e 12 fornecedores da base da Ester; falta a persona que responde em PDF |
+| Q2 Três propostas válidas | Pronto: com menos de 3, justifica e nunca diz "melhor"; no fim do prazo, ou quando todos já responderam, busca mais fornecedores sozinho (até 2 levas, urgente 1) e o mapa diz quantos consultou |
+| Q3 Fornecedor simulado | Pronto: personas por categoria (obra, escritório, EPI, limpeza, informática, copa), estilos de desconto e personas difíceis (unitário ambíguo, duas mensagens, só Pix, orçamento em PDF) |
 | Q4 Prazo e lembrete, Q7 Robustez, N5 Raciocínio visível, N6 Reprovação com motivo, R12 Avisos | Pronto |
 | Q8 Verificação do fornecedor | Pronto: Receita, CEIS e CNEP (arquivos e API do Portal) e TJSP; o TJSP não pôde ser conferido (manutenção em 07 e 08/11) |
 | E5 Proposta em PDF e foto, R1b Pedido por áudio | Pronto |
@@ -46,7 +46,7 @@ Retrato em 07/11/2026, depois das frentes 1, 2 e 3 e da rodada de complementos. 
 | Módulo | Situação |
 |---|---|
 | X2 Memória (Raro) | Pronto: recompra em menos de 3 meses, histórico, homologação, lista de bloqueio; falta contrato anual com pedido automático |
-| X3 Negociação (Raro) | Pronto: até 3 rodadas, sem citar valor de outro fornecedor |
+| X3 Negociação (Raro) | Pronto: até 3 rodadas pelo botão, sem citar valor de outro fornecedor; e pedido automático de desconto em toda cotação (uma vez por fornecedor e item), com o resultado no mapa |
 | X4 Economia (Épico) | Pronto |
 | X5 Voz (Lendário) | Pronto e testado com microfone: pelo navegador; ligação telefônica de verdade fica de fora (paga) |
 
@@ -60,7 +60,7 @@ Retrato em 07/11/2026, depois das frentes 1, 2 e 3 e da rodada de complementos. 
 | R1c Pedido pelo quadro | Não feito; o chat web na tela cobre o mesmo uso |
 | E2 Resposta do fornecedor por e-mail | Não feito |
 | E8 Endereços de entrega e faturamento | Não feito; há só o endereço padrão da empresa |
-| E4 Login e várias empresas | Não feito; fora da demo, como o escopo previa |
+| E4 Login e várias empresas | Parcial: login com usuário e senha, chat e cards por pessoa, responsável do pedido e papel de gestor; várias empresas continua fora da demo |
 
 ### Além do escopo
 
@@ -88,11 +88,34 @@ Anotações em `docs/workspaces/`. Corrigido no código, com testes em `testes/m
 
 Ficou como estava, de propósito: o quadro mantém as 4 colunas do site (requisito, ver `decisoes.md`); "Captando fornecedores" e "Em negociação" são etiquetas, e as canceladas ficam ocultas com opção de mostrar.
 
-Pendente: a Ester especificou um dashboard em `docs/workspaces/ester-workspace/interface-dashboard.md` (KPIs, pizza de saving, curva da % de saving, gasto por setor, status com atraso, tabela por pedido com filtros). Ainda não foi implementado. Quando for, juntar com o que já existe em `web/app/dashboard/` e `web/app/economia/` (e as consultas em `web/lib/`), em vez de criar uma tela paralela.
+O dashboard que a Ester especificou (`docs/workspaces/ester-workspace/interface-dashboard.md` e `dashboard.md`) está pronto em `/dashboard`, com o que ficou da antiga tela de economia; ver a junção abaixo.
 
 ## Perfil e login (Frente 2, rodada 2, 08/11/2026)
 
 Cada pessoa entra com usuário e senha e tem o seu chat no navegador; quem não tem conta cria na tela de entrada. Os cards mostram o dono (quem pediu), e todos veem todos. As contas `ester` e `liria` já existem, ligadas ao Telegram delas, e a primeira entrada define a senha. Em Conversar, quem tem Telegram ligado vê o espelho dele, só para ler, com o botão "Continuar no Telegram". Ainda não: empresa e endereços no banco. Ver [perfil-login.md](perfil-login.md).
+
+## Junção da rodada 2 (08/11/2026)
+
+As quatro frentes de [frentes.md](frentes.md), o dashboard e a Base de Dados da Liria foram juntados no `main`, com os pedidos que cada frente anotou para as outras. Migrações novas: `0016` (papel de gestor, responsável e pagamento preferido do pedido, contador de levas e categoria do item) e `0017` (número curto do fornecedor).
+
+| Área | O que entrou |
+|---|---|
+| Conversa com o comprador (F4) | Interpretador generalista, que lê antes de abrir pedido ("Quer que eu cote X?"); guardrails em 8 classes, com lista dura, controlados, dado pessoal mascarado (também na tabela `mensagem`), insistência e aviso ao gestor; atributos obrigatórios por categoria; marca vista na foto; pagamento preferido lido do pedido |
+| Assistente do chat web (F3) | Responde perguntas sobre pedidos, mapas, fornecedores e regras com ferramentas conferidas, links para as telas e botões de ação; os guardrails rodam antes dele; no Telegram, responde as consultas que o Interpretador classifica |
+| Conversa com o fornecedor (F4) | Preço unitário ou total, aderência técnica, alertas de conduta, cotação em HTML com checklist, uma pergunta por vez (cadência), desconto automático com reserva atômica, desconto tardio que refaz o mapa, categoria perguntada ao fornecedor real, busca automática com retentativa de envio |
+| Mapa e comparador | Alertas de conduta (sem nota e item irregular saem do ranking), "a confirmar", negociação no mapa, busca automática contada, referência de preço só de fornecedores físicos (online vira alerta), frete "a calcular no site", forma de pagamento, mapa atualizado e mapa anterior marcado como substituído |
+| Telas | Base de Dados (Fornecedores e Itens com abas), Alertas de conduta com bloqueio, responsável do pedido, dashboard com recorte por comprador, gestores e regras de compra em Configurações, textos sem "obra" |
+| Harness (F3) | Simulador geral por categoria, regressão dos erros do plano, os 69 casos de guardrail, casos de ampliação, métricas de desconto e de mensagens sem resposta; `npm run guardrails:avaliar`, `regressao:avaliar`, `assistente:avaliar` |
+
+**Para rodar depois de atualizar:** `npm run db:migrar` (já aplicado no banco principal em 08/11) e `docker compose up -d --build`. Variáveis novas, todas opcionais (ver `.env.exemplo`): `ASSISTENTE`, `IA_MODELOS_CONVERSA*`, `GESTOR_CONTATO_ID` (reserva: o gestor agora é marcado em Configurações), `GUARDRAIL_MODO_DEMO`, `EMPRESA_NICHO`, `MAX_AMPLIACOES`, `PRAZO_PAGAMENTO_PADRAO`. `src/dados/` fica fora do git: worktree nova copia da pasta principal.
+
+**Decisões que ficaram para o dono, a Ester e o jurídico:**
+- Urgência `obra_parada` → `parada` (o banco não mudou; as telas e mensagens já dizem "operação parada" onde dava).
+- Lojas online contam para chegar às 3 propostas válidas? Hoje contam; o Q7 já as trata só como alerta de preço.
+- Política da empresa (bebida, tabaco, uso pessoal, serviços), os "10 minutos" do solicitante, a cotação esperar a janela do desconto, a lista de produtos controlados.
+- As cinco perguntas abertas de [frente-3-simulador.md](frente-3-simulador.md) (seção 7).
+
+**Ainda não feito:** PDF do mapa (exige dependência nova); frete de lojas fora da VTEX; negociador que redige com IA (I2) e memória na conversa (I5); serviços (hoje "ainda cotamos só produtos"); cenários do simulador com gabarito e personas guiadas por IA; comparação de modelos num conjunto misto; o Extrator ainda lê "R$ 300" para 5 unidades como unitário sem perguntar (achado do harness, depende do prompt).
 
 ## Para quem vai mexer nas telas
 
@@ -100,5 +123,5 @@ Cada pessoa entra com usuário e senha e tem o seu chat no navegador; quem não 
 - Casca (cabeçalho, menu lateral, sino, tema) em `web/components/Casca.tsx`; peças comuns de página em `Pagina.tsx`, `Bloco.tsx` e `Tabela.tsx`. Cada área tem suas consultas e componentes: `lib/dados-pedido.ts` e `components/pedido/`, `lib/dados-operacao.ts` e `components/operacao/` (início, quadro, lista, avisos), `lib/dados-consulta.ts` e `components/consulta/` (fornecedores, itens, convite, voz), `components/chat/` e `components/conta/` (demonstração). Avisos do sino em `lib/avisos.ts`, tirados do estado dos pedidos.
 - Rodar com recarga automática: `npm run telas:dev` (porta 3300; pare o container `telas` antes, porque usa a mesma porta). Conferir tipos: `npm run telas:tipos`.
 - Depois de mudar: `docker compose up -d --build telas`.
-- A tela fala a língua do comprador de obra: "assistente" (nunca "bot"), sem siglas de módulo, fornecedor simulado sempre com a marca "simulado", aprovação sempre em dois toques.
+- A tela fala a língua do comprador: "assistente" (nunca "bot"), sem siglas de módulo, fornecedor simulado sempre com a marca "simulado", aprovação sempre em dois toques.
 - Testes de integração (`npm run checar`) limpam o banco de teste: não rode ao mesmo tempo que uma simulação (`npm run simular`) no mesmo banco.
