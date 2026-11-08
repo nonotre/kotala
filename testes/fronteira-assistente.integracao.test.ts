@@ -86,3 +86,16 @@ test("aviso de conduta vai ao usuário gestor (Telegram antes do web), nunca ao 
     await db.update(schema.usuario).set({ papel: "comprador" }).where(eq(schema.usuario.papel, "gestor"));
   }
 });
+
+test("pedido automático de desconto: duas mensagens juntas do mesmo fornecedor reservam uma vez só", { skip: pular }, async () => {
+  const { db, schema } = m!;
+  const { reservarPedidoDeDesconto } = await import("../src/agentes/negociador/index.ts");
+  const o = await import("../src/nucleo/orquestrador/index.ts");
+  const [comprador] = await db.insert(schema.contato).values({ canal: "web", endereco: `res-${crypto.randomUUID()}`, papel: "comprador" }).returning();
+  const [f] = await db.insert(schema.fornecedor).values({ nome: `Reserva ${Date.now()}`, origem: "real" }).returning();
+  const ped = await o.abrirPedido({ compradorId: comprador!.id, canalOrigem: "web", textoOriginal: "40 cp2" });
+  const [item] = await o.definirItens(db, ped.id, [{ descricao: "Cimento CP II", quantidade: 40, unidade: "saco" }]);
+  const r = await Promise.all([reservarPedidoDeDesconto(f!.id, item!.id, ped.id), reservarPedidoDeDesconto(f!.id, item!.id, ped.id), reservarPedidoDeDesconto(f!.id, item!.id, ped.id)]);
+  assert.equal(r.filter(Boolean).length, 1);
+  assert.equal(await reservarPedidoDeDesconto(f!.id, item!.id, ped.id), false);
+});

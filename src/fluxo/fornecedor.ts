@@ -24,6 +24,7 @@ import {
   TEXTO_MANTEVE,
   unitarioDe,
   vaiResponderDepois,
+  reservarPedidoDeDesconto,
   type CondicaoProposta,
   type MarcaNegociacao,
 } from "../agentes/negociador/index.ts";
@@ -600,7 +601,7 @@ async function processarResposta(
           prazoDias: e.prazoDias,
           prazoMaxDias: l.pedido.prazoMaxDias,
         });
-        if (decisao.ok) {
+        if (decisao.ok && (await reservarPedidoDeDesconto(c.fornecedorId, l.item.id, l.pedido.id))) {
           const [recompra, refs] = await Promise.all([compraramAntes(c.fornecedorId), referenciasDoItem(l.item.id)]);
           const referencia = citarReferencia(unitarioDe(depois, qtd), refs.mediana);
           const pagamentoPreferido = preferenciaNaoAtendida(l.pedido.pagamentoPreferido, e.pagamento);
@@ -704,9 +705,17 @@ async function processarResposta(
     case "responsavel":
     case "suspeita":
     case "ofensa":
-    case "fora_do_assunto":
+    case "fora_do_assunto": {
+      // I1: "vou ver com o gerente e te retorno" com o pedido de desconto aberto não é pedido de
+      // falar com uma pessoa: o fornecedor vai responder depois e a janela continua aberta.
+      const marca = e.classificacao === "responsavel" && temPropostaAnterior ? marcaDe(anterior!.extraido) : null;
+      if (marca && !marca.respondidaEm && vaiResponderDepois(entrada.texto)) {
+        await registrar(db, { agente: "Negociador", acao: "O fornecedor vai responder o desconto depois.", motivo: entrada.texto.slice(0, 200), ...ctx, fornecedorIds: [c.fornecedorId] });
+        return;
+      }
       await situacaoDelicada(e.classificacao, c.fornecedorId, contatoId, entrada.texto, l, ctx);
       return;
+    }
     default: {
       // Resposta sem preço de quem já tem proposta ("não consigo desconto"): a proposta segue valendo.
       if (temPropostaAnterior) {

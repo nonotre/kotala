@@ -418,6 +418,16 @@ export async function ampliarSeFaltarPropostas(itemPedidoId: number): Promise<"a
   const { item } = d;
   // A rodada de negociação usa o mesmo estado e o mesmo varredor: nunca amplia nela.
   if (item.negociacao?.rodada === item.rodada) return "encerrar";
+  // Só amplia no fim do prazo ou quando ninguém mais deve resposta. Um varredor que leu a lista
+  // de vencidos antes de outro ampliar e prorrogar acha o prazo novo e cotações aguardando: pula.
+  if (item.prazoRespostasEm && item.prazoRespostasEm.getTime() > Date.now()) {
+    const [aguardando] = await db
+      .select({ id: cotacao.id })
+      .from(cotacao)
+      .where(and(eq(cotacao.itemPedidoId, item.id), eq(cotacao.rodada, item.rodada), eq(cotacao.situacao, "aguardando")))
+      .limit(1);
+    if (aguardando) return "pular";
+  }
   const teto = d.pedido.urgencia === "normal" ? MAX_AMPLIACOES() : 1;
   const feitas = item.ampliacoes;
   if (feitas >= teto) return "encerrar";

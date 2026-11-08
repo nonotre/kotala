@@ -13,7 +13,8 @@ import { and, eq, sql } from "drizzle-orm";
 import { formatarBRL, ultimoMapa, type Linha } from "../comparador/index.ts";
 import { referenciasDoItem } from "../busca/internet.ts";
 import { db } from "../../nucleo/db/cliente.ts";
-import { historicoCompra, oferta } from "../../nucleo/db/schema.ts";
+import { evento, historicoCompra, oferta } from "../../nucleo/db/schema.ts";
+import { registrar } from "../../nucleo/registro.ts";
 import { semAcento } from "../guardrail/index.ts";
 import { quando, quantidade } from "../../texto.ts";
 
@@ -345,13 +346,14 @@ export function validarTextoNegociacao(texto: string, permitidos: readonly numbe
 // ---------- Leitura da resposta ao pedido (código, não IA) ----------
 
 const VALOR_DESCONTO = String.raw`(?:\d+(?:[.,]\d+)?\s*%|R\$\s*\d+(?:[.,]\d+)?)`;
-const CONDICAO = String.raw`(?:à vista|a vista|no pix|via pix|pagamento antecipado|antecipad[oa]|em dinheiro|no dinheiro|acima de|a partir de)`;
+// Pagamento, volume ou prazo para fechar ("se fechar hoje", "fechando até sexta"): o desconto só vale com a condição.
+const CONDICAO = String.raw`(?:à vista|a vista|no pix|via pix|pagamento antecipado|antecipad[oa]|em dinheiro|no dinheiro|acima de|a partir de|(?:se )?fech(?:ar|ando|ado)\s+(?:hoje|agora|amanh[ãa]|até|ainda|essa semana|esta semana)|(?:só|somente|válido|valendo)\s+(?:para\s+|pra\s+)?(?:hoje|agora))`;
 const CONDICIONAL = [
   new RegExp(String.raw`${VALOR_DESCONTO}[^.!?\n]{0,60}?${CONDICAO}`, "i"),
   new RegExp(String.raw`${CONDICAO}[^.!?\n]{0,60}?${VALOR_DESCONTO}`, "i"),
 ];
 
-/** Desconto que depende de pagamento ou volume ("3% se for à vista"). Devolve o trecho, ou null. */
+/** Desconto que depende de pagamento, volume ou prazo para fechar ("3% se for à vista", "5% se fechar hoje"). Devolve o trecho, ou null. */
 export function descontoCondicional(texto: string): string | null {
   const t = texto.replace(/\s+/g, " ").trim();
   for (const r of CONDICIONAL) {
@@ -437,6 +439,35 @@ export async function jaPediuDesconto(fornecedorId: string, itemPedidoId: number
     .where(and(eq(oferta.fornecedorId, fornecedorId), eq(oferta.itemPedidoId, itemPedidoId), sql`${oferta.extraido}->'negociacao'->>'pedidaEm' is not null`))
     .limit(1);
   return !!l;
+}
+
+/**
+ * I1: reserva atômica do pedido automático de desconto, uma vez por fornecedor e item. Duas
+ * mensagens do mesmo fornecedor processadas juntas viam as duas "ainda não pedi" (a oferta é
+ * apagada e gravada de novo a cada proposta, levando a marca junto). O lock da transação
+ * serializa as duas, e o evento de reserva fica no rastro mesmo com a oferta trocada. Se o envio
+ * falhar depois, a reserva fica: o comprador ainda tem o botão de negociar.
+ */
+export async function reservarPedidoDeDesconto(fornecedorId: string, itemPedidoId: number, pedidoId: number): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`desconto:${fornecedorId}:${itemPedidoId}`}))`);
+    const [ja] = await tx
+      .select({ id: evento.id })
+      .from(evento)
+      .where(and(eq(evento.itemPedidoId, itemPedidoId), eq(evento.agente, "Negociador"), sql`${evento.dados}->>'reserva' = 'desconto'`, sql`${evento.fornecedorIds} @> ${JSON.stringify([fornecedorId])}::jsonb`))
+      .limit(1);
+    if (ja) return false;
+    await registrar(tx, {
+      agente: "Negociador",
+      acao: "Reservou o pedido automático de desconto.",
+      motivo: "Uma vez por fornecedor e item.",
+      pedidoId,
+      itemPedidoId,
+      fornecedorIds: [fornecedorId],
+      dados: { reserva: "desconto" },
+    });
+    return true;
+  });
 }
 
 /** Recompra: já houve compra com este fornecedor (histórico dele, nunca de concorrente). */

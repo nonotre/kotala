@@ -133,7 +133,7 @@ test("desconto: percentual, condicionado no Pix, recusa, ignora e vou ver são l
   assert.ok(valoresEmReais(depois!.texto).includes(menos5));
 });
 
-test("desconto \"se fechar hoje\" é condicionado", { todo: "o negociador só reconhece condição de pagamento ou volume (CONDICAO em negociador/index.ts); \"se fechar hoje\" é aplicado como desconto incondicional" }, () => {
+test("desconto \"se fechar hoje\" é condicionado", () => {
   const [hoje] = respostaAoDesconto(persona("fechar_hoje"), cimento, 39.9);
   assert.ok(descontoCondicional(hoje!.texto), hoje!.texto);
 });

@@ -85,7 +85,7 @@ const eventosDo = (id: number) => mod!.db.query.evento.findMany({ where: (t, { e
 
 test(
   "dois varredores: o que leu a lista de vencidos antes da prorrogação não amplia de novo",
-  { skip: pular, todo: "ampliarSeFaltarPropostas não confere se o prazo ainda está vencido; ver relatório da Frente 3 (bug I3)" },
+  { skip: pular },
   async () => {
     await fornecedores(6);
     const [a] = (await mod!.db.select({ id: mod!.schema.fornecedor.id }).from(mod!.schema.fornecedor).limit(1)).map((f) => f.id);
