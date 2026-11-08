@@ -30,6 +30,7 @@ import {
 import { referenciasDoItem } from "../agentes/busca/internet.ts";
 import { formatarBRL } from "../agentes/comparador/calculo.ts";
 import { avisarGestor, liberarSaida } from "../agentes/guardrail/rastro.ts";
+import { conferirSaida } from "../agentes/guardrail/index.ts";
 import { emailValido, FONTE_CONVITE_MANUAL, linkConvite, normalizarEmail } from "../canais/email.ts";
 import { EMPRESA } from "../config.ts";
 import { extrair, type AlertaFornecedor, type Extracao } from "../agentes/extrator/index.ts";
@@ -340,6 +341,17 @@ export async function convidarPorEmail(dados: { email: string; nome?: string; us
   if (!emailValido(dados.email)) throw new Error(`E-mail inválido: ${dados.email}`);
   const email = normalizarEmail(dados.email);
   const nome = (dados.nome?.trim() || email.split("@")[0]!).slice(0, 120);
+  // S: o nome é digitado por alguém e vai no corpo do convite; confere antes de gravar e mandar.
+  const saida = conferirSaida(textoConvite(nome, linkConvite(dados.usuarioBot, "conferencia")));
+  if (!saida.ok) {
+    await registrar(db, {
+      agente: "Guardrail",
+      acao: "Não mandou o convite ao fornecedor.",
+      motivo: `Conferência de saída: ${saida.motivos.join("; ")}.`,
+      dados: { email, nome },
+    });
+    throw new Error(`Convite não enviado: o texto tinha ${saida.motivos.join("; ")}.`);
+  }
 
   let [f] = await db.select().from(fornecedor).where(eq(fornecedor.email, email)).limit(1);
   if (f && f.fonte !== FONTE_CONVITE_MANUAL) {

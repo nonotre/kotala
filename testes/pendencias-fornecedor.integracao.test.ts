@@ -1,5 +1,5 @@
 // Pendências do lado do fornecedor (junção da rodada 2), com banco: quem compra no pedido
-// de compra. Usa DATABASE_URL_TESTE.
+// de compra; conferência de saída no convite. Usa DATABASE_URL_TESTE.
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 
@@ -13,6 +13,7 @@ const m = urlTeste
       ...(await import("../src/nucleo/index.ts")),
       ...(await import("../src/nucleo/mensagens/index.ts")),
       ...(await import("../src/fluxo/decisao.ts")),
+      ...(await import("../src/fluxo/fornecedor.ts")),
     }
   : null;
 
@@ -37,4 +38,13 @@ test("quem compra: responsável do card, senão o usuário do contato; sem conta
   assert.equal(await m!.nomeDoComprador({ responsavelId: bia!.id, compradorId: ligado!.id }), "Bia Lima");
   // Contato sem conta: não usa o nome do Telegram.
   assert.equal(await m!.nomeDoComprador({ responsavelId: null, compradorId: solto!.id }), null);
+});
+
+test("convite: nome com dado pessoal não sai, e nada fica gravado", { skip: pular }, async () => {
+  const { db } = m!;
+  const email = `teste-${crypto.randomUUID()}@exemplo.com`;
+  await assert.rejects(m!.convidarPorEmail({ email, nome: "Loja do João CPF 123.456.789-09", usuarioBot: "bot_teste" }), /Convite não enviado: o texto tinha dado pessoal/);
+  assert.equal(await db.query.fornecedor.findFirst({ where: (t, { eq }) => eq(t.email, email) }), undefined);
+  const ev = await db.query.evento.findFirst({ where: (t, { and, eq, sql }) => and(eq(t.agente, "Guardrail"), sql`${t.dados}->>'email' = ${email}`) });
+  assert.match(ev!.motivo, /Conferência de saída/);
 });
