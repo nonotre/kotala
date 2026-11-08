@@ -28,7 +28,6 @@ import {
   type CondicaoProposta,
   type MarcaNegociacao,
 } from "../negociador/index.ts";
-import { referenciasDoItem } from "../busca/internet.ts";
 import {
   confirmacaoFalada,
   conferirFalaDoAgente,
@@ -312,6 +311,8 @@ export async function registrarCotacaoPorVoz(cotacaoId: string, args: ArgsRegist
       prazoMaxDias: ped.prazoMaxDias,
     });
     if (decisao.ok && (await reservarPedidoDeDesconto(c.fornecedorId, item.id, ped.id))) {
+      // Import tardio: a busca na internet só roda aqui (processo dos bots); a página da ligação não a carrega.
+      const { referenciasDoItem } = await import("../busca/internet.ts");
       const [recompra, refs] = await Promise.all([compraramAntes(c.fornecedorId), referenciasDoItem(item.id)]);
       const referencia = citarReferencia(unitarioDe(depois, qtd), refs.mediana);
       const montado = montarNegociacao({

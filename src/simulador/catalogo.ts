@@ -2,7 +2,7 @@
 // de src/dominio/categorias.json: o item que não está na lista de preços recebe o
 // preço sintético da categoria que o domínio detectar, em vez de ser recusado.
 
-import { readFileSync } from "node:fs";
+import catalogoJson from "./catalogo.json" with { type: "json" };
 import { detectarCategoria, semAcento } from "../dominio/categorias.ts";
 
 export type ItemCatalogo = { categoria: string; palavras: string[]; unidade: string; preco: number; equivalente: string };
@@ -16,7 +16,7 @@ export type DadosCategoria = {
   precoSintetico: { unidade: string; preco: number };
 };
 
-const dados = JSON.parse(readFileSync(new URL("./catalogo.json", import.meta.url), "utf8")) as {
+const dados = catalogoJson as unknown as {
   itens: ItemCatalogo[];
   categorias: Record<string, DadosCategoria>;
 };

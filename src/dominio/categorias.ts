@@ -2,7 +2,9 @@
 // as regras; o que é de construção, papelaria ou EPI está nos dados.
 
 import { EMPRESA_NICHO } from "../config.ts";
-import { readFileSync } from "node:fs";
+// Import do JSON, e não readFileSync(new URL(...)): o Turbopack (telas) não resolve o new URL, e a
+// página da ligação por voz carrega este módulo na montagem.
+import dados from "./categorias.json" with { type: "json" };
 import { normalizarUnidade, unidadeAceita } from "./unidades.ts";
 
 export type Atributo = {
@@ -39,12 +41,10 @@ export type Categoria = {
   cnae: string[];
 };
 
-const ARQUIVO = new URL("./categorias.json", import.meta.url);
-let cache: Categoria[] | null = null;
+const TODAS = (dados as unknown as { categorias: Categoria[] }).categorias;
 
 export function categorias(): Categoria[] {
-  cache ??= (JSON.parse(readFileSync(ARQUIVO, "utf8")) as { categorias: Categoria[] }).categorias;
-  return cache;
+  return TODAS;
 }
 
 export const semAcento = (s: string) =>
