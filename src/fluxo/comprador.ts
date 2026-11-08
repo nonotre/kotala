@@ -13,6 +13,7 @@ import { and, asc, desc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
 import { lerAnexoDoComprador, textoDoPedidoComAnexo, type LeituraAnexo } from "../agentes/interpretador/anexos.ts";
 import { chaveDoItem, interpretar, palavrasEmComum, type Interpretacao } from "../agentes/interpretador/index.ts";
 import { ehServico, perguntasDoServico, soServicos } from "../agentes/interpretador/servicos.ts";
+import { aplicarMemoria, citaAlgoAnterior, memoriaDoComprador, textoMemoria } from "../agentes/interpretador/memoria-conversa.ts";
 import {
   deveAvisarGestor,
   posRegras,
@@ -204,25 +205,35 @@ function botoesConfirmacao(pedidoId: number, comPerguntas: boolean): Botao[] {
 
 // ---------- Interpretar e responder ----------
 
-/** O que a IA leu, já com as pós-regras do guardrail. */
-type Lida = { d: Decisao; meta: { modelo: string; rota: string; caiuNaReserva: boolean; forte: boolean } };
+/** O que a IA leu, já com as pós-regras do guardrail. `memoria` (I5): pedidos recentes que a leitura recebeu e o que o código completou. */
+type Lida = { d: Decisao; meta: { modelo: string; rota: string; caiuNaReserva: boolean; forte: boolean; memoria?: { consultada: number[]; completou: number | null } } };
 
 /**
  * Lê com o Interpretador e aplica as pós-regras (S). I4: com sinal sensível ou
- * risco que a lista não confirma, refaz a leitura com o modelo forte.
+ * risco que a lista não confirma, refaz a leitura com o modelo forte. I5: quando a
+ * mensagem cita algo anterior ("o mesmo de ontem", "mesmo endereço"), a leitura recebe
+ * os pedidos recentes do comprador e o código completa o que ficou vazio; as pós-regras
+ * rodam depois, sobre os itens finais.
  */
-async function lerComGuardrail(entrada: Parameters<typeof interpretar>[0], pedidoId: number | undefined, t: Triagem): Promise<Lida> {
-  let r = await interpretar(entrada, { pedidoId });
+async function lerComGuardrail(entrada: Parameters<typeof interpretar>[0], pedidoId: number | undefined, t: Triagem, compradorId?: string): Promise<Lida> {
+  const textos = [entrada.textoOriginal, ...(entrada.correcoes ?? [])].join("\n");
+  const memoria =
+    compradorId && citaAlgoAnterior(textos)
+      ? await memoriaDoComprador(compradorId, { excetoPedidoId: pedidoId }).catch((erro) => (console.error("[comprador] memória", erro), null))
+      : null;
+  const comMemoria = memoria?.pedidos.length ? { ...entrada, memoria: textoMemoria(memoria) } : entrada;
+  let r = await interpretar(comMemoria, { pedidoId });
   let forte = false;
   if (precisaModeloForte(t, r.valor)) {
     try {
-      r = await interpretar(entrada, { pedidoId, papel: "forte" });
+      r = await interpretar(comMemoria, { pedidoId, papel: "forte" });
       forte = true;
     } catch (erro) {
       console.error("[comprador] modelo forte", erro); // fica a leitura do rápido
     }
   }
-  return { d: posRegras(r.valor, t), meta: { modelo: r.modelo, rota: r.rota, caiuNaReserva: r.caiuNaReserva, forte } };
+  const lido = memoria?.pedidos.length ? aplicarMemoria(r.valor, textos, memoria, new Date()) : { interpretacao: r.valor, usou: null };
+  return { d: posRegras(lido.interpretacao, t), meta: { modelo: r.modelo, rota: r.rota, caiuNaReserva: r.caiuNaReserva, forte, ...(memoria?.pedidos.length ? { memoria: { consultada: memoria.pedidos.map((p) => p.id), completou: lido.usou } } : {}) } };
 }
 
 /** Ambíguo que o comprador já confirmou (Sim ou opção): segue como pedido. */
@@ -251,7 +262,7 @@ export async function interpretarEResponder(pedidoId: number, opcoes: { lida?: L
   let lida = opcoes.lida;
   if (!lida) {
     try {
-      lida = await lerComGuardrail({ textoOriginal: p.textoOriginal, correcoes: p.correcoes, atual }, pedidoId, opcoes.triagem ?? TRIAGEM_NEUTRA);
+      lida = await lerComGuardrail({ textoOriginal: p.textoOriginal, correcoes: p.correcoes, atual }, pedidoId, opcoes.triagem ?? TRIAGEM_NEUTRA, p.compradorId);
     } catch (erro) {
       await registrar(db, {
         agente: "Interpretador",
@@ -847,7 +858,7 @@ async function novaMensagem(m: {
 }) {
   let lida: Lida;
   try {
-    lida = await lerComGuardrail({ textoOriginal: m.texto }, undefined, m.t);
+    lida = await lerComGuardrail({ textoOriginal: m.texto }, undefined, m.t, m.contatoId);
   } catch (erro) {
     await registrar(db, { agente: "Interpretador", acao: "Não conseguiu ler a mensagem do comprador.", motivo: erro instanceof Error ? erro.message : String(erro) });
     await enviar(m.contatoId, TEXTO_FALHA_IA);
