@@ -15,9 +15,9 @@ const ROTULO = { evento: "Agentes", ia: "IA", mensagem: "Mensagens", dado: "Dado
 type Tipo = keyof typeof ROTULO;
 
 const NOME_TABELA: Record<string, string> = {
-  pedido: "Pedido",
+  pedido: "Cotação",
   item_pedido: "Item",
-  cotacao: "Cotação",
+  cotacao: "Solicitação de proposta",
   oferta: "Proposta",
   referencia_preco: "Preço da internet",
   mapa_cotacao: "Mapa",

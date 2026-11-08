@@ -2,6 +2,19 @@
 
 Registro curto das decisões que mudam o escopo ou o desenho. A mais nova fica no topo.
 
+## 08/11/2026 · Cotação, proposta e pedido
+
+**Situação:** em andamento (Frente 1, só os textos das telas).
+
+O produto da solução é a **cotação**; o **pedido** é só a etapa final, gerado pela cotação depois da aprovação. O que até aqui se chamou "pedido" passa a se chamar cotação.
+
+- **Cotação:** o que o comprador pede e o processo inteiro (solicitada, propostas, comparação, pedido). Quadro e lista do Início são duas vistas das cotações. Mesmo número: "Pedido 14" vira "Cotação 14".
+- **Solicitação de proposta / proposta:** o que vai a cada fornecedor e o que ele responde (antes chamado de "cotação" ao fornecedor).
+- **Mapa de cotações:** a comparação das propostas.
+- **Pedido:** o que a cotação aprovada gera para o fornecedor vencedor (antes "pedido de compra"). Uma cotação fecha com um único fornecedor, mesmo com vários itens. O dashboard de economia olha só os pedidos.
+
+Escopo desta rodada: textos das telas. Ficam para depois: as mensagens do bot (Frente 4), e rotas, código e banco (depois da junção das frentes, para não gerar conflito em todo arquivo). Pendência de backend: hoje cada item é decidido sozinho e pode fechar com fornecedor diferente (`src/fluxo/decisao.ts`), o que contraria a regra de um fornecedor por cotação.
+
 ## 07/11/2026 · Regras da área de compras (anotações da Ester)
 
 **Situação:** implementado em parte.

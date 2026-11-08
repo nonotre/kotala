@@ -19,18 +19,18 @@ import s from "./avisos.module.scss";
 const TODOS = "todos";
 
 const O_QUE_CHEGA = [
-  "Quando o assistente leu um pedido e espera você confirmar o que entendeu.",
-  "Quando o mapa de cotação fica pronto e falta a sua decisão.",
+  "Quando o assistente leu uma cotação e espera você confirmar o que entendeu.",
+  "Quando o mapa de cotações fica pronto e falta a sua decisão.",
   "Quando você comprou o mesmo item há pouco e pode repetir a compra.",
   "Quando nenhum fornecedor mandou proposta que passasse nas regras.",
 ];
 
-/** O canal do pedido. Conversar fica no app; os outros só dizem por onde o pedido chegou. */
+/** O canal do pedido. Conversas fica no app; os outros só dizem por onde o pedido chegou. */
 function CanalDoPedido({ canal }: { canal: string }) {
   if (canal === "web") {
     return (
-      <CarbonLink as={NextLink} href="/chat" size="sm">
-        Abrir em Conversar
+      <CarbonLink as={NextLink} href="/" size="sm">
+        Abrir em Conversas
       </CarbonLink>
     );
   }
@@ -44,7 +44,7 @@ function LinhaTarefa({ aviso, principal }: { aviso: AvisoSerial; principal: bool
       <span className={s.hora}>{dataHora(aviso.em)}</span>
       <div className={s.tarefaTexto}>
         <p className={s.rotulo}>
-          Pedido {aviso.pedidoId}
+          Cotação {aviso.pedidoId}
           {aviso.item ? ` · ${aviso.item}` : null}
         </p>
         <p className={principal ? s.fraseGrande : s.frase}>{aviso.titulo}</p>
@@ -78,7 +78,7 @@ function LinhaPassada({ p }: { p: Passado }) {
       </div>
       <span className={s.passadoPedido}>
         <CarbonLink as={NextLink} href={p.href}>
-          Pedido {p.pedidoId}
+          Cotação {p.pedidoId}
         </CarbonLink>
       </span>
       <span className={s.passadoCanal}>{nomeDoCanal(p.canal)}</span>
@@ -97,7 +97,7 @@ function TudoEmDia() {
           <h2 className={s.fraseGrande}>Nada precisa de você agora.</h2>
           <p className={s.apoio}>Quando precisar, o aviso aparece aqui e no sino.</p>
         </div>
-        <Button as={NextLink} href="/quadro" kind="tertiary" size={celular ? "lg" : "md"} renderIcon={ArrowRight}>
+        <Button as={NextLink} href="/" kind="tertiary" size={celular ? "lg" : "md"} renderIcon={ArrowRight}>
           Ver o quadro
         </Button>
       </div>
@@ -200,8 +200,8 @@ export function CentralAvisos({ avisos, acontecidos, temPedidos }: Props) {
               <Layer as="section" className={s.superficie}>
                 <EstadoVazio
                   titulo="Os avisos chegam aqui."
-                  proximoPasso="Quando um pedido precisar de você, ele aparece aqui e no sino."
-                  acao={{ texto: "Fazer um pedido", href: "/chat" }}
+                  proximoPasso="Quando uma cotação precisar de você, ela aparece aqui e no sino."
+                  acao={{ texto: "Pedir uma cotação", href: "/" }}
                 />
               </Layer>
             </Column>
@@ -247,12 +247,12 @@ export function CentralAvisos({ avisos, acontecidos, temPedidos }: Props) {
               <Bloco titulo="Onde mais ver" plano solto>
                 <p className={s.ladoTexto}>
                   O sino no topo conta o que pede você. O{" "}
-                  <CarbonLink as={NextLink} href="/quadro" inline>
+                  <CarbonLink as={NextLink} href="/" inline>
                     quadro
                   </CarbonLink>{" "}
                   e a{" "}
-                  <CarbonLink as={NextLink} href="/pedidos" inline>
-                    lista de pedidos
+                  <CarbonLink as={NextLink} href="/?vista=lista" inline>
+                    lista de cotações
                   </CarbonLink>{" "}
                   ficam sempre atualizados.
                 </p>

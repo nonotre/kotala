@@ -109,7 +109,7 @@ export function Ligacao({ cotacaoId, modelo, instrucoes, ferramenta }: { cotacao
           await fetch("/api/voz/cotacao", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cotacaoId, args: fc.args, transcricao: transcricao.current }) })
         ).json()) as { ok: boolean; resposta: string };
         setRegistro(r);
-        acrescentar("sistema", r.ok ? "Proposta registrada no mapa de cotação." : r.resposta);
+        acrescentar("sistema", r.ok ? "Proposta registrada no mapa de cotações." : r.resposta);
         sessao.current?.sendToolResponse({ functionResponses: [{ id: fc.id, name: fc.name, response: r }] });
       }
     }

@@ -50,7 +50,7 @@ function etiquetasDo(
   const e: Etiqueta[] = [];
   if (p.urgencia === "obra_parada") e.push({ texto: "Obra parada", tipo: "urgente" });
   else if (p.urgencia === "urgente") e.push({ texto: "Urgente", tipo: "urgente" });
-  if (p.estado === "interpretando") e.push({ texto: "Lendo o pedido", tipo: "info" });
+  if (p.estado === "interpretando") e.push({ texto: "Lendo a cotação", tipo: "info" });
   else if (p.estado === "aguardando_confirmacao") e.push({ texto: "Aguardando você confirmar", tipo: "atencao" });
   else
     switch (i.estado) {

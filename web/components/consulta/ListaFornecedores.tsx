@@ -45,8 +45,8 @@ export type Filtro = "todos" | "com-canal" | "sem-canal" | "verificados" | "homo
 type Linha = { f: LinhaFornecedor; canal: EstadoCanal; busca: string };
 
 const FILTROS: { id: Filtro; rotulo: string; vazio: string; passo: string; passa: (l: Linha) => boolean }[] = [
-  { id: "todos", rotulo: "Todos", vazio: "Nenhum fornecedor ainda.", passo: "Eles aparecem quando o assistente busca fornecedores para um pedido, ou quando alguém entra pelo convite.", passa: () => true },
-  { id: "com-canal", rotulo: "Com canal", vazio: "Nenhum fornecedor com canal ativo.", passo: "Quem entra pelo convite passa a receber as cotações.", passa: (l) => l.canal.peso === 0 },
+  { id: "todos", rotulo: "Todos", vazio: "Nenhum fornecedor ainda.", passo: "Eles aparecem quando o assistente busca fornecedores para uma cotação, ou quando alguém entra pelo convite.", passa: () => true },
+  { id: "com-canal", rotulo: "Com canal", vazio: "Nenhum fornecedor com canal ativo.", passo: "Quem entra pelo convite passa a receber as solicitações de proposta.", passa: (l) => l.canal.peso === 0 },
   { id: "sem-canal", rotulo: "Sem canal", vazio: "Todos têm canal.", passo: "Lojas achadas na internet aparecem aqui: são referência de preço e não são contatadas.", passa: (l) => l.canal.peso === 1 },
   { id: "verificados", rotulo: "Verificados", vazio: "Nenhum fornecedor verificado.", passo: "A verificação confere o CNPJ na Receita.", passa: (l) => l.f.verificado },
   { id: "homologados", rotulo: "Homologados", vazio: "Nenhum fornecedor homologado.", passo: "Homologar é a sua aprovação, feita aqui ou na ficha de cada um.", passa: (l) => l.f.homologado },
@@ -349,7 +349,7 @@ export function ListaFornecedores({ fornecedores, filtroInicial }: { fornecedore
             <div className={s.lista}>
               <Bloco
                 plano
-                titulo={`${recebem} de ${todas.length} ${todas.length === 1 ? "fornecedor recebe" : "fornecedores recebem"} as suas cotações`}
+                titulo={`${recebem} de ${todas.length} ${todas.length === 1 ? "fornecedor recebe" : "fornecedores recebem"} as suas solicitações de proposta`}
                 descricao={
                   simulados ? (
                     <>
@@ -380,7 +380,7 @@ export function ListaFornecedores({ fornecedores, filtroInicial }: { fornecedore
               </div>
               <div>
                 <dt>Bloqueado</dt>
-                <dd>Deixa de entrar nas buscas e na recompra. As cotações em andamento continuam.</dd>
+                <dd>Deixa de entrar nas buscas e na recompra. As solicitações de proposta em andamento continuam.</dd>
               </div>
             </dl>
           </Column>

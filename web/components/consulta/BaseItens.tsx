@@ -31,7 +31,7 @@ import s from "./consulta.module.scss";
 const COLUNAS = [
   { key: "descricao", header: "Item" },
   { key: "unidade", header: "Unidade" },
-  { key: "pedidos", header: "Pedidos" },
+  { key: "pedidos", header: "Cotações" },
   { key: "compra", header: "Última compra" },
   { key: "referencia", header: "Referência pública" },
 ];
@@ -40,7 +40,7 @@ const ESTADO: Record<string, { kind: Kind; rotulo: string }> = {
   na_fila: { kind: "not-started", rotulo: "Na fila" },
   buscando: { kind: "in-progress", rotulo: "Captando fornecedores" },
   aguardando_recompra: { kind: "informative", rotulo: "Repetir compra?" },
-  cotando: { kind: "in-progress", rotulo: "Cotando" },
+  cotando: { kind: "in-progress", rotulo: "Esperando propostas" },
   comparando: { kind: "pending", rotulo: "Montando o mapa" },
   aguardando_decisao: { kind: "informative", rotulo: "Aguardando sua decisão" },
   aprovado: { kind: "succeeded", rotulo: "Aprovado" },
@@ -76,9 +76,9 @@ function Detalhe({ i }: { i: ItemDaBase }) {
     <Bloco titulo={i.descricao} descricao={[i.codigo ? `Código ${i.codigo}` : null, i.unidade ? `Comprado por ${i.unidade}` : null, i.categoria].filter(Boolean).join(" · ") || undefined}>
       {i.cadastradoNoPedido ? (
         <p className={s.apoioCorpo}>
-          Não estava na base: o assistente cadastrou este item no{" "}
+          Não estava na base: o assistente cadastrou este item na{" "}
           <CarbonLink as={NextLink} href={`/pedidos/${i.cadastradoNoPedido}`} inline>
-            pedido {i.cadastradoNoPedido}
+            cotação {i.cadastradoNoPedido}
           </CarbonLink>
           .
         </p>
@@ -144,7 +144,7 @@ function Detalhe({ i }: { i: ItemDaBase }) {
                 <span className={s.apoio}>
                   {data(c.data)}
                   {c.frete !== null ? ` · frete ${brl(c.frete)}` : ""}
-                  {c.pedidoId ? ` · pedido ${c.pedidoId}` : ""}
+                  {c.pedidoId ? ` · cotação ${c.pedidoId}` : ""}
                 </span>
               </li>
             ))}
@@ -154,16 +154,16 @@ function Detalhe({ i }: { i: ItemDaBase }) {
         )}
       </section>
 
-      <section className={s.parte} aria-label="Pedidos">
-        <h3 className={s.subtitulo}>Pedidos</h3>
+      <section className={s.parte} aria-label="Cotações">
+        <h3 className={s.subtitulo}>Cotações</h3>
         {i.pedidos.length ? (
           <ul className={s.listaSimples}>
             {i.pedidos.map((p) => {
               const e = ESTADO[p.estado] ?? { kind: "normal" as Kind, rotulo: p.estado };
               return (
                 <li key={p.itemId} className={s.duasLinhas}>
-                  <CarbonLink as={NextLink} href={`/pedidos/${p.pedidoId}#item-${p.itemId}`}>
-                    Pedido {p.pedidoId}: {quantidade(p.quantidade, p.unidade)}
+                  <CarbonLink as={NextLink} href={`/pedidos/${p.pedidoId}`}>
+                    Cotação {p.pedidoId}: {quantidade(p.quantidade, p.unidade)}
                   </CarbonLink>
                   <IconIndicator kind={e.kind} label={`${e.rotulo} · ${dataHora(p.em)}`} size={16} />
                 </li>
@@ -171,12 +171,12 @@ function Detalhe({ i }: { i: ItemDaBase }) {
             })}
           </ul>
         ) : (
-          <EstadoVazio compacto titulo="Nenhum pedido deste item." />
+          <EstadoVazio compacto titulo="Nenhuma cotação deste item." />
         )}
       </section>
 
       <div className={s.acoes}>
-        <CarbonLink as={NextLink} href="/chat">
+        <CarbonLink as={NextLink} href="/">
           Pedir na conversa
         </CarbonLink>
       </div>
@@ -253,7 +253,7 @@ export function BaseItens({ itens, itemInicial }: { itens: ItemDaBase[]; itemIni
             <section className={s.achar} aria-label="Encontre o material">
               <Search size="lg" labelText="Buscar item" placeholder="Buscar por nome, código ou especificação" closeButtonLabelText="Limpar busca" value={busca} onChange={(e) => setBusca(e.target.value)} onClear={() => setBusca("")} />
               {itens.length === 0 ? (
-                <EstadoVazio titulo="Nenhum item ainda." proximoPasso="Os itens aparecem aqui depois do primeiro pedido." acao={{ texto: "Pedir na conversa", href: "/chat", tipo: "tertiary" }} />
+                <EstadoVazio titulo="Nenhum item ainda." proximoPasso="Os itens aparecem aqui depois da primeira cotação." acao={{ texto: "Pedir na conversa", href: "/", tipo: "tertiary" }} />
               ) : lista.length === 0 ? (
                 <EstadoVazio tamanho="sm" titulo="Nenhum item com esse nome." proximoPasso="Confira a escrita, ou tente outro nome." acao={{ texto: "Limpar busca", aoClicar: () => setBusca(""), tipo: "tertiary" }} />
               ) : (
@@ -291,7 +291,7 @@ export function BaseItens({ itens, itemInicial }: { itens: ItemDaBase[]; itemIni
                                     <span className={s.nomeForte}>{i.descricao}</span>
                                     {i.codigo ? <span className={s.apoio}>{i.codigo}</span> : null}
                                     <span className={s.apoioCelular}>
-                                      {i.unidade} · {i.pedidos.length} {i.pedidos.length === 1 ? "pedido" : "pedidos"}
+                                      {i.unidade} · {i.pedidos.length} {i.pedidos.length === 1 ? "cotação" : "cotações"}
                                     </span>
                                   </span>
                                 </TableCell>
@@ -342,9 +342,9 @@ export function BaseItens({ itens, itemInicial }: { itens: ItemDaBase[]; itemIni
               {atual ? (
                 <Detalhe i={atual} />
               ) : (
-                <Bloco titulo="Escolha o material" descricao="Marque um item na lista para ver a especificação, o que foi pago, a referência da internet e os pedidos.">
+                <Bloco titulo="Escolha o material" descricao="Marque um item na lista para ver a especificação, o que foi pago, a referência da internet e as cotações.">
                   <div className={s.acoes}>
-                    <CarbonLink as={NextLink} href="/chat">
+                    <CarbonLink as={NextLink} href="/">
                       Pedir na conversa
                     </CarbonLink>
                   </div>

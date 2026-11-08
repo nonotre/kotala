@@ -1,4 +1,4 @@
-// Aba Decisão: aprovar uma das propostas válidas ou reprovar com o motivo, que
+// Compra › Decidido: aprovar uma das propostas válidas ou reprovar com o motivo, que
 // leva o item a um caminho diferente. Depois de aprovar, o que foi aprovado.
 // Nada é comprado sem o comprador: toda aprovação passa por um modal.
 
@@ -52,13 +52,13 @@ function Escolha({ i }: { i: ItemDoPedido }) {
             size="sm"
             confirmar={{
               titulo: "Confirmar a compra?",
-              texto: `${quantidade(item.quantidade, item.unidade)} de ${item.descricao} com ${l.oferta.fornecedorNome}${l.oferta.simulado ? " (simulado)" : ""} por ${brl(l.custo)}, entrega em ${l.oferta.prazoDias !== null ? dias(l.oferta.prazoDias) : "prazo não informado"}. O pedido de compra vai para o fornecedor.`,
+              texto: `${quantidade(item.quantidade, item.unidade)} de ${item.descricao} com ${l.oferta.fornecedorNome}${l.oferta.simulado ? " (simulado)" : ""} por ${brl(l.custo)}, entrega em ${l.oferta.prazoDias !== null ? dias(l.oferta.prazoDias) : "prazo não informado"}. O pedido vai para o fornecedor.`,
               botao: "Sim, aprovar",
             }}
           />,
         ])}
       />
-      <p className={s.ajuda}>Aprovar pede uma confirmação antes de mandar o pedido de compra.</p>
+      <p className={s.ajuda}>Aprovar pede uma confirmação antes de mandar o pedido.</p>
     </Bloco>
   );
 }
@@ -128,7 +128,7 @@ function Aprovado({ i }: { i: ItemDoPedido }) {
           ["Quantidade", `${quantidade(item.quantidade, item.unidade)} de ${item.descricao}`],
         ]}
       />
-      {item.estado === "pedido_enviado" || item.estado === "aprovado" ? <p className={s.ajuda}>O pedido de compra foi para o fornecedor. Você recebe um aviso quando ele confirmar.</p> : null}
+      {item.estado === "pedido_enviado" || item.estado === "aprovado" ? <p className={s.ajuda}>O pedido foi para o fornecedor. Você recebe um aviso quando ele confirmar.</p> : null}
     </Bloco>
   );
 }
@@ -136,10 +136,10 @@ function Aprovado({ i }: { i: ItemDoPedido }) {
 function SemDecisao({ d, i }: { d: DadosPedido; i: ItemDoPedido }) {
   const { item } = i;
   if (item.estado === "aguardando_recompra") {
-    return <EstadoVazio compacto titulo="Compra repetida: escolha repetir ou cotar de novo no Resumo." acao={{ texto: "Ir para Resumo", href: hrefAba(d.pedido.id, "resumo", item.id) }} />;
+    return <EstadoVazio compacto titulo="Compra repetida: escolha repetir ou cotar de novo na etapa Comparação." acao={{ texto: "Ir para Comparação", href: hrefAba(d.pedido.id, "comparacao", item.id) }} />;
   }
   if (item.estado === "sem_proposta") {
-    return <EstadoVazio compacto titulo="Sem proposta válida: não há o que aprovar." acao={{ texto: "Ver as cotações", href: hrefAba(d.pedido.id, "cotacoes", item.id) }} />;
+    return <EstadoVazio compacto titulo="Sem proposta válida: não há o que aprovar." acao={{ texto: "Ver as propostas", href: hrefAba(d.pedido.id, "cotacoes", item.id) }} />;
   }
   if (item.estado === "cancelado") return <EstadoVazio compacto titulo="Item cancelado. Nada foi comprado." />;
   return <EstadoVazio compacto titulo="Ainda não há o que decidir." proximoPasso="A decisão chega quando o mapa estiver pronto." />;
@@ -175,7 +175,7 @@ export function AbaDecisao({ d }: { d: DadosPedido }) {
       })}
       {!d.itens.length ? (
         <Column sm={4} md={8} lg={16}>
-          <EstadoVazio titulo="Ainda não há o que decidir." proximoPasso="Primeiro, confirme o pedido no Resumo." acao={{ texto: "Ir para Resumo", href: `/pedidos/${d.pedido.id}`, tipo: "tertiary" }} />
+          <EstadoVazio titulo="Ainda não há o que decidir." proximoPasso="Primeiro, confirme a cotação na etapa Solicitada." acao={{ texto: "Ir para Solicitada", href: hrefAba(d.pedido.id, "solicitado"), tipo: "tertiary" }} />
         </Column>
       ) : null}
     </GradePagina>

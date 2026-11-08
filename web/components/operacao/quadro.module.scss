@@ -39,15 +39,33 @@
 }
 
 // ---------- Raias ----------
+// A partir de lg as 4 raias ficam lado a lado, cada uma com largura mínima estreita: no Início, ao lado do
+// chat, a área é pequena e o quadro rola na horizontal; em Pedidos, com a tela toda, elas se repartem.
+.raiasRolagem {
+  min-inline-size: 0;
+
+  @include breakpoint.breakpoint(lg) {
+    overflow-x: auto;
+    padding-block-end: spacing.$spacing-03;
+  }
+
+  &:focus-visible {
+    outline: 2px solid theme.$focus; /* stylelint-disable-line carbon/layout-use */
+    outline-offset: -2px; /* stylelint-disable-line carbon/layout-use */
+  }
+}
+
 .raias {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: spacing.$spacing-03;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: spacing.$spacing-05 spacing.$spacing-03;
   align-items: start;
 
-  @include breakpoint.breakpoint-down(lg) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: spacing.$spacing-05 spacing.$spacing-03;
+  @include breakpoint.breakpoint(lg) {
+    grid-auto-flow: column;
+    grid-template-columns: none;
+    grid-auto-columns: minmax(calc(#{spacing.$spacing-13} + #{spacing.$spacing-06}), 1fr); /* stylelint-disable-line carbon/layout-use */
+    gap: spacing.$spacing-03;
   }
 
   @include breakpoint.breakpoint-down(md) {
@@ -63,9 +81,6 @@
 }
 
 .raiaCabeca {
-  display: flex;
-  flex-direction: column;
-  gap: spacing.$spacing-02;
   padding-block-end: spacing.$spacing-03;
   border-block-end: 1px solid theme.$border-strong-01;
 }
@@ -75,20 +90,18 @@
 
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
   gap: spacing.$spacing-03;
+}
+
+// O nome é o gatilho da dica; o Carbon sublinha com pontilhado os termos definidos.
+.raiaNome {
+  @include type.type-style('heading-compact-01');
 }
 
 .raiaConta {
   @include type.type-style('label-01');
 
   font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
-  color: theme.$text-secondary;
-}
-
-.raiaAjuda {
-  @include type.type-style('label-01');
-
   color: theme.$text-secondary;
 }
 
@@ -114,18 +127,11 @@
   }
 }
 
-// No celular: contagem colada ao nome.
-@include breakpoint.breakpoint-down(md) {
-  .raiaTitulo {
-    justify-content: flex-start;
-  }
-}
-
 // ---------- Card ----------
 // Dobrada para vencer o preenchimento do Tile.
 .cartaoTile.cartaoTile {
   position: relative;
-  padding: spacing.$spacing-04;
+  padding: spacing.$spacing-03 spacing.$spacing-04;
 }
 
 // Na fila: ainda não começou. Só o contorno, para pesar menos que quem já anda.
@@ -143,7 +149,7 @@
 .cartao {
   display: flex;
   flex-direction: column;
-  gap: spacing.$spacing-04;
+  gap: spacing.$spacing-03;
   min-inline-size: 0;
 
   svg {
@@ -202,11 +208,7 @@
 }
 
 .custo {
-  @include type.type-style('heading-03');
+  @include type.type-style('heading-compact-02');
 
   font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
-
-  @include breakpoint.breakpoint-down(md) {
-    @include type.type-style('heading-05');
-  }
 }

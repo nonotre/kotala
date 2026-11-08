@@ -7,7 +7,8 @@ import { BotaoLink } from "./BotaoLink";
 import type { ProximoPasso, Quem } from "./textos";
 import s from "./pedido.module.scss";
 
-const ICONE: Record<Exclude<Quem, "sistema">, "informative" | "pending" | "succeeded"> = { comprador: "informative", fornecedor: "pending", fim: "succeeded" };
+// Cancelado não é sucesso: o mesmo ícone do pedido cancelado no resto do app.
+const ICONE: Record<Exclude<Quem, "sistema">, "informative" | "pending" | "succeeded" | "undefined"> = { comprador: "informative", fornecedor: "pending", fim: "succeeded", cancelado: "undefined" };
 
 /** O ícone diz de quem é a vez; o texto ao lado diz o quê. Etapa do assistente em andamento mostra o carregamento. */
 function IconeDaVez({ quem }: { quem: Quem }) {
@@ -33,7 +34,7 @@ export function FaixaProximoPasso({ passo }: { passo: ProximoPasso }) {
   const rota = usePathname();
   const destino = passo.botao?.href.split("#")[0];
   const botao = passo.botao && destino !== rota ? passo.botao : null;
-  const rotulo = passo.quem === "fim" ? null : passo.quem === "comprador" ? "O que falta agora" : "Agora";
+  const rotulo = passo.quem === "fim" || passo.quem === "cancelado" ? null : passo.quem === "comprador" ? "O que falta agora" : "Agora";
   const tipo = passo.quem === "comprador" ? "primary" : "secondary";
   return (
     <>

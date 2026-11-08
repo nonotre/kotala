@@ -1,19 +1,10 @@
-// Abas do pedido: cabeçalho, faixa do que falta agora, seções por item e mapa. Só tokens do Carbon.
+// Telas do pedido: cabeçalho, etapas da compra, faixa do que falta agora, seções por item e mapa. Só tokens do Carbon.
 @use '@carbon/react/scss/theme';
 @use '@carbon/react/scss/spacing';
 @use '@carbon/react/scss/type';
 @use '@carbon/react/scss/breakpoint';
 
-// ---------- Cabeçalho ----------
-// A partir de xlg, cada etapa cabe com o texto de apoio em uma linha.
-.progresso {
-  inline-size: 100%;
-
-  @include breakpoint.breakpoint(xlg) {
-    inline-size: calc(#{spacing.$spacing-13} * 3 + #{spacing.$spacing-12}); /* stylelint-disable-line carbon/layout-use */
-  }
-}
-
+// ---------- Detalhes ----------
 .urgencia {
   color: theme.$text-error;
 }
@@ -379,4 +370,147 @@
 
   color: theme.$text-primary;
   font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
+}
+
+// ---------- Cabeçalho: voltar e título ----------
+.tituloLinha {
+  display: flex;
+  align-items: flex-start;
+  gap: spacing.$spacing-03;
+  min-inline-size: 0;
+  // O botão voltar alinha a sua borda à do título e não empurra o texto para baixo.
+  margin-inline-start: calc(-1 * #{spacing.$spacing-03});
+}
+
+// Caixa do voltar com a altura da primeira linha do título: o ícone fica centrado nela, mesmo com o título em duas linhas.
+.voltar {
+  @include type.type-style('heading-04');
+
+  display: flex;
+  flex: none;
+  align-items: center;
+  block-size: 1lh;
+}
+
+// ---------- Etapas da compra: progresso e navegação ----------
+// Linha de cima: azul até a etapa atual, cinza depois. A etapa aberta tem fundo e nome em negrito.
+.etapas {
+  padding: spacing.$spacing-05 spacing.$spacing-05 0;
+}
+
+.etapasLista {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: spacing.$spacing-02;
+
+  @include breakpoint.breakpoint(md) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.etapaItem {
+  display: flex;
+  min-inline-size: 0;
+}
+
+.etapa {
+  display: flex;
+  flex: 1;
+  align-items: flex-start;
+  gap: spacing.$spacing-03;
+  min-inline-size: 0;
+  padding: spacing.$spacing-03 spacing.$spacing-04 spacing.$spacing-04;
+  border-block-start: spacing.$spacing-01 solid theme.$border-subtle-01;
+  background: theme.$layer-01;
+  color: theme.$text-primary;
+  text-decoration: none;
+
+  &[data-estado='concluida'],
+  &[data-estado='atual'] {
+    border-block-start-color: theme.$border-interactive;
+  }
+
+  &[data-estado='invalida'] {
+    border-block-start-color: theme.$support-error;
+  }
+
+  &[data-aberta] {
+    background: theme.$layer-selected-01;
+  }
+
+  &[data-aberta] .etapaRotulo {
+    @include type.type-style('heading-compact-01');
+  }
+}
+
+a.etapa:hover {
+  background: theme.$layer-hover-01;
+}
+
+a.etapa[data-aberta]:hover {
+  background: theme.$layer-selected-hover-01;
+}
+
+a.etapa:focus {
+  outline: 2px solid theme.$focus;
+  outline-offset: -2px;
+}
+
+.etapaIcone {
+  flex: none;
+  margin-block-start: spacing.$spacing-01;
+  fill: theme.$interactive;
+
+  [data-estado='futura'] > & {
+    fill: theme.$icon-secondary;
+  }
+
+  [data-estado='invalida'] > & {
+    fill: theme.$support-error;
+  }
+}
+
+.etapaTexto {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-01;
+  min-inline-size: 0;
+}
+
+.etapaRotulo {
+  @include type.type-style('body-compact-01');
+}
+
+.etapaApoio {
+  @include type.type-style('helper-text-01');
+
+  color: theme.$text-secondary;
+}
+
+// Futura sem conteúdo: texto, não link. O motivo continua legível.
+.etapaDesabilitada {
+  background: transparent;
+  color: theme.$text-disabled;
+
+  .etapaIcone {
+    fill: theme.$icon-disabled;
+  }
+
+  .etapaApoio {
+    color: theme.$text-secondary;
+  }
+}
+
+// ---------- Alternador de telas dentro de uma parte ----------
+.trocaVista {
+  padding-inline: spacing.$spacing-05;
+
+  @include breakpoint.breakpoint(md) {
+    max-inline-size: calc(#{spacing.$spacing-13} * 4); /* stylelint-disable-line carbon/layout-use */
+  }
+}
+
+// ---------- Mensagem original, recolhida no fim do Histórico ----------
+.recolhido {
+  background: theme.$layer-01;
 }

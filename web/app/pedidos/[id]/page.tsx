@@ -4,7 +4,7 @@ import { pedidoCompleto } from "@/lib/dados-pedido";
 
 export const dynamic = "force-dynamic";
 
-/** Resumo: o que foi pedido, a confirmação e onde cada item está. */
+/** Pedido › Resumo, a entrada do pedido: os detalhes e onde cada item está. */
 export default async function ResumoDoPedido({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const d = await pedidoCompleto(Number(id));

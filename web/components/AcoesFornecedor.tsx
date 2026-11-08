@@ -43,7 +43,7 @@ export function AcoesFornecedor({ id, nome, homologado, bloqueado }: { id: strin
         onRequestClose={() => setAberto(false)}
         onRequestSubmit={() => fazer("bloquear", motivo)}
       >
-        <p>Ele deixa de entrar nas buscas e na recompra. As cotações em andamento continuam.</p>
+        <p>Ele deixa de entrar nas buscas e na recompra. As solicitações de proposta em andamento continuam.</p>
         <TextInput id={`motivo-${id}`} labelText="Motivo" placeholder="Ex.: atrasou a entrega e não avisou" value={motivo} onChange={(e) => setMotivo(e.target.value)} />
       </Modal>
       {erro ? <InlineNotification kind="error" lowContrast title="Não deu certo." subtitle={erro} onCloseButtonClick={() => setErro(null)} /> : null}

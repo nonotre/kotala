@@ -176,7 +176,7 @@ export async function acontecidosRecentes(dias = 7): Promise<Acontecido[]> {
       simulado: origem === "simulado",
       canal,
       em: iso(item.atualizadoEm),
-      href: `/pedidos/${item.pedidoId}#item-${item.id}`,
+      href: `/pedidos/${item.pedidoId}`,
     };
   });
 }
@@ -188,8 +188,8 @@ const PASSO_DO_ITEM: Record<EstadoItem, string> = {
   buscando: "O assistente está procurando fornecedores.",
   aguardando_recompra: "Você comprou este item há pouco. Repita ou cote de novo.",
   cotando: "Esperando as propostas dos fornecedores.",
-  comparando: "O assistente está montando o mapa de cotação.",
-  aguardando_decisao: "O mapa de cotação está pronto. Falta a sua decisão.",
+  comparando: "O assistente está montando o mapa de cotações.",
+  aguardando_decisao: "O mapa de cotações está pronto. Falta a sua decisão.",
   aprovado: "Aprovada. O assistente vai enviar o pedido ao fornecedor.",
   pedido_enviado: "Pedido enviado. Falta o fornecedor confirmar.",
   confirmado: "Compra confirmada pelo fornecedor.",
@@ -228,13 +228,13 @@ export async function pedidosOperacao(): Promise<LinhaPedido[]> {
     const coluna: Coluna = p.estado === "concluido" ? "Decidido" : i ? colunaDoItem(p.estado, i.estado) : "Solicitado";
     const passo =
       p.estado === "interpretando"
-        ? "O assistente está lendo o pedido."
+        ? "O assistente está lendo a cotação."
         : p.estado === "aguardando_confirmacao"
-          ? "Confirme o que o assistente entendeu do pedido."
+          ? "Confirme o que o assistente entendeu da cotação."
           : p.estado === "cancelado"
             ? p.motivoCancelamento
-              ? `Cancelado: ${p.motivoCancelamento.charAt(0).toLowerCase()}${p.motivoCancelamento.slice(1)}.`
-              : "Pedido cancelado."
+              ? `Cancelada: ${p.motivoCancelamento.charAt(0).toLowerCase()}${p.motivoCancelamento.slice(1)}.`
+              : "Cotação cancelada."
             : p.estado === "concluido"
               ? "Todos os itens terminaram."
               : i

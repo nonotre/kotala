@@ -1,24 +1,26 @@
-// Conversar: sem moldura, a conversa ocupa a tela e o campo fica preso ao pé. Só tokens do Carbon.
+// Conversar: sem moldura, a conversa ocupa o espaço que o pai der e o campo fica preso ao pé. Só tokens do Carbon.
 @use '@carbon/react/scss/theme';
 @use '@carbon/react/scss/spacing';
 @use '@carbon/react/scss/type';
 
-// Altura da tela menos o Header da casca.
+// A altura vem do pai: o painel direito de Conversas, ou a coluna do Início.
 .tela {
   display: flex;
   flex-direction: column;
-  block-size: calc(100dvh - #{spacing.$spacing-09});
+  block-size: 100%;
+  min-block-size: 0;
   background: theme.$background;
 }
 
-// O título existe para o leitor de tela; quem vê, vê a conversa.
-.tituloOculto {
-  position: absolute;
-  overflow: hidden;
-  block-size: 1px;
-  clip-path: inset(50%);
-  inline-size: 1px;
-  white-space: nowrap;
+// Compacta: a coluna é estreita, a dica e o esqueleto encostam mais nas bordas.
+.telaPainel {
+  .dicaInicio {
+    padding-inline: spacing.$spacing-03;
+  }
+
+  .chatCarregando {
+    padding: spacing.$spacing-05 spacing.$spacing-03;
+  }
 }
 
 .chatArea {

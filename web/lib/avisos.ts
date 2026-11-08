@@ -37,20 +37,20 @@ export async function listarAvisos(): Promise<Aviso[]> {
     tipo: "confirmar_pedido",
     pedidoId: p.id,
     itemId: null,
-    titulo: `Confirme o pedido ${p.id}`,
-    texto: "O assistente leu o pedido e espera você conferir antes de cotar.",
-    href: `/pedidos/${p.id}`,
+    titulo: `Confirme a cotação ${p.id}`,
+    texto: "O assistente leu a cotação e espera você conferir antes de pedir propostas.",
+    href: `/pedidos/${p.id}/solicitado`,
     urgencia: p.urgencia,
     em: p.atualizadoEm,
   }));
   for (const { item, urgencia } of itens) {
     const base = { pedidoId: item.pedidoId, itemId: item.id, urgencia, em: item.atualizadoEm };
     if (item.estado === "aguardando_decisao")
-      lista.push({ ...base, chave: `decidir-${item.id}`, tipo: "decidir", titulo: `Decida a compra de ${item.descricao}`, texto: "O mapa de cotação está pronto. Nada é comprado sem a sua aprovação.", href: `/pedidos/${item.pedidoId}/decisao#item-${item.id}` });
+      lista.push({ ...base, chave: `decidir-${item.id}`, tipo: "decidir", titulo: `Decida a compra de ${item.descricao}`, texto: "O mapa de cotações está pronto. Nada é comprado sem a sua aprovação.", href: `/pedidos/${item.pedidoId}/decisao` });
     else if (item.estado === "aguardando_recompra")
-      lista.push({ ...base, chave: `recompra-${item.id}`, tipo: "recompra", titulo: `Repetir a compra de ${item.descricao}?`, texto: "Você comprou este item há pouco tempo. Repita ou cote de novo.", href: `/pedidos/${item.pedidoId}#item-${item.id}` });
+      lista.push({ ...base, chave: `recompra-${item.id}`, tipo: "recompra", titulo: `Repetir a compra de ${item.descricao}?`, texto: "Você comprou este item há pouco tempo. Repita ou cote de novo.", href: `/pedidos/${item.pedidoId}/comparacao` });
     else if (item.atualizadoEm > desde)
-      lista.push({ ...base, chave: `sem-${item.id}`, tipo: "sem_proposta", titulo: `Sem proposta válida para ${item.descricao}`, texto: "Nenhum fornecedor mandou proposta que passasse nas regras.", href: `/pedidos/${item.pedidoId}/cotacoes#item-${item.id}` });
+      lista.push({ ...base, chave: `sem-${item.id}`, tipo: "sem_proposta", titulo: `Sem proposta válida para ${item.descricao}`, texto: "Nenhum fornecedor mandou proposta que passasse nas regras.", href: `/pedidos/${item.pedidoId}/cotacoes` });
   }
   const peso = (u: string) => (u === "obra_parada" ? 0 : u === "urgente" ? 1 : 2);
   return lista.sort((a, b) => peso(a.urgencia) - peso(b.urgencia) || b.em.getTime() - a.em.getTime());

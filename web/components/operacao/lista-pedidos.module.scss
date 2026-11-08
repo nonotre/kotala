@@ -1,14 +1,27 @@
-// Lista de pedidos: tabela no notebook, linhas no celular. Só tokens do Carbon.
+// Lista de cotações: tabela quando cabe, linhas quando não. Só tokens do Carbon.
+// As larguras vêm do contêiner da lista, e não da janela: no Início ela divide a tela com o menu e as conversas.
 @use '@carbon/react/scss/theme';
 @use '@carbon/react/scss/spacing';
 @use '@carbon/react/scss/type';
 @use '@carbon/react/scss/breakpoint';
 
-// A coluna de custo tem a mesma largura com proposta, sem proposta e no cabeçalho, a partir de 1440 px.
+// A coluna de custo tem a mesma largura com proposta, sem proposta e no cabeçalho, quando a lista é larga.
 @mixin largura-custo {
-  @include breakpoint.breakpoint(90rem) {
+  @container lista (min-width: 80rem) {
     min-inline-size: calc(#{spacing.$spacing-13} + #{spacing.$spacing-10});
   }
+}
+
+// O ListaPedidos mede este contêiner para escolher entre tabela e linhas; o CSS abaixo usa a mesma medida.
+.conteiner {
+  container: lista / inline-size;
+}
+
+// Antes de medir (no servidor e na hidratação): só o lugar da lista, sem escolher a forma.
+.reservado {
+  min-block-size: calc(#{spacing.$spacing-13} * 2); /* stylelint-disable-line carbon/layout-use */
+  padding: spacing.$spacing-05;
+  background: theme.$layer-01;
 }
 
 // ---------- Tabela ----------
@@ -17,19 +30,32 @@
   vertical-align: top;
 }
 
+// Sem espaço para os filtros e a busca lado a lado, a busca desce para a linha de baixo.
+// (O TableToolbar da Carbon descarta o className: a regra vai pelo contêiner.)
+.tabela :global(.cds--table-toolbar) {
+  flex-wrap: wrap;
+  block-size: auto;
+}
+
+.tabela :global(.cds--table-toolbar > .cds--toolbar-content) {
+  flex: 1 1 calc(#{spacing.$spacing-13} + #{spacing.$spacing-11}); /* stylelint-disable-line carbon/layout-use */
+  min-block-size: spacing.$spacing-09;
+}
+
+// O seletor de filtro, com folga nas laterais.
 .filtros {
   display: flex;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   align-items: center;
+  min-block-size: spacing.$spacing-09;
   min-inline-size: 0;
+  padding-inline: spacing.$spacing-05;
+}
 
-  @include breakpoint.breakpoint(xlg) {
-    inline-size: calc(#{spacing.$spacing-13} * 5); /* stylelint-disable-line carbon/layout-use */
-  }
-
-  @include breakpoint.breakpoint-down(xlg) {
-    padding-inline: spacing.$spacing-05;
-  }
+// Os filtros em botões, um ao lado do outro: só quando cabem com a busca na mesma linha.
+.filtrosLargos {
+  flex-basis: calc(#{spacing.$spacing-13} * 5); /* stylelint-disable-line carbon/layout-use */
+  padding-inline: 0;
 }
 
 .filtros > * {
@@ -71,7 +97,7 @@
   gap: spacing.$spacing-01;
   min-inline-size: spacing.$spacing-12;
 
-  @include breakpoint.breakpoint(xlg) {
+  @container lista (min-width: 80rem) {
     min-inline-size: spacing.$spacing-13;
   }
 }
@@ -202,10 +228,15 @@
   gap: spacing.$spacing-03;
   margin-block-end: spacing.$spacing-03;
 
-  @include breakpoint.breakpoint(md) {
+  @container lista (min-width: 42rem) {
     flex-direction: row;
     align-items: center;
     gap: spacing.$spacing-05;
+
+    // Lado a lado, a busca cede espaço: o seletor mostra o filtro e a contagem inteiros.
+    > .seletor {
+      flex: none;
+    }
   }
 }
 

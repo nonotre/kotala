@@ -4,14 +4,6 @@
 @use '@carbon/react/scss/type';
 @use '@carbon/react/scss/breakpoint';
 
-.nomeProduto.nomeProduto {
-  white-space: nowrap;
-
-  @include breakpoint.breakpoint-down(md) {
-    display: none;
-  }
-}
-
 .marca {
   display: flex;
   align-items: center;
@@ -74,15 +66,16 @@
   }
 }
 
+// Só a partir de lg: no trilho do pedido, o menu aberto só empresta a largura. Não escurece, mas o clique fora fecha.
+// Abaixo de lg, quem escurece (e fecha ao clique) é a sobreposição do próprio SideNav.
 .veu {
   position: fixed;
   z-index: 7000;
   inset: spacing.$spacing-09 0 0;
-  background: theme.$overlay;
+  background: transparent;
 
-  // No trilho do pedido, o menu aberto só empresta a largura: não escurece, mas o clique fora fecha.
-  @include breakpoint.breakpoint(lg) {
-    background: transparent;
+  @include breakpoint.breakpoint-down(lg) {
+    display: none;
   }
 }
 
@@ -117,6 +110,11 @@
 
   &:focus {
     outline: none;
+  }
+
+  // Acompanha a largura do menu (o SideNav anima o dele em 0,11 s).
+  @media (prefers-reduced-motion: no-preference) {
+    transition: margin-inline-start 0.11s cubic-bezier(0.2, 0, 1, 0.9);
   }
 
   // Sem <Pagina>, como em not-found.tsx, a casca dá o respiro.

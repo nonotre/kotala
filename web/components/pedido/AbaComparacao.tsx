@@ -1,6 +1,6 @@
-// Aba Comparação: o mapa de cotação calculado em código (uma coluna por proposta
-// válida), a recomendação do assistente com os pesos, de onde vem a nota e o que
-// ficou fora da comparação.
+// Compra › Comparando › Comparação: o mapa de cotação calculado em código (uma coluna
+// por proposta válida), a recomendação do assistente com os pesos, de onde vem a nota
+// e o que ficou fora da comparação. A compra repetida também se decide aqui.
 
 import { Column, InlineNotification, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Tile } from "@carbon/react";
 import { CheckmarkFilled } from "@carbon/react/icons";
@@ -16,6 +16,7 @@ import type { DadosPedido, ItemDoPedido } from "@/lib/dados-pedido";
 import { brl, nota } from "@/lib/formato";
 import { BotaoLink } from "./BotaoLink";
 import { Fornecedor, IndiceItens, SecaoItem, textoDias } from "./Item";
+import { Recompra } from "./Recompra";
 import { Status } from "./Status";
 import { hrefAba } from "./textos";
 import s from "./pedido.module.scss";
@@ -69,7 +70,7 @@ function Mapa({ i }: { i: ItemDoPedido }) {
     ["Pagamento", (l) => l.oferta.pagamento ?? "—"],
     ["Confiança", (l) => confianca(l, i.verificacoes[l.oferta.fornecedorId] as Verificacao)],
     ["Nota", (l) => <span className={s.custo}>{nota(l.nota)}</span>],
-    ["Item oferecido", (l) => (l.oferta.itemExato ? "O pedido" : `Equivalente: ${l.oferta.itemOferecido}`)],
+    ["Item oferecido", (l) => (l.oferta.itemExato ? "O item pedido" : `Equivalente: ${l.oferta.itemOferecido}`)],
     [
       "Alertas",
       (l) =>
@@ -84,7 +85,7 @@ function Mapa({ i }: { i: ItemDoPedido }) {
   ];
   return (
     <div className={s.mapaRolagem}>
-      <Table size="md" aria-label={`Mapa de cotação do item ${i.item.ordem}`} className={s.mapa}>
+      <Table size="md" aria-label={`Mapa de cotações do item ${i.item.ordem}`} className={s.mapa}>
         <TableHead>
           <TableRow>
             <TableHeader>
@@ -144,7 +145,7 @@ function Recomendacao({ d, i }: { d: DadosPedido; i: ItemDoPedido }) {
       <p className={s.texto}>{mapa!.recomendacao}</p>
       <p className={s.ajuda}>
         Pesos: preço {c.pesos.preco}, prazo {c.pesos.prazo}, confiança {c.pesos.confianca}, aderência {c.pesos.aderencia}, pagamento {c.pesos.pagamento}
-        {c.urgente ? " (prazo em dobro: pedido urgente)" : ""}.
+        {c.urgente ? " (prazo em dobro: cotação urgente)" : ""}.
       </p>
       {item.justificativaMenosDeTres ? <p className={s.ajuda}>{item.justificativaMenosDeTres}</p> : null}
       {item.negociacao && item.negociacao.rodada === item.rodada ? (
@@ -215,7 +216,7 @@ function ForaDaComparacao({ i }: { i: ItemDoPedido }) {
 function vazioDoItem(i: ItemDoPedido): string {
   if (i.item.estado === "comparando") return "O assistente está montando o mapa.";
   if (i.item.estado === "cotando") return "O mapa aparece quando as propostas chegarem.";
-  if (i.item.estado === "aguardando_recompra") return "Compra repetida: sem mapa até você escolher no Resumo.";
+  if (i.item.estado === "aguardando_recompra") return "Compra repetida: sem mapa até você escolher repetir ou cotar de novo.";
   if (i.item.estado === "cancelado") return "Item cancelado sem mapa.";
   if (i.item.estado === "sem_proposta") return "Nenhuma proposta chegou para montar o mapa.";
   return "Ainda não há mapa para este item.";
@@ -234,7 +235,7 @@ export function AbaComparacao({ d }: { d: DadosPedido }) {
             <SecaoItem i={i}>
               {c ? (
                 <div className={s.divisao}>
-                  <Bloco titulo={`Mapa de cotação${i.mapa!.rodada > 1 ? `, rodada ${i.mapa!.rodada}` : ""}: ${c.validas.length} ${c.validas.length === 1 ? "proposta válida" : "propostas válidas"}`}>
+                  <Bloco titulo={`Mapa de cotações${i.mapa!.rodada > 1 ? `, rodada ${i.mapa!.rodada}` : ""}: ${c.validas.length} ${c.validas.length === 1 ? "proposta válida" : "propostas válidas"}`}>
                     {c.alertasGerais.length ? <InlineNotification kind="warning" lowContrast hideCloseButton title="Atenção:" subtitle={c.alertasGerais.join("; ")} statusIconDescription="Aviso" /> : null}
                     {c.validas.length ? <Mapa i={i} /> : <EstadoVazio compacto titulo="Nenhuma proposta válida neste mapa." />}
                   </Bloco>
@@ -248,6 +249,8 @@ export function AbaComparacao({ d }: { d: DadosPedido }) {
                     <ForaDaComparacao i={i} />
                   </div>
                 </div>
+              ) : i.recompra ? (
+                <Recompra i={i} />
               ) : (
                 <EstadoVazio compacto titulo={vazioDoItem(i)} />
               )}

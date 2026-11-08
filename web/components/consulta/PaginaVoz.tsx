@@ -22,18 +22,18 @@ type Props = {
 };
 
 export function PaginaVoz({ pedidoId, itemId, fornecedor, simulado, pedidoTexto, ligacao }: Props) {
-  const voltar = `/pedidos/${pedidoId}#item-${itemId}`;
+  const voltar = `/pedidos/${pedidoId}`;
   return (
     <Pagina>
       <CabecalhoPagina
-        trilha={[{ rotulo: `Pedido ${pedidoId}`, href: voltar }, { rotulo: "Ligação por voz" }]}
+        trilha={[{ rotulo: `Cotação ${pedidoId}`, href: voltar }, { rotulo: "Ligação por voz" }]}
         titulo={
           <span className={s.titulo}>
             Ligar para {fornecedor}
             {simulado ? <SeloSimulado /> : null}
           </span>
         }
-        contexto={`Cotação de ${pedidoTexto}.`}
+        contexto={`Solicitação de proposta: ${pedidoTexto}.`}
       />
       <CorpoPagina>
         <GradePagina>
@@ -45,10 +45,10 @@ export function PaginaVoz({ pedidoId, itemId, fornecedor, simulado, pedidoTexto,
               {ligacao ?? (
                 <EstadoVazio
                   compacto
-                  titulo="Esta cotação não está mais aberta: não dá para ligar agora."
+                  titulo="Esta solicitação de proposta não está mais aberta: não dá para ligar agora."
                   proximoPasso={
                     <CarbonLink as={NextLink} href={voltar} inline>
-                      Voltar ao pedido {pedidoId}
+                      Voltar à cotação {pedidoId}
                     </CarbonLink>
                   }
                 />

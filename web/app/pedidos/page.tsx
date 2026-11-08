@@ -1,19 +1,15 @@
-import { AtualizaSozinho } from "@/components/AtualizaSozinho";
-import { ListaPedidos, type Filtro } from "@/components/operacao/ListaPedidos";
-import { pedidosOperacao } from "@/lib/dados-operacao";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
+type Busca = { vista?: string; filtro?: string; canceladas?: string };
 
-const FILTROS_VALIDOS: Filtro[] = ["todos", "voce", "andando", "concluidos", "cancelados"];
-
-export default async function Pedidos({ searchParams }: { searchParams: Promise<{ filtro?: string }> }) {
-  const pedido = (await searchParams).filtro as Filtro | undefined;
-  const filtroInicial = pedido && FILTROS_VALIDOS.includes(pedido) ? pedido : "todos";
-  const linhas = await pedidosOperacao();
-  return (
-    <>
-      <AtualizaSozinho segundos={3} />
-      <ListaPedidos linhas={linhas} filtroInicial={filtroInicial} />
-    </>
-  );
+// O quadro e a lista das cotações agora são vistas do Início. Leva junto o que a vista guardava no endereço.
+export default async function PaginaPedidos({ searchParams }: { searchParams: Promise<Busca> }) {
+  const busca = await searchParams;
+  const p = new URLSearchParams();
+  // O quadro é o padrão do Início: só a lista precisa ir no endereço.
+  if (busca.vista === "lista") p.set("vista", "lista");
+  if (busca.filtro) p.set("filtro", busca.filtro);
+  if (busca.canceladas === "1") p.set("canceladas", "1");
+  const q = p.toString();
+  redirect(q ? `/?${q}` : "/");
 }

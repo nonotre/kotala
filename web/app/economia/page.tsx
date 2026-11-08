@@ -48,7 +48,7 @@ export default async function Economia() {
           <p>Custo total escolhido contra a proposta válida mais cara do mesmo mapa. Mostra a faixa de preço que a cotação revelou.</p>
         </Tile>
         <Tile className={estilos.numero}>
-          <span>Tempo do pedido à confirmação</span>
+          <span>Tempo da cotação à confirmação</span>
           <strong>{medianaMin !== null ? `${medianaMin} min` : "—"}</strong>
           <p>Mediana. Na demo os fornecedores têm 2 minutos para responder; a estimativa da área para o processo manual é de cerca de 7 dias.</p>
         </Tile>
@@ -57,7 +57,7 @@ export default async function Economia() {
       <h2 className={estilos.secao}>Trabalho feito pelo assistente</h2>
       <div className={estilos.numeros}>
         <Tile className={estilos.numero}>
-          <span>Pedidos de cotação enviados</span>
+          <span>Solicitações de proposta enviadas</span>
           <strong>{e.cotacoes}</strong>
         </Tile>
         <Tile className={estilos.numero}>
@@ -80,7 +80,7 @@ export default async function Economia() {
           <Table aria-label="Compras confirmadas">
             <TableHead>
               <TableRow>
-                <TableHeader>Pedido</TableHeader>
+                <TableHeader>Cotação</TableHeader>
                 <TableHeader>Item</TableHeader>
                 <TableHeader>Fornecedor</TableHeader>
                 <TableHeader>Custo total</TableHeader>
@@ -94,7 +94,7 @@ export default async function Economia() {
               {e.linhas.map((l) => (
                 <TableRow key={l.itemId}>
                   <TableCell>
-                    <Link href={`/pedidos/${l.pedidoId}#item-${l.itemId}`}>Pedido {l.pedidoId}</Link>
+                    <Link href={`/pedidos/${l.pedidoId}`}>Cotação {l.pedidoId}</Link>
                   </TableCell>
                   <TableCell>
                     {quantidade(l.quantidade, l.unidade)} de {l.descricao}

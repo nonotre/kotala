@@ -1,16 +1,17 @@
 "use client";
 // Quadro de compras: cada item do pedido é um card, nas 4 colunas fixas da esteira.
+// As raias servem ao Início (ao lado do chat) e à tela Pedidos; o cabeçalho é de quem as usa.
 
-import { Accordion, AccordionItem, Column, Link as CarbonLink, Tile } from "@carbon/react";
+import { Accordion, AccordionItem, DefinitionTooltip, Link as CarbonLink, Tile } from "@carbon/react";
 import NextLink from "next/link";
 import { BarraProgresso } from "@/components/BarraProgresso";
 import { EstadoVazio } from "@/components/EstadoVazio";
-import { CabecalhoPagina, CorpoPagina, GradePagina, Pagina } from "@/components/Pagina";
 import { SeloIA } from "@/components/SeloIA";
+import { ROTULO_COLUNA } from "@/lib/colunas";
 import type { Coluna, Etiqueta } from "@/lib/dados";
 import type { AvisoSerial, ExtraDoItem } from "@/lib/dados-operacao";
 import { brl, quantidade } from "@/lib/formato";
-import { NomeFornecedor, Situacao, UrgenciaDasEtiquetas, VistaPedidos } from "./Situacao";
+import { NomeFornecedor, Situacao, UrgenciaDasEtiquetas } from "./Situacao";
 import o from "./operacao.module.scss";
 import s from "./quadro.module.scss";
 
@@ -29,9 +30,9 @@ export type CartaoSerial = {
 const COLUNAS: Coluna[] = ["Solicitado", "Cotando", "Comparando", "Decidido"];
 
 const AJUDA: Record<Coluna, string> = {
-  Solicitado: "Pedidos que chegaram e esperam confirmação ou a vez na fila.",
+  Solicitado: "Cotações que chegaram e esperam confirmação ou a vez na fila.",
   Cotando: "Buscando fornecedores e esperando as propostas.",
-  Comparando: "Mapa de cotação montado ou esperando sua decisão.",
+  Comparando: "Mapa de cotações montado ou esperando sua decisão.",
   Decidido: "Aprovados, enviados, confirmados ou sem proposta.",
 };
 
@@ -53,7 +54,7 @@ function Cartao({ c, extra }: { c: CartaoSerial; extra: ExtraDoItem | undefined 
         recomendada ? (
           <div className={s.seloCartao}>
             <SeloIA tamanho="mini" titulo="Por que esta proposta">
-              Maior nota entre as {recomendada.validas} propostas válidas do mapa de cotação. Quem decide é você.
+              Maior nota entre as {recomendada.validas} propostas válidas do mapa de cotações. Quem decide é você.
             </SeloIA>
           </div>
         ) : undefined
@@ -62,8 +63,8 @@ function Cartao({ c, extra }: { c: CartaoSerial; extra: ExtraDoItem | undefined 
       <div className={s.cartao}>
         <div className={s.cartaoTopo}>
           {/* O link cobre o card inteiro: abrir o pedido é a ação do card. */}
-          <NextLink href={`/pedidos/${c.pedidoId}#item-${c.itemId}`} className={s.numero}>
-            Pedido {c.pedidoId}
+          <NextLink href={`/pedidos/${c.pedidoId}`} className={s.numero}>
+            Cotação {c.pedidoId}
           </NextLink>
           <h3 className={s.cartaoTitulo}>
             {quantidade(c.quantidade, c.unidade)} de {c.descricao}
@@ -104,12 +105,14 @@ function Raia({ coluna, lista, daVez, extras }: { coluna: Coluna; lista: CartaoS
     <section className={classes} aria-labelledby={idTitulo}>
       <div className={s.raiaCabeca}>
         <h2 className={s.raiaTitulo} id={idTitulo}>
-          {coluna}
+          {/* A explicação da coluna fica no nome: abre com o foco, o toque ou o mouse. */}
+          <DefinitionTooltip definition={AJUDA[coluna]} align="bottom-start" openOnHover triggerClassName={s.raiaNome}>
+            {ROTULO_COLUNA[coluna]}
+          </DefinitionTooltip>
           <span className={s.raiaConta} aria-label={lista.length === 1 ? "1 item" : `${lista.length} itens`}>
             {lista.length}
           </span>
         </h2>
-        <p className={s.raiaAjuda}>{AJUDA[coluna]}</p>
       </div>
       {ordem.length ? (
         <ul className={s.cartoes}>
@@ -128,7 +131,8 @@ function Raia({ coluna, lista, daVez, extras }: { coluna: Coluna; lista: CartaoS
   );
 }
 
-function PrecisaDeVoce({ avisos }: { avisos: AvisoSerial[] }) {
+/** "Precisa de você": o que pede ação do comprador, recolhido acima do quadro. */
+export function PrecisaDeVoce({ avisos }: { avisos: AvisoSerial[] }) {
   const n = avisos.length;
   if (n === 0) return <p className={s.precisaNada}>Nada precisa de você agora.</p>;
   return (
@@ -138,7 +142,7 @@ function PrecisaDeVoce({ avisos }: { avisos: AvisoSerial[] }) {
           {avisos.map((a) => (
             <li key={a.chave}>
               <p className={o.rotulo}>
-                Pedido {a.pedidoId}
+                Cotação {a.pedidoId}
                 {a.item ? ` · ${a.item}` : null}
               </p>
               <p className={o.frase}>{a.titulo}</p>
@@ -156,46 +160,33 @@ function PrecisaDeVoce({ avisos }: { avisos: AvisoSerial[] }) {
 type Props = {
   colunas: Record<Coluna, CartaoSerial[]>;
   extras: Record<number, ExtraDoItem>;
-  /** Só o que pede ação do comprador. */
-  avisos: AvisoSerial[];
-  mostrarCanceladas: boolean;
 };
 
-export function Quadro({ colunas, extras, avisos, mostrarCanceladas }: Props) {
+/** As 4 raias do quadro, sem cabeçalho: quem usa põe o título e os controles. */
+export function QuadroRaias({ colunas, extras }: Props) {
   const total = COLUNAS.reduce((t, c) => t + colunas[c].length, 0);
-  // A raia da vez é a do primeiro card que espera o comprador; no celular, ela vem primeiro.
+  if (total === 0) {
+    return <EstadoVazio compacto titulo="Nenhuma cotação ainda." proximoPasso="Peça uma cotação pelo Telegram ou em Conversas." />;
+  }
+  // A raia da vez é a do primeiro card que espera o comprador; sem colunas lado a lado, ela vem primeiro.
   const colunaDaVez = COLUNAS.find((c) => colunas[c].some(esperaVoce)) ?? null;
-  const contexto = total
-    ? `${total} ${total === 1 ? "item" : "itens"}. O card anda sozinho a cada etapa.`
-    : "Nenhum pedido ainda. Mande um pedido pelo Telegram ou pela aba Conversar.";
   return (
-    <Pagina>
-      <CabecalhoPagina
-        titulo="Quadro de compras"
-        contexto={contexto}
-        lado={
-          <div className={o.ladoCabecalho}>
-            <CarbonLink as={NextLink} href={mostrarCanceladas ? "/quadro" : "/quadro?canceladas=1"}>
-              {mostrarCanceladas ? "Ocultar canceladas" : "Mostrar canceladas"}
-            </CarbonLink>
-            <VistaPedidos atual="quadro" />
-          </div>
-        }
-      />
-      <CorpoPagina>
-        <GradePagina>
-          <Column sm={4} md={8} lg={16}>
-            <PrecisaDeVoce avisos={avisos} />
-          </Column>
-          <Column sm={4} md={8} lg={16}>
-            <div className={s.raias}>
-              {COLUNAS.map((col) => (
-                <Raia key={col} coluna={col} lista={colunas[col]} daVez={col === colunaDaVez} extras={extras} />
-              ))}
-            </div>
-          </Column>
-        </GradePagina>
-      </CorpoPagina>
-    </Pagina>
+    // Região que rola na horizontal quando as 4 raias não cabem: precisa de foco para quem usa teclado.
+    <div className={s.raiasRolagem} role="region" aria-label="Quadro de compras" tabIndex={0}>
+      <div className={s.raias}>
+        {COLUNAS.map((col) => (
+          <Raia key={col} coluna={col} lista={colunas[col]} daVez={col === colunaDaVez} extras={extras} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Link "Mostrar canceladas" / "Ocultar canceladas": quem usa dá os dois endereços. */
+export function AlternarCanceladas({ mostrando, hrefMostrar, hrefOcultar }: { mostrando: boolean; hrefMostrar: string; hrefOcultar: string }) {
+  return (
+    <CarbonLink as={NextLink} href={mostrando ? hrefOcultar : hrefMostrar}>
+      {mostrando ? "Ocultar canceladas" : "Mostrar canceladas"}
+    </CarbonLink>
   );
 }
