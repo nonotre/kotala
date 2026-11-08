@@ -16,6 +16,7 @@ import type { DadosPedido, ItemDoPedido } from "@/lib/dados-pedido";
 import { brl, nota } from "@/lib/formato";
 import { BaixarMapaPdf } from "./BaixarMapaPdf";
 import { BotaoLink } from "./BotaoLink";
+import { ContratoDoItem } from "./ContratoDoItem";
 import { chatDoFornecedor, Fornecedor, IndiceItens, SecaoItem, textoDias } from "./Item";
 import { Recompra } from "./Recompra";
 import { Status } from "./Status";
@@ -268,7 +269,7 @@ function SobreOMapa({ i }: { i: ItemDoPedido }) {
 function vazioDoItem(i: ItemDoPedido): string {
   if (i.item.estado === "comparando") return "O assistente está montando o mapa.";
   if (i.item.estado === "cotando") return "O mapa aparece quando as propostas chegarem.";
-  if (i.item.estado === "aguardando_recompra") return "Compra repetida: sem mapa até você escolher repetir ou cotar de novo.";
+  if (i.item.estado === "aguardando_recompra") return i.contrato ? "Item com contrato: sem mapa até você escolher pedir direto ou cotar." : "Compra repetida: sem mapa até você escolher repetir ou cotar de novo.";
   if (i.item.estado === "cancelado") return "Item cancelado sem mapa.";
   if (i.item.estado === "sem_proposta") return "Nenhuma proposta chegou para montar o mapa.";
   return "Ainda não há mapa para este item.";
@@ -308,6 +309,8 @@ export function AbaComparacao({ d }: { d: DadosPedido }) {
                     <ForaDaComparacao d={d} i={i} />
                   </div>
                 </div>
+              ) : i.contrato ? (
+                <ContratoDoItem i={i} />
               ) : i.recompra ? (
                 <Recompra i={i} />
               ) : (

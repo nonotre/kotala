@@ -102,7 +102,7 @@ function vazioDoItem(d: DadosPedido, i: ItemDoPedido): string {
   if (["interpretando", "aguardando_confirmacao"].includes(d.pedido.estado)) return "A busca começa depois que você confirmar a cotação.";
   if (i.item.estado === "na_fila") return "A busca começa quando este item sair da fila.";
   if (i.item.estado === "buscando") return "O assistente está procurando fornecedores.";
-  if (i.item.estado === "aguardando_recompra") return "Compra repetida: sem busca nova até você escolher na etapa Comparação.";
+  if (i.item.estado === "aguardando_recompra") return `${i.contrato ? "Item com contrato" : "Compra repetida"}: sem busca nova até você escolher na etapa Comparação.`;
   if (i.item.estado === "cancelado") return "Item cancelado.";
   return "A busca não achou fornecedor para este item.";
 }
