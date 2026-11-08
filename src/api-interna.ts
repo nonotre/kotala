@@ -10,7 +10,8 @@ import { contato, itemPedido, pedido } from "./nucleo/db/schema.ts";
 import { receber } from "./nucleo/mensagens/index.ts";
 import { salvarArquivo } from "./nucleo/arquivos.ts";
 import type { Anexo } from "./nucleo/db/schema.ts";
-import { registrarCotacaoPorVoz, type ArgsRegistrar } from "./agentes/voz/index.ts";
+import { registrarCotacaoPorVoz, registrarFimDaLigacao } from "./agentes/voz/index.ts";
+import { TEXTO_FIM, type MotivoFim } from "./agentes/voz/sessao.ts";
 import { alterarFornecedor, type AcaoFornecedor } from "./agentes/fornecedores/index.ts";
 
 /** Teto do corpo: 20 kB para ações; o chat com anexos aceita até 3 arquivos de 10 MB (em base64). */
@@ -111,8 +112,16 @@ export function iniciarApiInterna(porta: number, token: string, host = "127.0.0.
       if (req.url === "/voz/cotacao") {
         const cotacaoId = String(b.cotacaoId ?? "");
         if (!/^[0-9a-f-]{36}$/.test(cotacaoId)) return responder(400, { erro: "cotação inválida" });
-        const r = await registrarCotacaoPorVoz(cotacaoId, (b.args ?? {}) as ArgsRegistrar, String(b.transcricao ?? ""));
+        const r = await registrarCotacaoPorVoz(cotacaoId, b.args ?? {}, String(b.transcricao ?? ""));
         return responder(200, r);
+      }
+      // X5: fim da ligação (desligou, silêncio, tempo, queda): a transcrição vai para o rastro.
+      if (req.url === "/voz/fim") {
+        const cotacaoId = String(b.cotacaoId ?? "");
+        const motivo = String(b.motivo ?? "") as MotivoFim;
+        if (!/^[0-9a-f-]{36}$/.test(cotacaoId) || !(motivo in TEXTO_FIM)) return responder(400, { erro: "pedido inválido" });
+        const duracao = Number(b.duracaoSeg);
+        return responder(200, await registrarFimDaLigacao(cotacaoId, { motivo, transcricao: String(b.transcricao ?? ""), duracaoSeg: Number.isFinite(duracao) ? Math.round(duracao) : null }));
       }
       return responder(404, { erro: "rota desconhecida" });
     } catch (erro) {

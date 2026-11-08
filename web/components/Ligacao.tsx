@@ -2,9 +2,22 @@
 // X5: ligação por voz no navegador com o Gemini Live. A chave é temporária
 // (gerada no servidor); a ferramenta registrar_cotacao roda no servidor.
 // Microfone em PCM 16 kHz; a voz do agente chega em PCM 24 kHz.
-import { Button, InlineNotification, Tag, Tile } from "@carbon/react";
+// Full duplex: com fone, o microfone segue aberto enquanto o agente fala e o fornecedor
+// pode interromper (o Live manda `interrupted` e a fala do agente para na hora). Silêncio
+// longo, tempo máximo e queda de conexão encerram a ligação e a transcrição vai para o rastro.
+import { Button, Checkbox, InlineNotification, Tag, Tile } from "@carbon/react";
 import { GoogleGenAI, Modality, type LiveServerMessage, type Session } from "@google/genai";
 import { useEffect, useRef, useState } from "react";
+import {
+  acaoDaSessao,
+  acrescentarFala,
+  AVISO_ATENDIDA,
+  AVISO_SILENCIO,
+  AVISO_TEMPO,
+  respostaDaFerramenta,
+  TEXTO_FIM,
+  type MotivoFim,
+} from "../../src/agentes/voz/sessao.ts";
 import estilos from "./ligacao.module.scss";
 
 type Fala = { quem: "agente" | "fornecedor" | "sistema"; texto: string };
@@ -36,20 +49,31 @@ function base64(buf: ArrayBuffer) {
   return btoa(s);
 }
 
+type Relogio = { inicio: number; ultimaAtividade: number; avisouSilencio: boolean; avisouTempo: boolean; timer?: ReturnType<typeof setInterval> };
+
 export function Ligacao({ cotacaoId, modelo, instrucoes, ferramenta }: { cotacaoId: string; modelo: string; instrucoes: string; ferramenta: object }) {
   const [estado, setEstado] = useState<"parada" | "conectando" | "ligada" | "encerrada">("parada");
   const [falas, setFalas] = useState<Fala[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [registro, setRegistro] = useState<{ ok: boolean; resposta: string } | null>(null);
+  // Sem fone, o microfone fica mudo enquanto o agente fala (senão ele ouve a própria voz e se interrompe).
+  const [comFone, setComFone] = useState(true);
+  const comFoneRef = useRef(true);
   const sessao = useRef<Session | null>(null);
   const audio = useRef<{ mic?: MediaStream; micCtx?: AudioContext; playCtx?: AudioContext; fila: AudioBufferSourceNode[]; cabeca: number }>({ fila: [], cabeca: 0 });
   const transcricao = useRef("");
+  const relogio = useRef<Relogio>({ inicio: 0, ultimaAtividade: 0, avisouSilencio: false, avisouTempo: false });
+  /** A ligação em curso já terminou (o fim vai uma vez só ao servidor). */
+  const terminada = useRef(true);
   const fim = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fim.current?.scrollIntoView({ block: "end" });
   }, [falas.length]);
-  useEffect(() => () => encerrar(), []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => finalizar("saiu"), []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    comFoneRef.current = comFone;
+  }, [comFone]);
 
   const acrescentar = (quem: Fala["quem"], texto: string) =>
     setFalas((f) => {
@@ -57,6 +81,10 @@ export function Ligacao({ cotacaoId, modelo, instrucoes, ferramenta }: { cotacao
       if (ultima && ultima.quem === quem && quem !== "sistema") return [...f.slice(0, -1), { quem, texto: ultima.texto + texto }];
       return [...f, { quem, texto }];
     });
+
+  const atividade = () => {
+    relogio.current.ultimaAtividade = Date.now();
+  };
 
   function tocar(b64: string) {
     const a = audio.current;
@@ -74,7 +102,10 @@ export function Ligacao({ cotacaoId, modelo, instrucoes, ferramenta }: { cotacao
     fonte.start(a.cabeca);
     a.cabeca += buf.duration;
     a.fila.push(fonte);
-    fonte.onended = () => (a.fila = a.fila.filter((x) => x !== fonte));
+    fonte.onended = () => {
+      a.fila = a.fila.filter((x) => x !== fonte);
+      atividade(); // o silêncio conta a partir do fim da fala do agente
+    };
   }
 
   function silenciar() {
@@ -90,29 +121,78 @@ export function Ligacao({ cotacaoId, modelo, instrucoes, ferramenta }: { cotacao
     a.cabeca = 0;
   }
 
+  function avisarAgente(texto: string) {
+    sessao.current?.sendClientContent({ turns: [{ role: "user", parts: [{ text: texto }] }], turnComplete: true });
+  }
+
+  async function registrar(fc: { id?: string; name?: string; args?: unknown }) {
+    acrescentar("sistema", "Registrando a proposta…");
+    let r: { ok: boolean; resposta: string };
+    try {
+      const resp = await fetch("/api/voz/cotacao", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ cotacaoId, args: fc.args ?? {}, transcricao: transcricao.current }),
+      });
+      r = respostaDaFerramenta(resp.ok ? await resp.json() : null);
+    } catch {
+      r = respostaDaFerramenta(null);
+    }
+    if (r.ok) setRegistro(r);
+    acrescentar("sistema", r.ok ? "Proposta registrada no mapa de cotação." : r.resposta);
+    atividade();
+    // A ferramenta sempre responde, mesmo com falha: o agente não fica esperando.
+    sessao.current?.sendToolResponse({ functionResponses: [{ id: fc.id, name: fc.name, response: r }] });
+  }
+
   async function aoMensagem(msg: LiveServerMessage) {
     const sc = msg.serverContent;
-    if (sc?.interrupted) silenciar();
-    for (const p of sc?.modelTurn?.parts ?? []) if (p.inlineData?.data) tocar(p.inlineData.data);
-    if (sc?.inputTranscription?.text) {
-      transcricao.current += `\n[fornecedor] ${sc.inputTranscription.text}`;
-      acrescentar("fornecedor", sc.inputTranscription.text);
+    if (sc?.interrupted) {
+      silenciar();
+      atividade();
     }
-    if (sc?.outputTranscription?.text) {
-      transcricao.current += `\n[agente] ${sc.outputTranscription.text}`;
-      acrescentar("agente", sc.outputTranscription.text);
-    }
-    if (msg.toolCall) {
-      for (const fc of msg.toolCall.functionCalls ?? []) {
-        acrescentar("sistema", "Registrando a proposta…");
-        const r = (await (
-          await fetch("/api/voz/cotacao", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cotacaoId, args: fc.args, transcricao: transcricao.current }) })
-        ).json()) as { ok: boolean; resposta: string };
-        setRegistro(r);
-        acrescentar("sistema", r.ok ? "Proposta registrada no mapa de cotação." : r.resposta);
-        sessao.current?.sendToolResponse({ functionResponses: [{ id: fc.id, name: fc.name, response: r }] });
+    for (const p of sc?.modelTurn?.parts ?? []) {
+      if (p.inlineData?.data) {
+        tocar(p.inlineData.data);
+        atividade();
       }
     }
+    if (sc?.inputTranscription?.text) {
+      transcricao.current = acrescentarFala(transcricao.current, "fornecedor", sc.inputTranscription.text);
+      acrescentar("fornecedor", sc.inputTranscription.text);
+      atividade();
+      relogio.current.avisouSilencio = false;
+    }
+    if (sc?.outputTranscription?.text) {
+      transcricao.current = acrescentarFala(transcricao.current, "agente", sc.outputTranscription.text);
+      acrescentar("agente", sc.outputTranscription.text);
+      atividade();
+    }
+    if (msg.goAway) acrescentar("sistema", "O servidor de voz vai encerrar a conexão em instantes.");
+    for (const fc of msg.toolCall?.functionCalls ?? []) await registrar(fc);
+  }
+
+  /** Relógio da ligação: silêncio longo e tempo máximo (regras em src/agentes/voz/sessao.ts). */
+  function conferirRelogio() {
+    const r = relogio.current;
+    const acao = acaoDaSessao({
+      agora: Date.now(),
+      inicio: r.inicio,
+      ultimaAtividade: r.ultimaAtividade,
+      agenteFalando: audio.current.fila.length > 0,
+      avisouSilencio: r.avisouSilencio,
+      avisouTempo: r.avisouTempo,
+    });
+    if (acao === "avisar_silencio") {
+      r.avisouSilencio = true;
+      acrescentar("sistema", "Silêncio na linha: o assistente vai perguntar se o fornecedor ainda está aí.");
+      avisarAgente(AVISO_SILENCIO);
+    } else if (acao === "avisar_tempo") {
+      r.avisouTempo = true;
+      acrescentar("sistema", "Falta um minuto para o tempo máximo da ligação.");
+      avisarAgente(AVISO_TEMPO);
+    } else if (acao === "encerrar_silencio") finalizar("silencio");
+    else if (acao === "encerrar_tempo") finalizar("tempo");
   }
 
   async function ligar() {
@@ -120,6 +200,7 @@ export function Ligacao({ cotacaoId, modelo, instrucoes, ferramenta }: { cotacao
     setRegistro(null);
     setFalas([]);
     transcricao.current = "";
+    terminada.current = false;
     setEstado("conectando");
     try {
       const { token, apiVersion, erro: e } = (await (await fetch("/api/voz/token", { method: "POST" })).json()) as { token?: string; apiVersion?: string; erro?: string };
@@ -139,7 +220,8 @@ export function Ligacao({ cotacaoId, modelo, instrucoes, ferramenta }: { cotacao
         },
         callbacks: {
           onopen: () => setEstado("ligada"),
-          onclose: () => setEstado((x) => (x === "parada" ? x : "encerrada")),
+          // Fechou sem ninguém encerrar: a conexão caiu no meio.
+          onclose: () => finalizar("queda"),
           onerror: (ev) => setErro(String((ev as ErrorEvent).message ?? "erro na ligação")),
           onmessage: (m) => void aoMensagem(m),
         },
@@ -151,20 +233,29 @@ export function Ligacao({ cotacaoId, modelo, instrucoes, ferramenta }: { cotacao
       const no = new AudioWorkletNode(a.micCtx, "captura");
       a.micCtx.createMediaStreamSource(a.mic).connect(no);
       no.port.onmessage = ({ data }) => {
-        // Ignora o microfone enquanto o agente fala (eco).
-        if (!audio.current.fila.length) sessao.current?.sendRealtimeInput({ audio: { data: base64(data as ArrayBuffer), mimeType: "audio/pcm;rate=16000" } });
+        if (!comFoneRef.current && audio.current.fila.length) return; // sem fone: ignora o eco da voz do agente
+        sessao.current?.sendRealtimeInput({ audio: { data: base64(data as ArrayBuffer), mimeType: "audio/pcm;rate=16000" } });
       };
+      const agora = Date.now();
+      relogio.current = { inicio: agora, ultimaAtividade: agora, avisouSilencio: false, avisouTempo: false, timer: setInterval(conferirRelogio, 1000) };
       // O agente abre a conversa.
-      s.sendClientContent({ turns: [{ role: "user", parts: [{ text: "(a ligação foi atendida)" }] }], turnComplete: true });
+      avisarAgente(AVISO_ATENDIDA);
     } catch (e) {
       setErro(e instanceof Error ? e.message : String(e));
-      encerrar();
+      finalizar("erro");
     }
   }
 
-  function encerrar() {
-    sessao.current?.close();
+  /** Encerra a ligação uma vez só, por qualquer motivo, e manda a transcrição para o rastro. */
+  function finalizar(motivo: MotivoFim) {
+    if (terminada.current) return;
+    terminada.current = true;
+    const r = relogio.current;
+    if (r.timer) clearInterval(r.timer);
+    r.timer = undefined;
+    const s = sessao.current;
     sessao.current = null;
+    s?.close();
     silenciar();
     const a = audio.current;
     a.mic?.getTracks().forEach((t) => t.stop());
@@ -173,14 +264,23 @@ export function Ligacao({ cotacaoId, modelo, instrucoes, ferramenta }: { cotacao
     a.mic = undefined;
     a.micCtx = undefined;
     a.playCtx = undefined;
-    setEstado((x) => (x === "parada" ? x : "encerrada"));
+    // keepalive: o fim chega ao servidor mesmo saindo da página.
+    void fetch("/api/voz/fim", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      keepalive: true,
+      body: JSON.stringify({ cotacaoId, motivo, transcricao: transcricao.current, duracaoSeg: r.inicio ? (Date.now() - r.inicio) / 1000 : null }),
+    }).catch(() => undefined);
+    if (motivo === "saiu") return;
+    acrescentar("sistema", TEXTO_FIM[motivo]);
+    setEstado("encerrada");
   }
 
   return (
     <Tile className={estilos.ligacao}>
       <div className={estilos.topo}>
         {estado === "ligada" || estado === "conectando" ? (
-          <Button kind="danger" onClick={encerrar}>
+          <Button kind="danger" onClick={() => finalizar("desligou")}>
             Encerrar ligação
           </Button>
         ) : (
@@ -192,6 +292,12 @@ export function Ligacao({ cotacaoId, modelo, instrucoes, ferramenta }: { cotacao
           {{ parada: "Pronta para ligar", conectando: "Conectando…", ligada: "Em ligação: pode falar", encerrada: "Ligação encerrada" }[estado]}
         </Tag>
         {registro?.ok ? <Tag type="purple">Proposta registrada</Tag> : null}
+        <Checkbox
+          id={`fone-${cotacaoId}`}
+          labelText="Estou de fone (pode interromper o assistente)"
+          checked={comFone}
+          onChange={(_, { checked }) => setComFone(checked)}
+        />
       </div>
       {erro ? <InlineNotification kind="error" lowContrast title="A ligação falhou." subtitle={erro} onCloseButtonClick={() => setErro(null)} /> : null}
       <div className={estilos.conversa} aria-live="polite">
