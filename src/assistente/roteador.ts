@@ -13,6 +13,7 @@ import { insistenciaDo } from "../agentes/guardrail/rastro.ts";
 import { escolhaEscrita, itemComPerguntaDePrazo } from "../agentes/cotador/prazo.ts";
 import { aoMensagemDoComprador, definirRespondedorDeConsulta, garantirAvisoPrivacidade, type RespostaConsulta } from "../fluxo/comprador.ts";
 import { aoMensagemDoFornecedor } from "../fluxo/fornecedor.ts";
+import { esperandoRecadoDoComprador } from "../fluxo/transbordo.ts";
 import { db } from "../nucleo/db/cliente.ts";
 import { mensagem, pedido } from "../nucleo/db/schema.ts";
 import { aoReceber, enviar, type MensagemRecebida } from "../nucleo/mensagens/index.ts";
@@ -37,6 +38,8 @@ async function vaiDiretoAoFluxo({ contato, entrada }: MensagemRecebida): Promise
   if (entrada.botao || entrada.anexos?.length || !texto || texto.startsWith("/")) return true;
   // R14b: resposta escrita à pergunta do prazo ("pode estender"): o fluxo trata como o botão.
   if (escolhaEscrita(texto) && (await itemComPerguntaDePrazo(contato.id)) !== null) return true;
+  // Transbordo: o comprador está escrevendo o recado ao fornecedor; vai como ele escreveu.
+  if (await esperandoRecadoDoComprador(contato.id)) return true;
   if (!CONFIRMACAO.test(texto)) return false;
   const [p] = await db
     .select({ id: pedido.id })
@@ -75,7 +78,7 @@ async function eDoGuardrail(contatoId: string, t: ReturnType<typeof triagem>): P
 }
 
 /** Motivos do Assistente que garantem que a mensagem não é resposta à dúvida de um fornecedor. */
-const NAO_RESPONDE_FORNECEDOR = new Set(["pedido_novo", "correcao", "confirmacao", "fora_do_escopo"]);
+const NAO_RESPONDE_FORNECEDOR = new Set(["pedido_novo", "correcao", "confirmacao", "fora_do_escopo", "transbordo"]);
 
 async function atender(m: MensagemRecebida) {
   if (await vaiDiretoAoFluxo(m)) return aoMensagemDoComprador(m);
@@ -95,7 +98,7 @@ async function atender(m: MensagemRecebida) {
     return aoMensagemDoComprador(m);
   }
   // O fluxo recebe a mensagem original: ele mesmo mascara e avisa do dado pessoal.
-  if (r.tipo === "encaminhar") return aoMensagemDoComprador(m, { naoEhRespostaFornecedor: NAO_RESPONDE_FORNECEDOR.has(r.motivo) });
+  if (r.tipo === "encaminhar") return aoMensagemDoComprador(m, { naoEhRespostaFornecedor: NAO_RESPONDE_FORNECEDOR.has(r.motivo), transbordo: r.motivo === "transbordo" });
   await garantirAvisoPrivacidade(m.contato);
   if (t.dadoPessoal.length) await enviar(m.contato.id, TEXTO_DADO_PESSOAL);
   const saida = m.entrada.canal === "web" ? { texto: r.texto, botoes: r.botoes.length ? r.botoes : undefined } : paraCanalSemTelas(r.texto, r.botoes);

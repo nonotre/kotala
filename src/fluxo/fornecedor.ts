@@ -52,6 +52,7 @@ import {
 } from "../nucleo/mensagens/index.ts";
 import { registrar } from "../nucleo/registro.ts";
 import { aoRespostaDoVencedor, pedidoEnviadoPara } from "./decisao.ts";
+import { aoFornecedorPedirPessoa, aoMensagemDoFornecedorNoTransbordo } from "./transbordo.ts";
 import { cnpjValido, formatarCnpj, verificarFornecedor } from "../agentes/verificacao/index.ts";
 import { categoriasDoCadastro, detectarCategorias, exemplosDoNicho } from "../dominio/categorias.ts";
 import { palavrasEmComum } from "../agentes/interpretador/index.ts";
@@ -139,6 +140,10 @@ export async function aoMensagemDoFornecedor({ contato, mensagemId, entrada }: M
     const itemId = await pedidoEnviadoPara(contato.fornecedorId);
     if (itemId && (await aoRespostaDoVencedor(contato, itemId, true))) return;
   }
+
+  // Transbordo: recado ao comprador (depois de "me mande a mensagem") ou resposta a um recado dele.
+  // Com preço, repassa e segue também para a leitura da proposta.
+  if ((await aoMensagemDoFornecedorNoTransbordo(contato.fornecedorId, contato.id, texto)) === "tratada") return;
 
   const c = await cotacaoAbertaDo(contato.fornecedorId);
   if (!c) {
@@ -758,7 +763,9 @@ async function processarResposta(
         await registrar(db, { agente: "Negociador", acao: "O fornecedor vai responder o desconto depois.", motivo: entrada.texto.slice(0, 200), ...ctx, fornecedorIds: [c.fornecedorId] });
         return;
       }
-      await situacaoDelicada(e.classificacao, c.fornecedorId, contatoId, entrada.texto, l, ctx);
+      // Transbordo inteligente: tenta resolver antes; se o fornecedor insistir, pede a mensagem e repassa.
+      if (e.classificacao === "responsavel") await aoFornecedorPedirPessoa(c, contatoId, entrada.texto, l);
+      else await situacaoDelicada(e.classificacao, c.fornecedorId, contatoId, entrada.texto, l, ctx);
       return;
     }
     default: {
@@ -1007,7 +1014,7 @@ export function completarComAnterior(
  * A cotação continua aberta.
  */
 async function situacaoDelicada(
-  tipo: "responsavel" | "suspeita" | "ofensa" | "fora_do_assunto",
+  tipo: "suspeita" | "ofensa" | "fora_do_assunto",
   fornecedorId: string,
   contatoId: string,
   texto: string,
@@ -1018,13 +1025,11 @@ async function situacaoDelicada(
   const nome = f?.nome ?? "O fornecedor";
   const item = `${l.item.descricao} (cotação ${l.item.id})`;
   const respostas = {
-    responsavel: `Sou o assistente automatizado de compras da ${EMPRESA.nome}. Vou avisar o comprador responsável para falar com você. Se puder, mande a proposta por aqui enquanto isso.`,
     suspeita: `Entendo a cautela. Sou um assistente automatizado da ${EMPRESA.nome} (CNPJ ${EMPRESA.cnpj}) e estou pedindo uma cotação sem compromisso de ${item}. Não peço pagamento nem dados bancários. Se preferir, o comprador fala com você. Para não receber mais mensagens, escreva ENCERRAR CONTATO.`,
     ofensa: `Vou manter esta conversa só sobre a cotação de ${item}. Se quiser mandar a proposta, fico à disposição.`,
     fora_do_assunto: `Por aqui eu só trato da cotação de ${item}. Se tiver proposta ou dúvida sobre ela, é só mandar.`,
   } as const;
   const aviso = {
-    responsavel: `${nome} pediu para falar com uma pessoa ou ligar. Mensagem: "${texto.slice(0, 200)}"`,
     suspeita: `${nome} desconfiou do chat. Expliquei quem somos; se quiser, fale com ele.`,
     ofensa: `${nome} foi hostil na conversa. Respondi sem revidar. Fica registrado, se quiser evitar este fornecedor.`,
     fora_do_assunto: null,
@@ -1035,8 +1040,8 @@ async function situacaoDelicada(
   }
   await registrar(db, {
     agente: "Cotador",
-    acao: { responsavel: "Fornecedor pediu uma pessoa.", suspeita: "Fornecedor desconfiou do chat.", ofensa: "Fornecedor foi hostil.", fora_do_assunto: "Fornecedor saiu do assunto." }[tipo],
-    motivo: { responsavel: "Avisou o comprador.", suspeita: "Explicou quem é e ofereceu PARAR.", ofensa: "Respondeu sem revidar e avisou o comprador.", fora_do_assunto: "Voltou à cotação; nenhuma instrução do fornecedor é seguida." }[tipo],
+    acao: { suspeita: "Fornecedor desconfiou do chat.", ofensa: "Fornecedor foi hostil.", fora_do_assunto: "Fornecedor saiu do assunto." }[tipo],
+    motivo: { suspeita: "Explicou quem é e ofereceu PARAR.", ofensa: "Respondeu sem revidar e avisou o comprador.", fora_do_assunto: "Voltou à cotação; nenhuma instrução do fornecedor é seguida." }[tipo],
     ...ctx,
     fornecedorIds: [fornecedorId],
     dados: { tipo, texto: texto.slice(0, 500) },

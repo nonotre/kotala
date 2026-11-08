@@ -48,6 +48,7 @@ import {
 import { registrar } from "../nucleo/registro.ts";
 import { EMPRESA, JANELA_CONFIRMACAO_MIN } from "../config.ts";
 import { aoBotaoDoComprador } from "./decisao.ts";
+import { aoBotaoDoTransbordo, aoTransbordoDoComprador, ligarTransbordo } from "./transbordo.ts";
 import { atributosFaltando, exemplosDoNicho } from "../dominio/categorias.ts";
 import { dias, fmtNumero, MOTIVOS_CANCELAMENTO, nomePedido, quantidade, quantidadeDe, type MotivoCancelamento } from "../texto.ts";
 
@@ -718,6 +719,7 @@ export async function lembrarConfirmacoes(agora: Date) {
 
 export function ligarComprador() {
   aoVarrer(lembrarConfirmacoes);
+  ligarTransbordo(); // recado do comprador ao fornecedor pela cadência
 }
 
 // ---------- Guardrail: respostas por classe (S) ----------
@@ -982,6 +984,8 @@ export type OpcoesMensagemComprador = {
    * leu como pedido novo, correção ou confirmação): não repassa ao fornecedor.
    */
   naoEhRespostaFornecedor?: boolean;
+  /** O Assistente já tentou resolver e o comprador insiste em falar com o fornecedor: pede a mensagem e repassa. */
+  transbordo?: boolean;
 };
 
 export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: MensagemRecebida, opcoes: OpcoesMensagemComprador = {}) {
@@ -1008,6 +1012,8 @@ export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: Me
       await vincularMensagem(mensagemId, { pedidoId: Number(attr[1]) });
       return escolherAtributo(Number(attr[1]), Number(attr[2]), attr[3]!, Number(attr[4]), contato.id);
     }
+    // Transbordo: "com qual fornecedor quer falar?".
+    if (await aoBotaoDoTransbordo(contato.id, entrada.botao)) return;
     const ref = /^(pedido|item):(\d+):/.exec(entrada.botao);
     if (ref) await vincularMensagem(mensagemId, ref[1] === "pedido" ? { pedidoId: Number(ref[2]) } : { itemPedidoId: Number(ref[2]) });
     // R14b: prazo vencido com menos de 3 propostas (encerrar ou estender).
@@ -1077,6 +1083,10 @@ export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: Me
   // Dúvida de fornecedor esperando o comprador: esta mensagem é a resposta.
   // R14b: "pode estender" ou "encerra" escrito, com a pergunta do prazo aberta, vale como o botão.
   if (await respostaEscritaDoPrazo(contato, texto)) return;
+
+  // Transbordo inteligente: recado ao fornecedor em escrita, ou pedido de falar com o fornecedor
+  // (tenta resolver antes; se insistir, pede a mensagem e repassa pela cadência).
+  if (await aoTransbordoDoComprador(contato.id, texto, { insistiu: opcoes.transbordo })) return;
 
   if (!opcoes.naoEhRespostaFornecedor && (await repassarRespostaDoComprador(contato.id, texto))) return;
 
