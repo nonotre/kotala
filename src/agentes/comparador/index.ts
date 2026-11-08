@@ -10,7 +10,7 @@ import { and, desc, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { db } from "../../nucleo/db/cliente.ts";
 import { cotacao, evento, fornecedor, historicoCompra, itemPedido, mapaCotacao, mensagem, oferta, pedido } from "../../nucleo/db/schema.ts";
 import { gerarTexto } from "../../nucleo/ia/index.ts";
-import { contatoAtivoDoFornecedor, enviar, type Botao } from "../../nucleo/mensagens/index.ts";
+import { enviar, type Botao } from "../../nucleo/mensagens/index.ts";
 import { aoEntrarItem, avancarItem, TransicaoConcorrente, TransicaoInvalida, type MudancaItem } from "../../nucleo/orquestrador/index.ts";
 import { MAX_AMPLIACOES } from "../../config.ts";
 import type { MarcaNegociacao } from "../negociador/index.ts";
@@ -445,7 +445,7 @@ async function montarMapa(m: MudancaItem) {
   if (refeito) await substituirMapaAnterior(p.compradorId, item, cabecalho);
   await enviar(p.compradorId, texto, { pedidoId: p.id, itemPedidoId: item.id, botoes: botoesDecisao(item.id, c), tipo: "aviso" });
   // Só depois do mapa pronto: a resposta do fornecedor encontra o item esperando a decisão.
-  await pedirConfirmacaoDePreco(d, c);
+  await pedirConfirmacaoDePreco(item.id);
 }
 
 /** Texto do mapa para o chat (Telegram, e-mail, web). Função pura: os testes leem o mesmo texto que o comprador. */
@@ -514,30 +514,13 @@ export function textoReferencias(refs: Awaited<ReturnType<typeof referenciasDoIt
  * R8: preço muito abaixo da referência fica retido. Em vez de só cortar, pergunta
  * ao fornecedor se é isso mesmo (uma vez por proposta). Se ele confirmar, o mapa é refeito.
  */
-async function pedirConfirmacaoDePreco(d: NonNullable<Awaited<ReturnType<typeof carregar>>>, c: Comparacao) {
-  for (const l of c.cortadas) {
-    if (l.portoes.naoRetida) continue;
-    const bruta = d.brutas.get(l.oferta.id);
-    if (!bruta || bruta.confirmacaoPedidaEm || bruta.precoConfirmado) continue;
-    const ct = await contatoAtivoDoFornecedor(l.oferta.fornecedorId);
-    if (!ct) continue;
-    const unit = l.precoUnitarioEfetivo !== null ? `${formatarBRL(l.precoUnitarioEfetivo)} por ${d.item.unidade}` : formatarBRL(l.produto ?? 0);
-    const texto =
-      `Sobre a cotação ${d.item.id} (${quantidade(d.item.quantidade, d.item.unidade)} de ${d.item.descricao}): ` +
-      `o seu preço de ${unit} ficou bem abaixo das outras propostas. Pode confirmar que é esse valor mesmo, para o item pedido e entregue no local? ` +
-      "Responda SIM para confirmar.";
-    const r = await enviar(ct.id, texto, { pedidoId: d.pedido.id, itemPedidoId: d.item.id, tipo: "confirmar_preco" });
-    if (r.situacao !== "enviada") continue;
-    await db.update(oferta).set({ confirmacaoPedidaEm: new Date() }).where(eq(oferta.id, l.oferta.id));
-    await registrar(db, {
-      agente: "Comparador",
-      acao: `Pediu a ${l.oferta.fornecedorNome} para confirmar o preço.`,
-      motivo: `Preço ${Math.round(l.abaixoDaReferencia * 100)}% abaixo da referência: fica retido até o fornecedor confirmar.`,
-      pedidoId: d.pedido.id,
-      itemPedidoId: d.item.id,
-      fornecedorIds: [l.oferta.fornecedorId],
-    });
-  }
+/**
+ * R8: pergunta aos fornecedores com preço retido se o valor está certo, pela cadência (U3): com
+ * outra pergunta pendente, a confirmação espera na fila. Import tardio: o cotador importa o comparador.
+ */
+async function pedirConfirmacaoDePreco(itemPedidoId: number) {
+  const { pedirConfirmacoesDePreco } = await import("../cotador/confirmar-preco.ts");
+  await pedirConfirmacoesDePreco(itemPedidoId);
 }
 
 function ignorarCorrida(erro: unknown) {

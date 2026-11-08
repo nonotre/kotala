@@ -73,3 +73,12 @@ test("pergunta única junta preço e item", () => {
   assert.match(t, /Também: o item oferecido/);
   assert.match(t, /sem dimensão/);
 });
+
+test("I1: a condição do desconto só fica quando há desconto válido", () => {
+  const com = limpar({ ...base, precoUnitario: 30, descontoPercentual: 5, descontoCondicao: " à vista " }, pedido);
+  assert.equal(com.descontoCondicao, "à vista");
+  const semValor = limpar({ ...base, precoUnitario: 30, descontoPercentual: 150, descontoCondicao: "à vista" }, pedido);
+  assert.equal(semValor.descontoCondicao, null);
+  // Leitura montada sem o campo (testes antigos, simulador) continua aceita.
+  assert.equal(limpar({ ...base, precoUnitario: 30 }, pedido).descontoCondicao, null);
+});

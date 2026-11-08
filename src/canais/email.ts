@@ -116,6 +116,8 @@ export function adaptadorEmail(op: OpcoesEmail = {}): AdaptadorCanal {
           ? `Pedido de cotação${opcoes.itemPedidoId ? ` ${opcoes.itemPedidoId}` : ""} · ${EMPRESA.nome}`
           : opcoes.tipo === "lembrete"
             ? `Lembrete de cotação · ${EMPRESA.nome}`
+            : opcoes.tipo === "pedido_compra"
+              ? `Pedido de compra${opcoes.itemPedidoId ? ` · cotação ${opcoes.itemPedidoId}` : ""} · ${EMPRESA.nome}`
             : `Mensagem de ${EMPRESA.nome}`;
       // O convite já traz o link e o aviso no corpo.
       const { lista, faltaram } = await anexosDoEmail(opcoes.anexos ?? []);
