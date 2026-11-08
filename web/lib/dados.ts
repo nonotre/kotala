@@ -227,12 +227,24 @@ export async function listaFornecedores() {
 /** E3: conversa do chat web de um navegador: as 300 mensagens mais recentes, em ordem. */
 export async function conversaWeb(endereco: string) {
   const [c] = await db.select().from(contato).where(and(eq(contato.canal, "web"), eq(contato.endereco, endereco)));
-  if (!c) return [];
+  return c ? mensagensDoContato(c.id) : [];
+}
+
+/** Frente 2, espelho do Telegram: a conversa do usuário com o bot do comprador, no mesmo formato do chat web. */
+export async function conversaTelegram(usuarioId: string) {
+  const [c] = await db
+    .select({ id: contato.id })
+    .from(contato)
+    .where(and(eq(contato.canal, "telegram"), eq(contato.papel, "comprador"), eq(contato.usuarioId, usuarioId)));
+  return c ? mensagensDoContato(c.id) : [];
+}
+
+async function mensagensDoContato(contatoId: string) {
   // Pega do fim para o começo e desvira: numa conversa longa, as mais novas não podem ficar de fora.
   const recentes = await db
     .select({ id: mensagem.id, direcao: mensagem.direcao, texto: mensagem.texto, botoes: mensagem.botoes, criadoEm: mensagem.criadoEm, anexos: mensagem.anexos })
     .from(mensagem)
-    .where(eq(mensagem.contatoId, c.id))
+    .where(eq(mensagem.contatoId, contatoId))
     .orderBy(desc(mensagem.criadoEm))
     .limit(300);
   // Só o nome e o tipo dos anexos vão para a tela.

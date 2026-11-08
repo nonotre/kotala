@@ -18,7 +18,7 @@ import {
 } from "@carbon/ai-chat";
 import { Button, SkeletonText } from "@carbon/react";
 import { ArrowDown } from "@carbon/react/icons";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Pagina } from "@/components/Pagina";
 import { enviarChat, type AnexoChat } from "@/lib/acoes";
 import { AVATAR_ASSISTENTE } from "./avatar";
@@ -146,7 +146,7 @@ const escritos = {
 };
 
 /** O chat de quem entrou: o endereço é o id do usuário (contato "web" dele, ver src/contas.ts). */
-export function Conversa({ endereco }: { endereco: string }) {
+export function Conversa({ endereco, topo }: { endereco: string; topo?: ReactNode }) {
   const [historicoPronto, setHistoricoPronto] = useState(false);
   const [chatPronto, setChatPronto] = useState(false);
   const [novas, setNovas] = useState(false);
@@ -457,6 +457,7 @@ export function Conversa({ endereco }: { endereco: string }) {
     <Pagina>
       <div className={s.tela}>
         <h1 className={s.tituloOculto}>Conversar com o assistente</h1>
+        {topo}
         <ContextoConversa.Provider value={acoes}>
           <div className={s.chatArea}>
             {endereco ? (

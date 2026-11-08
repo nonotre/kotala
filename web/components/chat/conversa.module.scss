@@ -11,6 +11,13 @@
   background: theme.$background;
 }
 
+// Frente 2: troca entre o chat do site e o espelho do Telegram.
+.trocaCanal {
+  flex: none;
+  padding: spacing.$spacing-03 spacing.$spacing-05;
+  max-inline-size: calc(#{spacing.$spacing-13} * 3); /* stylelint-disable-line carbon/layout-use */
+}
+
 // O título existe para o leitor de tela; quem vê, vê a conversa.
 .tituloOculto {
   position: absolute;
@@ -106,4 +113,79 @@
     outline: 2px solid theme.$focus;
     outline-offset: 1px;
   }
+}
+
+// Frente 2: espelho do Telegram, só leitura.
+.espelhoLista {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: spacing.$spacing-05;
+  overflow-y: auto;
+  min-block-size: 0;
+  padding: spacing.$spacing-05;
+  inline-size: 100%;
+  max-inline-size: calc(#{spacing.$spacing-13} * 6); /* stylelint-disable-line carbon/layout-use */
+  margin-inline: auto;
+}
+
+.espelhoAssistente,
+.espelhoVoce {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-02;
+  max-inline-size: 85%;
+}
+
+.espelhoVoce {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.espelhoQuem {
+  @include type.type-style('label-01');
+
+  color: theme.$text-secondary;
+}
+
+.espelhoTexto {
+  @include type.type-style('body-01');
+
+  color: theme.$text-primary;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+
+  .espelhoVoce & {
+    padding: spacing.$spacing-03 spacing.$spacing-05;
+    background: theme.$layer-accent-01;
+  }
+}
+
+.espelhoBotoes {
+  @include type.type-style('label-01');
+
+  color: theme.$text-helper;
+}
+
+.espelhoVazio {
+  @include type.type-style('body-01');
+
+  color: theme.$text-secondary;
+}
+
+.espelhoRodape {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: spacing.$spacing-05;
+  padding: spacing.$spacing-05;
+  border-block-start: 1px solid theme.$border-subtle-01;
+}
+
+.espelhoAviso {
+  @include type.type-style('body-01');
+
+  color: theme.$text-secondary;
 }

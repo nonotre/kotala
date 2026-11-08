@@ -92,7 +92,7 @@ Pendente: a Ester especificou um dashboard em `docs/workspaces/ester-workspace/i
 
 ## Perfil e login (Frente 2, rodada 2, 08/11/2026)
 
-Cada pessoa entra com usuário e senha e tem o seu chat no navegador; quem não tem conta cria na tela de entrada. Os cards mostram o dono (quem pediu), e todos veem todos. As contas `ester` e `liria` já existem, ligadas ao Telegram delas, e a primeira entrada define a senha. Ainda não: espelho do Telegram no chat web, empresa e endereços no banco. Ver [perfil-login.md](perfil-login.md).
+Cada pessoa entra com usuário e senha e tem o seu chat no navegador; quem não tem conta cria na tela de entrada. Os cards mostram o dono (quem pediu), e todos veem todos. As contas `ester` e `liria` já existem, ligadas ao Telegram delas, e a primeira entrada define a senha. Em Conversar, quem tem Telegram ligado vê o espelho dele, só para ler, com o botão "Continuar no Telegram". Ainda não: empresa e endereços no banco. Ver [perfil-login.md](perfil-login.md).
 
 ## Para quem vai mexer nas telas
 

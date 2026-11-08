@@ -10,6 +10,7 @@ Branch `f2-perfil-login`, telas de teste na porta 3320. Plano geral em [frentes.
 - **Chat web por usuário.** Cada usuário tem um contato `web` com o próprio id como endereço, criado ao entrar ou ao criar a conta. O chat da tela `/chat` usa esse endereço no lugar do id aleatório que ficava no navegador; as conversas antigas, de ids aleatórios, ficam no banco sem dono.
 - **Contato ligado a uma pessoa.** Coluna nova `contato.usuario_id`. O Telegram da Ester e da Liria foi ligado à mão (ver abaixo).
 - **Dono do card.** O dono de um pedido é o usuário ligado ao contato que o fez (`pedido.comprador_id → contato.usuario_id → usuario.nome`). Aparece no card do Quadro, na Lista de pedidos e no cabeçalho do pedido; sem usuário ligado, aparece "Sem dono". Todos veem todos os cards: o dono só diz quem é o responsável.
+- **Espelho do Telegram, só leitura.** Em Conversar, quem tem Telegram ligado troca entre "Chat do site" e "Espelho do Telegram". O espelho mostra a conversa com o bot do comprador (`/api/chat?canal=telegram`, `web/components/chat/EspelhoTelegram.tsx`), atualizando a cada 4 s. Não tem campo de envio, de propósito: no lugar há o botão "Continuar no Telegram", que abre o bot.
 - **Sua conta.** Em Configurações, o bloco "Sua conta" mostra o nome, o usuário e os canais ligados. Empresas e endereços continuam sendo a demonstração no navegador (`demo.ts`).
 
 ## Telegram da Ester e da Liria
@@ -43,7 +44,8 @@ Ideias que esta frente não vai fazer, separadas por quem deve pegar. Servem de 
 
 ### Frente 4 · IA, Telegram e conversa
 
-- **Espelho Telegram ↔ chat web.** Uma das conversas do chat no site espelha exatamente o Telegram da pessoa: as mensagens dos contatos de Telegram ligados ao usuário (`contato.usuario_id`) aparecem na tela, e o que se escreve ali sai pelo Telegram. Hoje o chat web é uma conversa separada, com o seu próprio contato `web`.
+- **Espelho só leitura, por decisão.** O espelho do Telegram no site não vai ter campo de envio; responder é sempre no Telegram ("Continuar no Telegram"). Não acrescentar envio por ele.
+- **Tela "Conversas" da Frente 1.** A Frente 1 está fazendo uma lista de conversas (site e Telegram, só leitura) que ainda usa o id aleatório do navegador. Na junção: usar o id do usuário entrado (`useSessao()`) no lugar de `kotala-chat`, marcar as conversas do usuário por `contato.usuario_id` e reaproveitar `conversaTelegram()` ou `EspelhoTelegram.tsx` em vez de manter dois espelhos.
 - **Ligar o Telegram pela tela, sem script.** Configurações mostra um código; a pessoa manda `/vincular CODIGO` ao bot, e `src/canais/telegram.ts` grava `usuario_id` no contato. Substitui `scripts/ligar-telegram.ts` para gente nova.
 - **Contato novo no Telegram sem conta.** Hoje ele vira um contato sem dono. O bot pode oferecer a ligação (o `/vincular` acima) logo no primeiro contato.
 - **Usar o nome do dono nas mensagens.** O pedido ao fornecedor e os resumos podem dizer quem está comprando (`usuario.nome`) em vez do nome que veio do Telegram.
