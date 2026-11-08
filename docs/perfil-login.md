@@ -15,28 +15,16 @@ Branch `f2-perfil-login`, telas de teste na porta 3320. Plano geral em [frentes.
 
 ## Telegram da Ester e da Liria
 
-Só as duas conversaram com os bots de verdade, cada uma nos dois bots (do comprador e do fornecedor). No banco principal havia exatamente quatro contatos de Telegram, dois por pessoa (mesmo id de Telegram nos dois bots):
+As contas `ester` e `liria` estão ligadas ao Telegram de compradora de cada uma. Em 08/11/2026 todos os dados de teste delas foram apagados a pedido do dono (conversas, pedidos e os fornecedores em que se passaram, "Cleiton Extintores" e "vizzano", com backup feito antes); as contas e a ligação do Telegram de compradora ficaram. Para ligar outra pessoa, use o `/vincular` (abaixo); `scripts/ligar-telegram.ts` continua para o caso manual.
 
-| Pessoa | Bot | Contato (`contato.id`) | Nome no contato | Pedidos |
-|---|---|---|---|---|
-| Ester | comprador | `736236bf-ddd9-4f27-a8ed-2af684d569b3` | Leoni | 9, 14, 15 |
-| Ester | fornecedor | `d91e350a-c4b7-40dd-8721-80dfa1b48253` | Cleiton Extintores | — |
-| Liria | comprador | `055f2067-19fb-4ee7-9917-4ff02adee2e6` | Liria | 3, 10, 11, 12 |
-| Liria | fornecedor | `ddca1a92-14fa-497a-8d58-44e8d160a0f4` | vizzano | — |
+## Bloco 4 (08/11/2026): o que era "próxima rodada" e entrou
 
-Como se sabe quem é quem:
-
-- **Liria:** o nome no Telegram do bot do comprador é "Liria".
-- **Ester:** o nome no Telegram é "Leoni", o sobrenome dela (Ester Leoni Medeiros, pelo e-mail dos commits). Os pedidos desse contato são de extintor de incêndio, o caso que ela mesma anotou em `docs/workspaces/ester-workspace/analise-erros-cotacao.md`.
-- Em cada pessoa, o contato de fornecedor tem o mesmo id de Telegram que o de comprador.
-
-A ligação está em `scripts/ligar-telegram.ts`, que cria as contas `ester` e `liria` sem senha e põe `usuario_id` nesses contatos. O script não faz nada de mais se rodar de novo e já foi rodado no banco principal em 08/11/2026:
-
-```bash
-node --env-file=.env scripts/ligar-telegram.ts
-```
-
-Os ids acima são do banco principal; num banco novo os contatos não existem e o script só cria as contas.
+- **Sessão no servidor.** Ao entrar, uma linha em `sessao` (vale 30 dias) e o id no cookie httpOnly `kotala_sessao` (SameSite=Lax; Secure em HTTPS). O proxy das telas (`web/proxy.ts`) confere a sessão a cada requisição: sem ela, tela vai para `/login` e API recebe 401. Ações e rotas usam o usuário do cookie, nunca o que vem do navegador; `useSessao()` virou espelho para a interface. Sair apaga a sessão.
+- **Empresas e locais de entrega no banco** (E4/E8), no lugar da demonstração: empresa em uso por pessoa (`usuario.empresa_id`, seletor no topo), locais por empresa com um padrão. O local padrão vira o destino do pedido que não diz onde entregar (contato → usuário → empresa → local padrão; sem isso, o `EMPRESA` do `.env`). Faturamento que vai ao fornecedor (R11) continua do `EMPRESA`.
+- **"Só os meus"** no Início (`?meus=1`) e **sino e avisos por pessoa** (Meus/Todos), pela mesma regra do dono: responsável, senão o usuário de quem pediu.
+- **/vincular.** Em Configurações › Visão geral, um código de 8 caracteres que vale 15 min e uma vez; mandar `/vincular CODIGO` ao bot do comprador liga o Telegram à conta (migração 0019). Contato novo de Telegram sem conta recebe a oferta no primeiro contato.
+- **Conversar** voltou a ser tela própria (`/chat`): só as conversas da conta, Telegram primeiro (o espelho), e "Nova conversa".
+- Ficaram de fora: convites e papéis Aprovador/Só leitura (não há tabela); qualquer pessoa que entrou edita empresas e locais.
 
 ## Fica para depois
 

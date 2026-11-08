@@ -60,11 +60,12 @@ Legenda: **feito** = resolvido no `main` (rodada de 07/11 ou junção da rodada 
 | Perguntar a categoria do fornecedor no primeiro contato | Ester | feito | U5 |
 | Negociar mesmo com a proposta de menor valor | Ester | feito (com a R13 do dono) | I1 |
 | Guardrails: crime, +18, ambíguo, pedido errado | dono | feito | S |
-| Funcionar para qualquer compra, não só construção | dono | feito (serviços ainda não) | G, Q3 |
+| Funcionar para qualquer compra, não só construção | dono | feito, inclusive serviços (Bloco 4) | G, Q3 |
 | "Obrigado! Aviso se for escolhida." fechava a negociação; validade não pedida; 1 minuto para responder; lojas online fora; "Pedido 11" sem nome; frase exagerada | Liria | feito | — |
 | 3ª correção cancelava o pedido com 0 unidades | Liria | feito | — |
 | PARAR do fornecedor deve valer só para a cotação; sair de vez com "Encerrar contato" (`erros_chat.md`) | Liria | feito | — |
 | Revisão do chat (`revisaodochat.md`): mapa com unitário e total, negociar e cotar com mais quando o comprador pedir, dados da proposta e histórico nas respostas, desconto em mensagem separada com 5 min de espera | Ester | feito (ver decisoes.md, 08/11) | — |
+| Transbordo inteligente (`ideiastransbordo.md`): tentar resolver antes de passar a uma pessoa; se insistir, repassar a mensagem e trazer a resposta | Ester | feito (Bloco 4, `src/fluxo/transbordo.ts`) | — |
 
 ## G · Generalista: funcionar para qualquer compra
 
@@ -331,6 +332,8 @@ Componentes que servem a qualquer canal ficam em `src/fluxo/componentes/`, com t
 
 ### I2 · Negociador que redige com IA, dentro de trilhos
 
+**Feito no Bloco 4 (08/11):** `src/agentes/negociador/redacao.ts`; a IA redige o pedido de desconto e a rodada do botão, `conferirRedacao` confere (valores, alavancas, tamanho, validador); reprovou ou IA fora do ar, vale o template. `NEGOCIADOR_IA=desligado` desliga.
+
 Trocar o texto fixo por um texto redigido pelo modelo forte a partir do plano de negociação e das alavancas. O validador do I1 troca a mensagem pelo template quando aparece um valor em R$ que não seja a referência pública ou a própria proposta do fornecedor. **Fica para depois:** só entra se o harness mostrar ganho, com 20 ou mais execuções por braço.
 
 ### I3 · Buscar mais fornecedores sozinho com menos de 3 propostas (Q2 do escopo)
@@ -358,6 +361,8 @@ Trocar o texto fixo por um texto redigido pelo modelo forte a partir do plano de
 O Extrator e o Interpretador usam o papel "rápido". Quando o `limpar` acusar incoerência (Q1), `a_confirmar` (Q2) ou faltar um atributo obrigatório (Q4), refazer a chamada com o papel "forte" antes de perguntar a uma pessoa. Não muda `src/nucleo/ia/config.ts`, que é da Frente 3: é só o `papel` passado na chamada.
 
 ### I5 · Memória e contexto
+
+**Feito no Bloco 4 (08/11):** `src/agentes/interpretador/memoria-conversa.ts`; "o mesmo de ontem", "mesmo endereço", "pedido 12" completados com pedidos e compras dos últimos 30 dias da conta, mostrados como suposição.
 
 - Recompra (X2) na confirmação: "Da última vez você comprou da X por R$ Y; cotar de novo ou repetir?".
 - Na cotação ao fornecedor que já vendeu, citar a última compra dele, que é dado dele e não de concorrente.
@@ -457,5 +462,5 @@ Levantadas nos desenhos; cada uma tem uma recomendação no anexo.
 | 6 | A economia conta o desconto no frete? (Hoje só conta o produto) | Sim | negociacao |
 | 7 | Pedido de compra e lembrete passam direto na fila de cadência? | Sim | negociacao |
 | 8 | Política da empresa: bebida, tabaco, uso pessoal ("um iPhone pra mim") | Cotar com aviso ao gestor | guardrails |
-| 9 | Serviços (contratar manutenção, aluguel): cotar já ou só produtos? | Por ora só produtos, com aviso ao gestor | guardrails, generalista |
+| 9 | Serviços (contratar manutenção, aluguel): cotar já ou só produtos? | Decidido pelo dono (Bloco 4): cotar serviços (hora, diária, visita, serviço; escopo e prazo perguntados) | guardrails, generalista |
 | 10 | Renomear a urgência para `parada` (migração) ou só trocar o rótulo? | Renomear | generalista |

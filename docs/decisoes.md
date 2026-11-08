@@ -2,6 +2,20 @@
 
 Registro curto das decisões que mudam o escopo ou o desenho. A mais nova fica no topo.
 
+## 08/11/2026 · Bloco 4 e fornecedor simulado com espera
+
+**Situação:** implementado no `main` (migrações 0018 e 0019).
+
+- **Urgência "parada"** no lugar de "obra_parada" (decidido pelo dono; `ALTER TYPE ... RENAME VALUE`).
+- **Sessão no servidor** (cookie httpOnly) e rotas protegidas; todos entram de novo uma vez.
+- **Empresas e locais de entrega** no banco; o local padrão vira o destino do pedido sem destino.
+- **Serviços são cotados** (decisão 9 do plano-ia): hora, diária, visita ou serviço, com escopo e prazo perguntados; serviço proibido continua barrado.
+- **Negociador redige com IA** (I2), sempre pelo validador, ligado por padrão (`NEGOCIADOR_IA=desligado` desliga). **Memória na conversa** (I5).
+- **Transbordo inteligente** (Ester): quem pede para falar com uma pessoa primeiro recebe uma tentativa de solução; se insistir, o agente pede a mensagem, repassa ao outro lado e traz a resposta. No sentido fornecedor → comprador, o comprador só é avisado quando chega o recado. O recado do comprador ao fornecedor não pode citar valor de outro fornecedor.
+- **Contrato anual**: item com contrato vigente pede direto ao fornecedor do contrato, em dois toques; contrato com unidade diferente não vale (não converte); fornecedor que recusa não encerra o contrato.
+- **Frete do anúncio** (JSON-LD) quando a loja declara; sem isso, "a calcular no site". **PDF do mapa** sem dependência nova.
+- **Fornecedor simulado espera 5 min** (`SIM_ESPERA_HUMANO_SEG`) antes de responder sozinho, para dar tempo de responder como ele pelo Telegram simulado; se alguém responder nesse tempo, ele pula a etapa e volta a contar na próxima mensagem. Por isso a janela do desconto tem 7 min (5 da Ester + 2 de folga).
+
 ## 08/11/2026 · Conversar volta a ser uma tela própria
 
 **Situação:** implementado. Pedido do dono, depois da junção da Frente 1.

@@ -2,7 +2,7 @@
 
 Retrato em 08/11/2026, depois da junção da rodada 2 (as quatro frentes, o dashboard e a Base de Dados; ver [Junção da rodada 2](#junção-da-rodada-2-08112026)). Como cada parte funciona: [arquitetura.md](arquitetura.md). Decisões: [decisoes.md](decisoes.md). Pitch: [pitch.md](pitch.md).
 
-**Resumo:** dos 42 módulos do escopo V1, 35 prontos, 2 parciais e 5 não feitos (todos das fases de complemento e "só se sobrar"). Fases 0 a 2, pitch e todos os diferenciais (Raro, Épico e Lendário) completos. O assistente agora é generalista (compras de uma empresa; construção é só o nicho de exemplo), com guardrails dos dois lados. 365 testes automáticos passando.
+**Resumo:** dos 42 módulos do escopo V1, 37 prontos, 2 parciais e 3 não feitos (todos das fases de complemento e "só se sobrar"). Fases 0 a 2, pitch e todos os diferenciais (Raro, Épico e Lendário) completos. O assistente agora é generalista (compras de uma empresa; construção é só o nicho de exemplo), com guardrails dos dois lados. 441 testes automáticos passando.
 
 ## Módulos
 
@@ -21,13 +21,13 @@ Retrato em 08/11/2026, depois da junção da rodada 2 (as quatro frentes, o dash
 |---|---|
 | R2 Interpretador, R4 Cotador, R6 Extrator, R8 Comparador, R9 Recomendação, R11 Decisão | Pronto |
 | R3 Busca | Pronto: lojas VTEX com frete por CEP, Serper e leitura de páginas, sempre com fonte e hora |
-| R7 Frete e prazo | Parcial: vale o frete informado, ou estimado pela mediana dos outros; loja online sem frete aparece como "a calcular no site", com total estimado; falta cálculo por distância e frete de lojas fora da VTEX |
+| R7 Frete e prazo | Parcial: vale o frete informado, ou estimado pela mediana dos outros; lojas VTEX com frete por CEP; outras lojas com o frete declarado no anúncio (JSON-LD), quando há; senão "a calcular no site", com total estimado. Falta cálculo por distância |
 
 ### Fase 2 · Nota da banca (11 prontos, 1 parcial)
 
 | Módulo | Situação |
 |---|---|
-| Q1 Mapa de cotação | Pronto; faltam os cenários "menor custo / mais rápido / conhecido" ("se sobrar tempo" no escopo) |
+| Q1 Mapa de cotação | Pronto, com unitário e total por fornecedor e PDF do mapa (anexado no Telegram e no e-mail, e para baixar na tela); faltam os cenários "menor custo / mais rápido / conhecido" |
 | Q2 Três propostas válidas | Pronto: com menos de 3, justifica e nunca diz "melhor"; no fim do prazo, ou quando todos já responderam, busca mais fornecedores sozinho (até 2 levas, urgente 1) e o mapa diz quantos consultou |
 | Q3 Fornecedor simulado | Pronto: personas por categoria (obra, escritório, EPI, limpeza, informática, copa), estilos de desconto e personas difíceis (unitário ambíguo, duas mensagens, só Pix, orçamento em PDF) |
 | Q4 Prazo e lembrete, Q7 Robustez, N5 Raciocínio visível, N6 Reprovação com motivo, R12 Avisos | Pronto |
@@ -45,8 +45,8 @@ Retrato em 08/11/2026, depois da junção da rodada 2 (as quatro frentes, o dash
 
 | Módulo | Situação |
 |---|---|
-| X2 Memória (Raro) | Pronto: recompra em menos de 3 meses, histórico, homologação, lista de bloqueio; falta contrato anual com pedido automático |
-| X3 Negociação (Raro) | Pronto: até 3 rodadas pelo botão, sem citar valor de outro fornecedor; e pedido automático de desconto em toda cotação (uma vez por fornecedor e item), com o resultado no mapa |
+| X2 Memória (Raro) | Pronto: recompra em menos de 3 meses, histórico, homologação, lista de bloqueio, contrato anual (tela Contratos; item com contrato vigente pede direto em dois toques) e memória na conversa ("o mesmo de ontem") |
+| X3 Negociação (Raro) | Pronto: até 3 rodadas pelo botão, sem citar valor de outro fornecedor; pedido automático de desconto em toda cotação (uma vez por fornecedor e item, em mensagem separada, com 5 min de espera); texto redigido pela IA e conferido pelo validador (NEGOCIADOR_IA=desligado volta ao template) |
 | X4 Economia (Épico) | Pronto |
 | X5 Voz (Lendário) | Pronto e testado com microfone: pelo navegador; ligação telefônica de verdade fica de fora (paga) |
 
@@ -59,8 +59,8 @@ Retrato em 08/11/2026, depois da junção da rodada 2 (as quatro frentes, o dash
 | E9 Primeiro contato ativo simulado | Não feito |
 | R1c Pedido pelo quadro | Não feito; o chat web na tela cobre o mesmo uso |
 | E2 Resposta do fornecedor por e-mail | Não feito |
-| E8 Endereços de entrega e faturamento | Não feito; há só o endereço padrão da empresa |
-| E4 Login e várias empresas | Parcial: login com usuário e senha, chat e cards por pessoa, responsável do pedido e papel de gestor; várias empresas continua fora da demo |
+| E8 Endereços de entrega e faturamento | Pronto: locais de entrega por empresa no banco, com padrão usado quando o pedido não diz o destino |
+| E4 Login e várias empresas | Pronto: login com sessão no servidor (cookie), empresas no banco com empresa em uso por pessoa, responsável, gestor, "Só os meus", avisos por pessoa e /vincular do Telegram |
 
 ### Além do escopo
 
@@ -92,7 +92,7 @@ O dashboard que a Ester especificou (`docs/workspaces/ester-workspace/interface-
 
 ## Perfil e login (Frente 2, rodada 2, 08/11/2026)
 
-Cada pessoa entra com usuário e senha e tem o seu chat no navegador; quem não tem conta cria na tela de entrada. Os cards mostram o dono (quem pediu), e todos veem todos. As contas `ester` e `liria` já existem, ligadas ao Telegram delas, e a primeira entrada define a senha. Na lista de Conversas (lateral do Início), quem tem Telegram ligado vê "Seu Telegram", só para ler, com o botão que abre o bot. Ainda não: empresa e endereços no banco. Ver [perfil-login.md](perfil-login.md).
+Cada pessoa entra com usuário e senha e tem o seu chat no navegador; quem não tem conta cria na tela de entrada. Os cards mostram o dono (quem pediu), e todos veem todos. As contas `ester` e `liria` já existem, ligadas ao Telegram delas, e a primeira entrada define a senha. Na lista de Conversas (lateral do Início), quem tem Telegram ligado vê "Seu Telegram", só para ler, com o botão que abre o bot. Depois, no Bloco 4: sessão no servidor, empresas e locais no banco, "Só os meus", avisos por pessoa e /vincular. Ver [perfil-login.md](perfil-login.md).
 
 ## Junção da rodada 2 (08/11/2026)
 
@@ -118,7 +118,9 @@ As quatro frentes de [frentes.md](frentes.md), o dashboard e a Base de Dados da 
 - Política da empresa (bebida, tabaco, uso pessoal, serviços), os "10 minutos" do solicitante, a cotação esperar a janela do desconto, a lista de produtos controlados.
 - As cinco perguntas abertas de [frente-3-simulador.md](frente-3-simulador.md) (seção 7).
 
-**Ainda não feito:** PDF do mapa (exige dependência nova); frete de lojas fora da VTEX; negociador que redige com IA (I2) e memória na conversa (I5); serviços (hoje "ainda cotamos só produtos"); cenários do simulador com gabarito e personas guiadas por IA; comparação de modelos num conjunto misto; o Extrator ainda lê "R$ 300" para 5 unidades como unitário sem perguntar (achado do harness, depende do prompt).
+**Depois da junção (mesmo dia):** revisão do chat da Ester (Assistente também no Telegram, negociar e cotar com mais quando o comprador pede, mapa com unitário e total, desconto separado com 5 min), anotações da Liria nas telas (título, etapas, faixa, Detalhes, Busca em cards por rodada, Propostas limpa), Conversar de novo como tela própria com "Nova conversa", PARAR só da cotação, forma de pagamento perguntada, e o Bloco 4: sessão em cookie, empresas e locais, "Só os meus", avisos por pessoa, /vincular, negociador com IA, memória na conversa, cotação de serviços, transbordo inteligente (Ester), frete do anúncio, PDF do mapa, contrato anual e urgência "parada" (migrações 0018 e 0019). Fornecedor simulado espera 5 min antes de responder (dá tempo de responder como ele pelo Telegram simulado).
+
+**Ainda não feito:** cálculo de frete por distância; comparação de modelos num conjunto misto; o Extrator ainda lê "R$ 300" para 5 unidades como unitário sem perguntar (depende do prompt).
 
 ## Para quem vai mexer nas telas
 
