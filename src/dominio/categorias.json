@@ -141,8 +141,8 @@
       "palavras": ["extintor", "mangueira de incendio", "hidrante", "sinalizacao de emergencia", "detector de fumaca"],
       "unidadesAceitas": ["unidade", "caixa"],
       "atributos": [
-        { "chave": "tipo", "rotulo": "tipo", "pergunta": "qual o tipo (pó ABC, CO2, água)?", "quando": "extintor", "reconhece": "\\babc\\b|\\bbc\\b|po quimico|pqs|co2|gas carbonico|agua|espuma" },
-        { "chave": "capacidade", "rotulo": "capacidade", "pergunta": "qual a capacidade (ex.: 4 kg ou 6 kg)?", "quando": "extintor", "reconhece": "\\d+([.,]\\d+)? ?(kg|l|litros?)\\b|capacidade" },
+        { "chave": "tipo", "rotulo": "tipo", "pergunta": "qual o tipo (pó ABC, CO2, água)?", "opcoes": ["Pó ABC", "CO2", "Água"], "quando": "extintor", "reconhece": "\\babc\\b|\\bbc\\b|po quimico|pqs|co2|gas carbonico|agua|espuma" },
+        { "chave": "capacidade", "rotulo": "capacidade", "pergunta": "qual a capacidade (ex.: 4 kg ou 6 kg)?", "opcoes": ["4 kg", "6 kg", "12 kg"], "quando": "extintor", "reconhece": "\\d+([.,]\\d+)? ?(kg|l|litros?)\\b|capacidade" },
         { "chave": "norma", "rotulo": "norma", "pergunta": "precisa de alguma norma ou selo (ex.: NBR 15808, Inmetro)?", "quando": "extintor", "reconhece": "nbr|norma|inmetro|selo" }
       ],
       "exemplos": ["2 extintores de pó ABC de 6 kg, NBR 15808"],
@@ -171,7 +171,7 @@
       "sinonimos": { "sulfite": ["papel"] },
       "unidadesAceitas": ["resma", "caixa", "pacote", "unidade", "kit"],
       "atributos": [
-        { "chave": "formato", "rotulo": "formato", "pergunta": "qual o formato (A4, A3, ofício)?", "quando": "papel|sulfite|resma", "reconhece": "\\ba[0-5]\\b|oficio|carta" },
+        { "chave": "formato", "rotulo": "formato", "pergunta": "qual o formato (A4, A3, ofício)?", "opcoes": ["A4", "A3", "Ofício"], "quando": "papel|sulfite|resma", "reconhece": "\\ba[0-5]\\b|oficio|carta" },
         { "chave": "modelo", "rotulo": "modelo da impressora ou do cartucho", "pergunta": "qual o modelo (impressora ou código do cartucho)?", "quando": "toner|cartucho", "reconhece": "\\b[a-z]{0,3}\\d{2,}[a-z]*\\b|modelo|compativel" }
       ],
       "jargao": [

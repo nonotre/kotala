@@ -8,7 +8,7 @@ import { z } from "zod";
 import { gerarObjeto } from "../../nucleo/ia/index.ts";
 import { CLASSES, RISCOS } from "../guardrail/index.ts";
 import { textoJargao } from "./jargao.ts";
-import { regraDeUnidade } from "../../dominio/categorias.ts";
+import { detectarCategorias, regraDeUnidade, type Categoria } from "../../dominio/categorias.ts";
 
 const Item = z.object({
   descricao: z.string().describe("Nome técnico normalizado, ex.: 'Cimento CP II 50 kg', 'Clipe de papel nº 2/0', 'Notebook Core i5 16 GB'"),
@@ -50,7 +50,7 @@ export type Interpretacao = z.infer<typeof Interpretacao> & { ehPedido: boolean 
 
 const DIAS = ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"];
 
-function sistema(hoje: Date) {
+export function sistema(hoje: Date, categorias?: Categoria[]) {
   const data = hoje.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
   return `Você é o Interpretador de um assistente de cotações de compras de uma empresa. A empresa pode comprar qualquer produto: escritório, limpeza, copa, informática, ferramentas, peças, EPI, construção, móveis e o que mais precisar.
 Sua tarefa é classificar a mensagem do comprador e transformá-la em um pedido estruturado. Hoje é ${DIAS[hoje.getDay()]}, ${data}.
@@ -95,7 +95,7 @@ Risco de cada item:
 - "nenhum": todo o resto.
 
 Jargão de compras (use só quando o item for daquela área):
-${textoJargao()}`;
+${textoJargao(categorias)}`;
 }
 
 /** O que já foi entendido do pedido, antes da última correção. */
@@ -123,7 +123,7 @@ export async function interpretar(
   const r = await gerarObjeto({
     papel: contexto.papel ?? "rapido",
     schema: Interpretacao,
-    sistema: sistema(contexto.hoje ?? new Date()),
+    sistema: sistema(contexto.hoje ?? new Date(), detectarCategorias([entrada.textoOriginal, ...(entrada.correcoes ?? [])].join("\n"))),
     prompt: prompt(entrada.textoOriginal, entrada.correcoes ?? [], entrada.atual),
     contexto: { agente: "Interpretador", pedidoId: contexto.pedidoId },
   });

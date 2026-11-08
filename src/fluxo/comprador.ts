@@ -45,12 +45,18 @@ import {
 import { registrar } from "../nucleo/registro.ts";
 import { EMPRESA, JANELA_CONFIRMACAO_MIN } from "../config.ts";
 import { aoBotaoDoComprador } from "./decisao.ts";
+import { atributosFaltando, exemplosDoNicho } from "../dominio/categorias.ts";
 import { dias, fmtNumero, MOTIVOS_CANCELAMENTO, nomePedido, quantidade, quantidadeDe, type MotivoCancelamento } from "../texto.ts";
 
-export const TEXTO_BOAS_VINDAS =
-  "Olá! Sou o assistente de cotações. Mande o que precisa comprar, do seu jeito, por exemplo: " +
-  "\"10 caixas de clipes de papel e 5 resmas de papel A4 para o escritório até sexta\". " +
-  "Eu entendo o pedido, confirmo com você e busco fornecedores.";
+/** Exemplo do nicho da empresa (EMPRESA_NICHO); sem nicho, o padrão neutro. */
+export function textoBoasVindas(): string {
+  const exemplo = exemplosDoNicho().pedidos[0] ?? "50 resmas de papel A4 e 20 pares de luva para o escritório até sexta";
+  return (
+    "Olá! Sou o assistente de cotações. Mande o que precisa comprar, do seu jeito, por exemplo: " +
+    `"${exemplo}". ` +
+    "Eu entendo o pedido, confirmo com você e busco fornecedores."
+  );
+}
 
 export const AVISO_PRIVACIDADE =
   "Aviso: sou um assistente automatizado. Guardo as mensagens desta conversa para cotar seus pedidos. " +
@@ -279,8 +285,8 @@ export async function interpretarEResponder(pedidoId: number, opcoes: { lida?: L
     }).catch(ignorarCorrida);
     // O item controlado já teve o aviso acima; as outras classes têm a resposta delas.
     if (i.classe !== "controlado") {
-      const r = i.classe === "pedido" || i.classe === "ambiguo" ? TEXTO_BOAS_VINDAS : await responderClasse(p.compradorId, textoNovo, lida, { enviarResposta: false });
-      await enviar(p.compradorId, r || TEXTO_BOAS_VINDAS);
+      const r = i.classe === "pedido" || i.classe === "ambiguo" ? textoBoasVindas() : await responderClasse(p.compradorId, textoNovo, lida, { enviarResposta: false });
+      await enviar(p.compradorId, r || textoBoasVindas());
     }
     return;
   }
@@ -289,7 +295,6 @@ export async function interpretarEResponder(pedidoId: number, opcoes: { lida?: L
   if (i.ehPedido && !i.setor && !p.setor && !i.faltando.some((f) => /setor/i.test(f))) {
     i.faltando = ["Para qual setor é este pedido?", ...i.faltando];
   }
-  const perguntar = i.faltando.length > 0 && p.perguntasFeitas === 0;
   // E6: casa cada item com a base; com uma correspondência, ganha código e especificação técnica.
   const daBase: string[] = [];
   const itens = await definirItens(
@@ -311,6 +316,11 @@ export async function interpretarEResponder(pedidoId: number, opcoes: { lida?: L
     }),
   );
   if (daBase.length) i.suposicoes = [...i.suposicoes, `Da base de itens: ${daBase.join("; ")}`];
+
+  // Q4: atributo obrigatório da categoria que o pedido não diz. Pergunta uma vez, no máximo 3 perguntas no total.
+  const atributos = p.perguntasFeitas === 0 ? atributosPerguntados(itens, i.faltando.length) : [];
+  i.faltando = [...i.faltando, ...atributos.map((a) => a.pergunta)];
+  const perguntar = i.faltando.length > 0 && p.perguntasFeitas === 0;
 
   const alteracoes = {
     destino: i.destino,
@@ -362,7 +372,57 @@ export async function interpretarEResponder(pedidoId: number, opcoes: { lida?: L
   // Q5: pedido de foto ou print com marca vista: pergunta se a marca é exigida.
   const deImagem = /\[(Foto|Print de loja)\]/.test([p.textoOriginal, ...p.correcoes].join("\n"));
   const marcas = deImagem ? perguntasDeMarca(pedidoId, i.itens) : { texto: "", botoes: [] };
-  await enviar(p.compradorId, texto + escolha.texto + marcas.texto, { pedidoId, botoes: [...marcas.botoes, ...escolha.botoes, ...botoesConfirmacao(pedidoId, perguntar)] });
+  const botoesAtributo = botoesDeAtributos(pedidoId, atributos);
+  await enviar(p.compradorId, texto + escolha.texto + marcas.texto, { pedidoId, botoes: [...botoesAtributo, ...marcas.botoes, ...escolha.botoes, ...botoesConfirmacao(pedidoId, perguntar)] });
+}
+
+const MAX_PERGUNTAS = 3;
+type AtributoPerguntado = { ordem: number; chave: string; rotulo: string; pergunta: string; opcoes?: string[] };
+
+/** Q4: o que a categoria exige e o item não diz, até caber em MAX_PERGUNTAS junto com as perguntas que já existem. */
+export function atributosPerguntados(
+  itens: { ordem: number; descricao: string; unidade: string; quantidade: string | number; especificacao: Record<string, string> }[],
+  jaPerguntadas: number,
+): AtributoPerguntado[] {
+  const r: AtributoPerguntado[] = [];
+  for (const it of itens) {
+    // A unidade já é perguntada pelo Interpretador (regraDeUnidade).
+    for (const a of atributosFaltando({ ...it, quantidade: Number(it.quantidade) }).filter((x) => x.chave !== "unidade")) {
+      if (jaPerguntadas + r.length >= MAX_PERGUNTAS) return r;
+      r.push({ ordem: it.ordem, chave: a.chave, rotulo: a.rotulo, pergunta: `${it.descricao}: ${a.pergunta}`, ...(a.opcoes ? { opcoes: a.opcoes } : {}) });
+    }
+  }
+  return r;
+}
+
+/** Botões das respostas conhecidas ("1: Pó ABC"); sem opções, a pergunta fica só em texto. Máximo de 6 botões. */
+function botoesDeAtributos(pedidoId: number, atributos: AtributoPerguntado[]): Botao[] {
+  const botoes: Botao[] = [];
+  for (const a of atributos) {
+    a.opcoes?.forEach((o, n) => {
+      if (botoes.length < 6) botoes.push({ rotulo: `${a.ordem}: ${o}`.slice(0, 40), dado: `pedido:${pedidoId}:attr:${a.ordem}:${a.chave}:${n}` });
+    });
+  }
+  return botoes;
+}
+
+/** Q4: resposta por botão. Entra na especificação do item e vira correção, para valer se o pedido for relido. */
+async function escolherAtributo(pedidoId: number, ordem: number, chave: string, indice: number, compradorId: string) {
+  const [p] = await db.select().from(pedido).where(eq(pedido.id, pedidoId));
+  if (!p || p.compradorId !== compradorId) return;
+  if (p.estado !== "aguardando_confirmacao") {
+    await enviar(compradorId, `O pedido ${pedidoId} não está esperando confirmação.`, { pedidoId });
+    return;
+  }
+  const [it] = await db.select().from(itemPedido).where(and(eq(itemPedido.pedidoId, pedidoId), eq(itemPedido.ordem, ordem)));
+  if (!it) return;
+  const a = atributosFaltando({ descricao: it.descricao, unidade: it.unidade, quantidade: Number(it.quantidade), especificacao: it.especificacao }).find((x) => x.chave === chave);
+  const valor = a?.opcoes?.[indice];
+  if (!a || !valor) return;
+  await db.update(itemPedido).set({ especificacao: { ...it.especificacao, [a.rotulo]: valor } }).where(eq(itemPedido.id, it.id));
+  await db.update(pedido).set({ correcoes: [...p.correcoes, `Item ${ordem}: ${a.rotulo}: ${valor}.`] }).where(eq(pedido.id, pedidoId));
+  await registrar(db, { agente: "Comprador", acao: `Informou ${a.rotulo}: ${valor} no item ${ordem}.`, motivo: "Resposta à pergunta do atributo obrigatório da categoria.", pedidoId, itemPedidoId: it.id });
+  await mostrarConfirmacao(pedidoId);
 }
 
 /** Q5: "Cotar só a marca X ou aceita similar?", em dois botões por item. */
@@ -711,7 +771,7 @@ async function novaMensagem(m: {
     return;
   }
   if (!i.itens.length && !lida.d.controlados.length) {
-    await enviar(m.contatoId, TEXTO_BOAS_VINDAS);
+    await enviar(m.contatoId, textoBoasVindas());
     return;
   }
   await abrirEInterpretar({ ...m, lida: i.classe === "ambiguo" ? comoPedido(lida) : lida });
@@ -827,6 +887,11 @@ export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: Me
       await vincularMensagem(mensagemId, { pedidoId: Number(marca[1]) });
       return escolherMarca(Number(marca[1]), Number(marca[2]), marca[3] as "so" | "similar", contato.id);
     }
+    const attr = /^pedido:(\d+):attr:(\d+):([a-z_]+):(\d+)$/.exec(entrada.botao);
+    if (attr) {
+      await vincularMensagem(mensagemId, { pedidoId: Number(attr[1]) });
+      return escolherAtributo(Number(attr[1]), Number(attr[2]), attr[3]!, Number(attr[4]), contato.id);
+    }
     const ref = /^(pedido|item):(\d+):/.exec(entrada.botao);
     if (ref) await vincularMensagem(mensagemId, ref[1] === "pedido" ? { pedidoId: Number(ref[2]) } : { itemPedidoId: Number(ref[2]) });
     if (await aoBotaoDoComprador(contato, entrada.botao)) return;
@@ -845,7 +910,7 @@ export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: Me
       await db.update(tContato).set({ avisoPrivacidadeEm: new Date() }).where(eq(tContato.id, contato.id));
       await enviar(contato.id, AVISO_PRIVACIDADE);
     }
-    await enviar(contato.id, TEXTO_BOAS_VINDAS);
+    await enviar(contato.id, textoBoasVindas());
     return;
   }
   // R1b: áudio, foto, print ou PDF viram texto de pedido.
@@ -901,7 +966,7 @@ export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: Me
   // Pedido velho (fora da janela) continua aberto, mas não captura mensagem nova como correção.
   const pendente = achado && (!achado.vencido || CONFIRMACAO.test(texto)) ? achado : undefined;
   if (!pendente && SAUDACAO.test(texto)) {
-    await enviar(contato.id, TEXTO_BOAS_VINDAS);
+    await enviar(contato.id, textoBoasVindas());
     return;
   }
   if (pendente?.estado === "aguardando_confirmacao" && CONFIRMACAO.test(texto)) {
