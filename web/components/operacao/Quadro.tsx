@@ -70,7 +70,7 @@ function Cartao({ c, extra }: { c: CartaoSerial; extra: ExtraDoItem | undefined 
           <h3 className={s.cartaoTitulo}>
             {quantidade(c.quantidade, c.unidade)} de {c.descricao}
           </h3>
-          <p className={s.dono}>{c.dono ?? "Sem dono"}</p>
+          <p className={s.dono}>{c.dono ?? "Sem responsável"}</p>
           <UrgenciaDasEtiquetas lista={c.etiquetas} />
         </div>
 
