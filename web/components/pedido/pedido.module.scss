@@ -529,3 +529,37 @@ a.etapa:focus {
   gap: spacing.$spacing-03;
   margin-block-start: spacing.$spacing-03;
 }
+
+// Liria: os consultados da Busca em cards, um embaixo do outro; a situação à direita.
+.cardsConsultados {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cardConsultado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: spacing.$spacing-05;
+  padding: spacing.$spacing-04 spacing.$spacing-05;
+  border: 1px solid theme.$border-subtle-01;
+  background: theme.$layer-01;
+}
+
+.cardConsultadoQuem,
+.cardConsultadoSituacao {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-02;
+  min-inline-size: 0;
+}
+
+.cardConsultadoSituacao {
+  align-items: flex-end;
+  text-align: end;
+}

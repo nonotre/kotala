@@ -1,5 +1,5 @@
-// Compra › Cotando › Busca: quem a busca achou e recebeu a cotação, em todas as rodadas, e o
-// preço público coletado na internet, que serve só de referência.
+// Compra › Cotando › Busca: quem foi consultado em cada rodada (cards, com a resposta e os horários)
+// e o preço público coletado na internet, que serve só de referência.
 
 import { Column } from "@carbon/react";
 import { Bloco } from "@/components/Bloco";
@@ -9,47 +9,59 @@ import { GradePagina } from "@/components/Pagina";
 import { Tabela } from "@/components/Tabela";
 import type { DadosPedido, ItemDoPedido } from "@/lib/dados-pedido";
 import { brl, dataHora, dias } from "@/lib/formato";
-import { Fornecedor, IndiceItens, SecaoItem } from "./Item";
-import { Status } from "./Status";
+import Link from "next/link";
+import { chatDoFornecedor, Fornecedor, IndiceItens, SecaoItem } from "./Item";
+import { Status, StatusCotacao } from "./Status";
 import { hrefAba } from "./textos";
 import s from "./pedido.module.scss";
 
 const ehLink = (t: string | null) => !!t && /^https?:\/\//.test(t);
 
-/** Uma linha por fornecedor, com as rodadas em que foi consultado. */
-function QuemRecebeu({ i }: { i: ItemDoPedido }) {
-  const porFornecedor = new Map<string, { c: ItemDoPedido["cotacoesTodas"][number]; rodadas: number[] }>();
-  for (const c of i.cotacoesTodas) {
-    const atual = porFornecedor.get(c.cotacao.fornecedorId);
-    if (atual) atual.rodadas.push(c.cotacao.rodada);
-    else porFornecedor.set(c.cotacao.fornecedorId, { c, rodadas: [c.cotacao.rodada] });
-  }
-  const linhas = [...porFornecedor.values()];
-  if (!linhas.length) return null;
+/**
+ * Liria (interface.md): quem foi consultado, em cards um embaixo do outro, separados por rodada
+ * ("Consultados na rodada 2"). Cada card: nome, região, pedidos confirmados com ele; à direita,
+ * se respondeu e os horários de envio e de resposta. Quem ainda não respondeu pode receber uma ligação.
+ */
+function Consultados({ d, i }: { d: DadosPedido; i: ItemDoPedido }) {
+  if (!i.cotacoesTodas.length) return null;
+  const rodadas = [...new Set(i.cotacoesTodas.map((c) => c.cotacao.rodada))].sort((a, b) => b - a);
   return (
-    <Bloco titulo="Quem recebeu a solicitação de proposta" descricao={`${linhas.length === 1 ? "1 fornecedor" : `${linhas.length} fornecedores`} encontrados para este item.`}>
-      <Tabela
-        rotulo={`Fornecedores do item ${i.item.ordem}`}
-        vazio="Ninguém recebeu a solicitação de proposta."
-        colunas={["Fornecedor", "Verificação", "Região", "Fonte", "Rodadas"]}
-        linhas={linhas.map(({ c, rodadas }) => [
-          <Fornecedor key="f" nome={c.nome} simulado={c.origem === "simulado"} />,
-          <span key="v" className={s.marcas}>
-            {c.verificado ? <Status tipo="succeeded" rotulo="Verificado" /> : <Status tipo="not-started" rotulo="Não verificado" />}
-            {c.homologado ? <Status tipo="succeeded" rotulo="Homologado" /> : null}
-          </span>,
-          c.regiao ?? "—",
-          ehLink(c.fonte) ? (
-            <LinkExterno key="l" href={c.fonte!}>
-              Fonte
-            </LinkExterno>
-          ) : (
-            (c.fonte ?? "—")
-          ),
-          rodadas.join(", "),
-        ])}
-      />
-    </Bloco>
+    <>
+      {rodadas.map((r) => {
+        const daRodada = i.cotacoesTodas.filter((c) => c.cotacao.rodada === r);
+        return (
+          <Bloco key={r} titulo={`Consultados na rodada ${r}`} descricao={`${daRodada.length === 1 ? "1 fornecedor" : `${daRodada.length} fornecedores`}.`}>
+            <ul className={s.cardsConsultados}>
+              {daRodada.map(({ cotacao: ct, nome, origem, regiao, verificado, homologado }) => {
+                const confirmados = d.pedidosConfirmados[ct.fornecedorId] ?? 0;
+                const podeLigar = r === i.item.rodada && i.item.estado === "cotando" && ct.situacao === "aguardando";
+                return (
+                  <li key={ct.id} className={s.cardConsultado}>
+                    <div className={s.cardConsultadoQuem}>
+                      <Fornecedor nome={nome} simulado={origem === "simulado"} chat={r === i.item.rodada ? chatDoFornecedor(d, i, ct.fornecedorId) : null} />
+                      <span className={s.ajudaCelula}>{regiao ?? "Endereço não informado"}</span>
+                      <span className={s.ajudaCelula}>
+                        {confirmados === 0 ? "Nenhum pedido confirmado com ele" : confirmados === 1 ? "1 pedido confirmado" : `${confirmados} pedidos confirmados`}
+                      </span>
+                      <span className={s.marcas}>
+                        {verificado ? <Status tipo="succeeded" rotulo="Verificado" /> : null}
+                        {homologado ? <Status tipo="succeeded" rotulo="Homologado" /> : null}
+                      </span>
+                    </div>
+                    <div className={s.cardConsultadoSituacao}>
+                      <StatusCotacao situacao={ct.situacao} />
+                      <span className={s.ajudaCelula}>Enviada: {ct.enviadaEm ? dataHora(ct.enviadaEm) : "—"}</span>
+                      <span className={s.ajudaCelula}>Respondeu: {ct.respondeuEm ? dataHora(ct.respondeuEm) : "—"}</span>
+                      {podeLigar ? <Link href={`/voz/${ct.id}`}>Ligar por voz</Link> : null}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </Bloco>
+        );
+      })}
+    </>
   );
 }
 
@@ -104,7 +116,7 @@ export function AbaBusca({ d }: { d: DadosPedido }) {
           <SecaoItem i={i}>
             {i.cotacoesTodas.length || i.referencias.length ? (
               <>
-                <QuemRecebeu i={i} />
+                <Consultados d={d} i={i} />
                 <Referencias i={i} />
               </>
             ) : (

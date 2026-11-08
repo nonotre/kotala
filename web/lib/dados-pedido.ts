@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { cache } from "react";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../../src/nucleo/db/cliente.ts";
-import { cotacao, evento, fornecedor, itemCatalogo, mapaCotacao, oferta } from "../../src/nucleo/db/schema.ts";
+import { cotacao, evento, fornecedor, itemCatalogo, itemPedido, mapaCotacao, oferta } from "../../src/nucleo/db/schema.ts";
 import { colunaDoItem, FINAIS_ITEM } from "../../src/nucleo/orquestrador/estados.ts";
 import { detalhePedido, type Comparacao } from "./dados";
 import { contatosSimulados } from "./dados-simulado";
@@ -116,6 +116,17 @@ export const pedidoCompleto = cache(async (id: number) => {
     : [];
   const fornecedores: Record<string, FornecedorCurto> = Object.fromEntries(nomes.map((f) => [f.id, { id: f.id, nome: f.nome, simulado: f.origem === "simulado" }]));
 
+  // Liria: os cards da Busca mostram quantos pedidos já foram confirmados com cada fornecedor consultado.
+  const idsConsultados = [...new Set(cotacoes.map((c) => c.cotacao.fornecedorId))];
+  const confirmadosLinhas = idsConsultados.length
+    ? await db
+        .select({ fornecedorId: itemPedido.fornecedorEscolhidoId, n: sql<number>`count(*)::int` })
+        .from(itemPedido)
+        .where(and(inArray(itemPedido.fornecedorEscolhidoId, idsConsultados), inArray(itemPedido.estado, ["pedido_enviado", "confirmado"])))
+        .groupBy(itemPedido.fornecedorEscolhidoId)
+    : [];
+  const pedidosConfirmados: Record<string, number> = Object.fromEntries(confirmadosLinhas.map((l) => [l.fornecedorId!, l.n]));
+
   // T8: o chat simulado de cada fornecedor simulado do pedido, para o botão "Ser o fornecedor" nas abas.
   const idsSimulados = new Set<string>();
   for (const c of cotacoes) if (c.origem === "simulado") idsSimulados.add(c.cotacao.fornecedorId);
@@ -186,6 +197,8 @@ export const pedidoCompleto = cache(async (id: number) => {
     canceladoEm,
     /** T8: por id do fornecedor simulado, o `contato.id` do chat dele em /telegram-simulado. */
     chatsSimulados,
+    /** Por id de fornecedor consultado: pedidos confirmados com ele (cards da Busca). */
+    pedidosConfirmados,
   };
 });
 

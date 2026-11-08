@@ -1,5 +1,5 @@
-// Compra › Cotando › Cotações: quem foi consultado na rodada, a situação de cada um, a ligação
-// por voz para quem não respondeu e as propostas como chegaram.
+// Compra › Cotando › Propostas: as propostas como chegaram. Quem foi consultado (e a ligação por voz
+// para quem não respondeu) fica na Busca, em cards por rodada.
 
 import { Column, InlineNotification } from "@carbon/react";
 import Link from "next/link";
@@ -16,45 +16,12 @@ import { StatusCotacao } from "./Status";
 import { FORMATO_OFERTA, hrefAba } from "./textos";
 import s from "./pedido.module.scss";
 
-function Consultados({ d, i }: { d: DadosPedido; i: ItemDoPedido }) {
-  const { item, cotacoes } = i;
-  if (!cotacoes.length) return null;
-  const respostas = cotacoes.filter((c) => c.cotacao.situacao === "respondeu").length;
-  const prazo = item.prazoRespostasEm && item.estado === "cotando" ? ` Respostas até ${hora(item.prazoRespostasEm)}.` : "";
-  return (
-    <Bloco
-      titulo={item.rodada > 1 ? `Consultados na rodada ${item.rodada}` : "Fornecedores consultados"}
-      descricao={`${respostas} de ${cotacoes.length} ${cotacoes.length === 1 ? "respondeu" : "responderam"}.${prazo}${item.rodada > 1 ? " Quem não foi consultado nesta rodada mantém a proposta anterior no mapa." : ""}`}
-    >
-      <Tabela
-        rotulo={`Fornecedores consultados no item ${item.ordem}`}
-        vazio="Ninguém consultado nesta rodada."
-        colunas={["Fornecedor", "Situação", "Enviada", "Respondeu", ""]}
-        linhas={cotacoes.map(({ cotacao: ct, nome, origem }) => [
-          <Fornecedor key="f" nome={nome} simulado={origem === "simulado"} chat={chatDoFornecedor(d, i, ct.fornecedorId)} />,
-          <StatusCotacao key="s" situacao={ct.situacao} />,
-          ct.enviadaEm ? dataHora(ct.enviadaEm) : "—",
-          ct.respondeuEm ? dataHora(ct.respondeuEm) : "—",
-          // Quem não respondeu ao texto pode receber uma ligação por voz.
-          item.estado === "cotando" && ct.situacao === "aguardando" ? (
-            <Link key="v" href={`/voz/${ct.id}`}>
-              Ligar por voz
-            </Link>
-          ) : (
-            ""
-          ),
-        ])}
-      />
-    </Bloco>
-  );
-}
-
 function Propostas({ d, i }: { d: DadosPedido; i: ItemDoPedido }) {
   if (!i.ofertas.length) return null;
   const ofertas = [...i.ofertas].sort((a, b) => b.rodada - a.rodada);
   const variasRodadas = new Set(ofertas.map((o) => o.rodada)).size > 1;
   return (
-    <Bloco titulo="Propostas recebidas" descricao="Como cada fornecedor respondeu, antes das contas do mapa.">
+    <Bloco titulo="Propostas recebidas">
       <Tabela
         rotulo={`Propostas do item ${i.item.ordem}`}
         vazio="Nenhuma proposta ainda."
@@ -90,22 +57,6 @@ function Propostas({ d, i }: { d: DadosPedido; i: ItemDoPedido }) {
   );
 }
 
-function RodadasAnteriores({ i }: { i: ItemDoPedido }) {
-  const antigas = i.cotacoesTodas.filter((c) => c.cotacao.rodada < i.item.rodada);
-  if (!antigas.length) return null;
-  return (
-    <Bloco titulo="Rodadas anteriores">
-      <Tabela
-        rotulo={`Rodadas anteriores do item ${i.item.ordem}`}
-        tamanho="sm"
-        vazio="Sem rodada anterior."
-        colunas={["Rodada", "Fornecedor", "Situação"]}
-        linhas={antigas.map((c) => [c.cotacao.rodada, <Fornecedor key="f" nome={c.nome} simulado={c.origem === "simulado"} />, <StatusCotacao key="s" situacao={c.cotacao.situacao} />])}
-      />
-    </Bloco>
-  );
-}
-
 function vazioDoItem(d: DadosPedido, i: ItemDoPedido): string {
   if (["interpretando", "aguardando_confirmacao"].includes(d.pedido.estado)) return "As solicitações de proposta saem depois que você confirmar a cotação.";
   if (i.item.estado === "na_fila") return "A solicitação de proposta deste item ainda não saiu: ele está na fila.";
@@ -124,7 +75,8 @@ export function AbaCotacoes({ d }: { d: DadosPedido }) {
         const duvida = i.item.duvidaPendente;
         return (
           <Column key={i.item.id} sm={4} md={8} lg={16}>
-            <SecaoItem i={i}>
+            {/* Sem o cabeçalho do item ("1. 20 sacos… Aguardando sua decisão, Rodada 2"), a pedido da Liria; com vários itens, só o nome, para separar. */}
+            <SecaoItem i={i} mostrarTitulo={d.itens.length > 1} soNome>
               {duvida ? (
                 <InlineNotification kind="info" lowContrast hideCloseButton title={`${duvida.fornecedor} perguntou:`} subtitle={`${duvida.pergunta} Só você sabe responder: a próxima mensagem que você mandar ao assistente vai para ele.`} statusIconDescription="Informação" />
               ) : null}
@@ -151,12 +103,9 @@ export function AbaCotacoes({ d }: { d: DadosPedido }) {
                   {i.mapa?.comparacao.cortadas.length ? <Link href={hrefAba(d.pedido.id, "comparacao", i.item.id)}>Ver por que cada proposta saiu</Link> : null}
                 </InlineNotification>
               ) : null}
-              {i.cotacoesTodas.length || i.ofertas.length ? (
-                <>
-                  <Consultados d={d} i={i} />
-                  <Propostas d={d} i={i} />
-                  <RodadasAnteriores i={i} />
-                </>
+              {/* Liria (interface.md): aqui ficam só as propostas recebidas; quem foi consultado, por rodada, mora na Busca. */}
+              {i.ofertas.length ? (
+                <Propostas d={d} i={i} />
               ) : (
                 <EstadoVazio compacto titulo={vazioDoItem(d, i)} />
               )}

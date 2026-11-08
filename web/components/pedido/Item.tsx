@@ -57,13 +57,13 @@ export function ContextoItem({ item }: { item: ItemDoPedido["item"] }) {
 }
 
 /** Uma seção por item, com a âncora que os avisos usam. */
-export function SecaoItem({ i, children, mostrarTitulo = true }: { i: ItemDoPedido; children: ReactNode; mostrarTitulo?: boolean }) {
+export function SecaoItem({ i, children, mostrarTitulo = true, soNome = false }: { i: ItemDoPedido; children: ReactNode; mostrarTitulo?: boolean; soNome?: boolean }) {
   return (
     <section id={`item-${i.item.id}`} className={s.item} aria-label={tituloItem(i.item)}>
       {mostrarTitulo ? (
         <header className={s.itemTopo}>
-          <h2 className={s.itemTitulo}>{tituloItem(i.item)}</h2>
-          <ContextoItem item={i.item} />
+          <h2 className={s.itemTitulo}>{soNome ? i.item.descricao : tituloItem(i.item)}</h2>
+          {soNome ? null : <ContextoItem item={i.item} />}
         </header>
       ) : null}
       {children}
