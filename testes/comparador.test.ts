@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { comparar, mediana, type ItemComparado, type OfertaComparavel } from "../src/agentes/comparador/calculo.ts";
+import { comparar, mediana, mudancasDoMapa, negociacaoDaLinha, type ItemComparado, type OfertaComparavel } from "../src/agentes/comparador/calculo.ts";
 
 const item: ItemComparado = { quantidade: 40, aceitaSimilar: false, prazoMaxDias: 5, modoEntrega: "entrega", urgencia: "normal" };
 
@@ -86,4 +86,102 @@ test("urgência dobra o peso do prazo e o mais rápido pode ganhar sendo mais ca
 test("pagamento antecipado com fornecedor novo gera alerta", () => {
   const c = comparar(item, [oferta({ prazoPagamentoDias: 0, pagamento: "PIX antecipado" })]);
   assert.ok(c.validas[0]!.alertas.includes("Pagamento antecipado com fornecedor novo"));
+});
+
+// ---------- Pedidos da Frente 4: guardrails, Q1, Q7, Q8 e negociação ----------
+
+test("S: sem nota e item irregular saem do ranking; propina e pagamento por fora vão para Atenção", () => {
+  const c = comparar(item, [
+    oferta({ alertasConduta: ["sem_nota"] }),
+    oferta({ alertasConduta: ["item_irregular"] }),
+    oferta({ alertasConduta: ["propina", "pagamento_por_fora"] }),
+  ]);
+  assert.equal(c.validas.length, 1);
+  assert.deepEqual(c.validas[0]!.alertas.slice(0, 2), ["Ofereceu comissão ou vantagem ao comprador", "Pediu pagamento por fora (conta pessoal, link ou cripto)"]);
+  const motivos = c.cortadas.flatMap((l) => l.motivos);
+  assert.ok(motivos.includes("Preço sem nota fiscal"));
+  assert.ok(motivos.some((m) => m.startsWith("Item irregular")));
+  assert.ok(c.cortadas.every((l) => !l.aConfirmar));
+});
+
+test("Q1: preço ambíguo fica 'a confirmar', com o número lido, e não ganha", () => {
+  const c = comparar(item, [oferta({ precoUnitario: null, aConfirmar: ["preco"], precoLido: 300 }), oferta({ precoUnitario: 45 })]);
+  assert.equal(c.vencedora!.oferta.precoUnitario, 45);
+  const pendente = c.cortadas[0]!;
+  assert.equal(pendente.aConfirmar, true);
+  assert.deepEqual(pendente.motivos, ["Preço a confirmar (R$\u00a0300,00: por unidade ou total?)"]);
+});
+
+test("Q2: item a confirmar e divergências viram alerta, sem corte", () => {
+  const c = comparar(item, [oferta({ aConfirmar: ["item"], divergencias: ["embalagem 25 kg"] })]);
+  assert.equal(c.validas.length, 1);
+  assert.ok(c.validas[0]!.alertas.includes("Item a confirmar com o fornecedor"));
+  assert.ok(c.validas[0]!.alertas.includes("Difere do pedido: embalagem 25 kg"));
+});
+
+test("R8: preço retido conta como 'a confirmar'; outro motivo junto não", () => {
+  const c = comparar(item, [oferta({ precoUnitario: 40 }), oferta({ precoUnitario: 41 }), oferta({ precoUnitario: 42 }), oferta({ precoUnitario: 25 }), oferta({ precoUnitario: 20, prazoDias: 10 })]);
+  const retida = c.cortadas.find((l) => l.oferta.precoUnitario === 25)!;
+  const tardia = c.cortadas.find((l) => l.oferta.precoUnitario === 20)!;
+  assert.equal(retida.aConfirmar, true);
+  assert.equal(tardia.aConfirmar, false);
+});
+
+test("Q7: a referência do portão vem só de fornecedores físicos; a internet só alerta", () => {
+  // Um físico barato e a referência pública alta: antes ficava retido, agora só alerta.
+  const sozinho = comparar(item, [oferta({ precoUnitario: 20 })], 40);
+  assert.equal(sozinho.validas.length, 1);
+  assert.equal(sozinho.referenciaUnitaria, 0);
+  assert.equal(sozinho.referenciaOnline, 40);
+  assert.ok(sozinho.validas[0]!.alertas.includes("Preço 50% abaixo da referência online"));
+  // Lojas online baratas não puxam a mediana para baixo nem são retidas.
+  const c = comparar(item, [
+    oferta({ precoUnitario: 40 }),
+    oferta({ precoUnitario: 42 }),
+    oferta({ precoUnitario: 20, online: true }),
+    oferta({ precoUnitario: 21, online: true }),
+  ]);
+  assert.equal(c.referenciaUnitaria, 41);
+  assert.equal(c.validas.length, 4);
+  const caro = comparar(item, [oferta({ precoUnitario: 60 })], 40);
+  assert.ok(caro.validas[0]!.alertas.includes("Preço 50% acima da referência online"));
+});
+
+test("Q8: loja online sem frete fica 'a calcular no site', com estimativa só para comparar", () => {
+  const c = comparar(item, [oferta({ frete: 40 }), oferta({ frete: null, online: true })]);
+  const loja = c.validas.find((l) => l.oferta.online)!;
+  assert.equal(loja.origemFrete, "a_calcular");
+  assert.equal(loja.frete, 40);
+  assert.ok(loja.alertas.includes("Frete a calcular no site: a estimativa serve só para comparar"));
+  assert.ok(!loja.alertas.includes("Frete não informado: valor estimado"));
+});
+
+test("I1: negociação no mapa (desconto, manteve, não respondeu, subiu, condicional)", () => {
+  const o = oferta({});
+  assert.equal(negociacaoDaLinha({ ...o, produtoAnterior: 1600 }, 1520).texto, "Desconto obtido: R$\u00a080,00 (de R$\u00a01.600,00 para R$\u00a01.520,00)");
+  assert.equal(negociacaoDaLinha({ ...o, produtoAnterior: 1600, negociacao: { resultado: "manteve" } }, 1600).texto, "Pedi desconto: manteve o preço");
+  assert.equal(negociacaoDaLinha({ ...o, negociacao: { resultado: "sem_resposta" } }, 1600).texto, "Pedi desconto: não respondeu");
+  assert.equal(negociacaoDaLinha({ ...o, negociacao: { resultado: null } }, 1600).texto, "Pedi desconto: não respondeu");
+  const subiu = negociacaoDaLinha({ ...o, produtoAnterior: 1600, negociacao: { resultado: "subiu" } }, 1700);
+  assert.equal(subiu.texto, null);
+  assert.deepEqual(subiu.alertas, ["Subiu o preço depois do pedido de desconto (de R$\u00a01.600,00 para R$\u00a01.700,00)"]);
+  const cond = negociacaoDaLinha({ ...o, produtoAnterior: 1600, negociacao: { resultado: "condicional", condicao: "3% à vista" } }, 1600);
+  assert.equal(cond.texto, "Pedi desconto: só com condição");
+  assert.deepEqual(cond.alertas, ['Desconto condicionado, não aplicado ao total: "3% à vista"']);
+  assert.equal(negociacaoDaLinha({ ...o, produtoAnterior: 1600, negociacao: { resultado: "desconto", descontoFrete: 10 } }, 1600).texto, "Desconto obtido: frete R$\u00a010,00 mais barato");
+  // Sem negociação e sem preço anterior: nada.
+  assert.deepEqual(negociacaoDaLinha(o, 1600), { texto: null, alertas: [] });
+  // A linha do mapa leva o texto e os alertas.
+  const c = comparar(item, [oferta({ produtoAnterior: 1700, negociacao: { resultado: "desconto" } })]);
+  assert.match(c.validas[0]!.negociacao!, /^Desconto obtido/);
+});
+
+test("Q6: o que mudou entre o mapa e o refeito", () => {
+  const a = oferta({ fornecedorNome: "A", precoUnitario: 40 });
+  const b = oferta({ fornecedorNome: "B", precoUnitario: 39 });
+  const cc = oferta({ fornecedorNome: "C", precoUnitario: 41 });
+  const antes = comparar(item, [a, b]);
+  const depois = comparar(item, [a, cc]);
+  assert.deepEqual(mudancasDoMapa(antes, depois), ["C entrou na comparação", "B saiu", "agora na frente: A"]);
+  assert.deepEqual(mudancasDoMapa(antes, antes), []);
 });

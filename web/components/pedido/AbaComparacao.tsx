@@ -24,11 +24,20 @@ const CRITERIOS: Criterio[] = ["preco", "prazo", "confianca", "aderencia", "paga
 
 type Verificacao = { nivel?: string; pontos?: number } | null | undefined;
 
-const textoFrete = (l: Linha) => (l.origemFrete === "nao_se_aplica" ? "Retirada" : `${brl(l.frete)} (${l.origemFrete})`);
+function textoFrete(l: Linha) {
+  if (l.origemFrete === "nao_se_aplica") return "Retirada";
+  // Q8: loja online sem frete para o CEP; a estimativa não é frete informado.
+  if (l.origemFrete === "a_calcular") return `A calcular no site (estimado ${brl(l.frete)} só para comparar)`;
+  return `${brl(l.frete)} (${l.origemFrete})`;
+}
 
 const confianca = (l: Linha, v: Verificacao) => (l.oferta.simulado ? "simulado" : v?.nivel ? `${v.nivel} (${v.pontos})` : "—");
 
-const negociado = (l: Linha) => !!l.oferta.produtoAnterior && l.produto !== null && l.oferta.produtoAnterior - l.produto >= 0.01;
+/** I1/X3: texto da negociação calculado no mapa; mapas antigos só têm o produto anterior. */
+function negociacao(l: Linha): string | null {
+  if (l.negociacao !== undefined) return l.negociacao;
+  return l.oferta.produtoAnterior && l.produto !== null && l.oferta.produtoAnterior - l.produto >= 0.01 ? `Negociado: produto era ${brl(l.oferta.produtoAnterior)}` : null;
+}
 
 function Melhor({ texto }: { texto: string }) {
   return (
@@ -50,8 +59,9 @@ function Mapa({ i }: { i: ItemDoPedido }) {
       (l) => (
         <>
           <span className={s.custo}>{brl(l.custo)}</span>
+          {l.origemFrete === "a_calcular" ? <span className={s.ajudaCelula}>Estimado: o frete sai no site</span> : null}
           {comparaveis && c.maisBarata?.oferta.id === l.oferta.id ? <Melhor texto="mais barata" /> : null}
-          {negociado(l) ? <span className={s.ajudaCelula}>Negociado: produto era {brl(l.oferta.produtoAnterior)}</span> : null}
+          {negociacao(l) ? <span className={s.ajudaCelula}>{negociacao(l)}</span> : null}
         </>
       ),
     ],
@@ -142,6 +152,7 @@ function Recomendacao({ d, i }: { d: DadosPedido; i: ItemDoPedido }) {
         </>
       ) : null}
       <p className={s.texto}>{mapa!.recomendacao}</p>
+      {d.pedido.pagamentoPreferido ? <p className={s.ajuda}>Pagamento preferido: {d.pedido.pagamentoPreferido}. A linha Pagamento do mapa mostra a forma que cada fornecedor aceita.</p> : null}
       <p className={s.ajuda}>
         Pesos: preço {c.pesos.preco}, prazo {c.pesos.prazo}, confiança {c.pesos.confianca}, aderência {c.pesos.aderencia}, pagamento {c.pesos.pagamento}
         {c.urgente ? " (prazo em dobro: pedido urgente)" : ""}.
@@ -196,19 +207,56 @@ function DeOndeVemANota({ i }: { i: ItemDoPedido }) {
   );
 }
 
+/** Q1/R8: quem só espera confirmar o preço fica à parte, como "a confirmar", e não ganha. */
+function AConfirmar({ i }: { i: ItemDoPedido }) {
+  const pendentes = i.mapa!.comparacao.cortadas.filter((l) => l.aConfirmar);
+  if (!pendentes.length) return null;
+  return (
+    <Bloco titulo="A confirmar com o fornecedor" descricao="Fora do ranking até o fornecedor responder; com a resposta, o mapa é atualizado.">
+      <Tabela
+        rotulo={`Propostas a confirmar do item ${i.item.ordem}`}
+        vazio="Nenhuma proposta a confirmar."
+        colunas={["Fornecedor", "Custo", "O que falta"]}
+        linhas={pendentes.map((l) => [<Fornecedor key="f" nome={l.oferta.fornecedorNome} simulado={l.oferta.simulado} online={l.oferta.online} />, brl(l.custo), l.motivos.join("; ")])}
+      />
+    </Bloco>
+  );
+}
+
 function ForaDaComparacao({ i }: { i: ItemDoPedido }) {
-  const c = i.mapa!.comparacao;
-  if (!c.cortadas.length) return null;
+  const fora = i.mapa!.comparacao.cortadas.filter((l) => !l.aConfirmar);
+  if (!fora.length) return null;
   return (
     <Bloco titulo="Fora da comparação" descricao="Propostas que não passaram nas regras do mapa, com o motivo.">
       <Tabela
         rotulo={`Propostas fora do mapa do item ${i.item.ordem}`}
         vazio="Nenhuma proposta cortada."
-        apagadas={c.cortadas.map((_, n) => n)}
+        apagadas={fora.map((_, n) => n)}
         colunas={["Fornecedor", "Custo", "Motivo"]}
-        linhas={c.cortadas.map((l) => [<Fornecedor key="f" nome={l.oferta.fornecedorNome} simulado={l.oferta.simulado} online={l.oferta.online} />, brl(l.custo), l.motivos.join("; ")])}
+        linhas={fora.map((l) => [<Fornecedor key="f" nome={l.oferta.fornecedorNome} simulado={l.oferta.simulado} online={l.oferta.online} />, brl(l.custo), l.motivos.join("; ")])}
       />
     </Bloco>
+  );
+}
+
+/** Contexto do mapa: refeito na rodada, busca automática e referência online (Q6, I3, Q7). */
+function SobreOMapa({ i }: { i: ItemDoPedido }) {
+  const c = i.mapa!.comparacao;
+  const b = c.buscaAutomatica;
+  const linhas = [
+    i.versoesDoMapa > 1 ? `Mapa atualizado: versão ${i.versoesDoMapa} desta rodada (refeito quando um preço é confirmado ou um fornecedor sai).` : null,
+    b ? `Busca automática: consultei mais ${b.fornecedores || "alguns"} ${b.fornecedores === 1 ? "fornecedor" : "fornecedores"} em ${b.levas} ${b.levas === 1 ? "leva" : "levas"}, porque faltavam propostas válidas.` : null,
+    c.referenciaOnline ? `Referência online: ${brl(c.referenciaOnline)} por ${i.item.unidade}. Só gera alerta; o corte por preço baixo usa os fornecedores físicos.` : null,
+  ].filter((x): x is string => !!x);
+  if (!linhas.length) return null;
+  return (
+    <>
+      {linhas.map((t) => (
+        <p key={t} className={s.ajuda}>
+          {t}
+        </p>
+      ))}
+    </>
   );
 }
 
@@ -235,6 +283,7 @@ export function AbaComparacao({ d }: { d: DadosPedido }) {
               {c ? (
                 <div className={s.divisao}>
                   <Bloco titulo={`Mapa de cotação${i.mapa!.rodada > 1 ? `, rodada ${i.mapa!.rodada}` : ""}: ${c.validas.length} ${c.validas.length === 1 ? "proposta válida" : "propostas válidas"}`}>
+                    <SobreOMapa i={i} />
                     {c.alertasGerais.length ? <InlineNotification kind="warning" lowContrast hideCloseButton title="Atenção:" subtitle={c.alertasGerais.join("; ")} statusIconDescription="Aviso" /> : null}
                     {c.validas.length ? <Mapa i={i} /> : <EstadoVazio compacto titulo="Nenhuma proposta válida neste mapa." />}
                   </Bloco>
@@ -243,6 +292,9 @@ export function AbaComparacao({ d }: { d: DadosPedido }) {
                   </div>
                   <div className={s.inteira}>
                     <DeOndeVemANota i={i} />
+                  </div>
+                  <div className={s.inteira}>
+                    <AConfirmar i={i} />
                   </div>
                   <div className={s.inteira}>
                     <ForaDaComparacao i={i} />

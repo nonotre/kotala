@@ -199,6 +199,19 @@ test("desconto condicionado, 'vou ver' e 'no limite' são lidos em código", () 
   assert.ok(!n.mantemFirme("Não consigo agora"));
 });
 
+test("desconto condicionado: o campo do Extrator manda e a regex é a reserva", () => {
+  const sem = { descontoPercentual: null, descontoValor: null };
+  // O campo pega condição que a regex não conhece ("pagando na entrega").
+  assert.equal(n.condicaoDoDesconto({ descontoPercentual: 4, descontoValor: null, descontoCondicao: "pagando na entrega" }, "Dou 4% pagando na entrega"), "4% pagando na entrega");
+  assert.match(n.condicaoDoDesconto({ descontoPercentual: null, descontoValor: 20, descontoCondicao: " no Pix " }, "tiro 20 no pix") ?? "", /^R\$\s20,00 no Pix$/);
+  // Campo vazio: a regex de antes continua valendo.
+  assert.match(n.condicaoDoDesconto({ descontoPercentual: 3, descontoValor: null, descontoCondicao: null }, "Faço 3% se for à vista.") ?? "", /3%.*à vista/);
+  assert.match(n.condicaoDoDesconto({ descontoPercentual: 3, descontoValor: null }, "Faço 3% se for à vista.") ?? "", /3%.*à vista/);
+  // Sem desconto, ou desconto sem condição: null.
+  assert.equal(n.condicaoDoDesconto({ ...sem, descontoCondicao: "à vista" }, "à vista"), null);
+  assert.equal(n.condicaoDoDesconto({ descontoPercentual: 5, descontoValor: null, descontoCondicao: null }, "Consigo 5% de desconto."), null);
+});
+
 test("desconto aplicado em código: percentual, valor no total e por unidade", () => {
   assert.deepEqual(n.aplicarDesconto({ precoUnitario: 40, totalProduto: null }, { descontoPercentual: 5, descontoValor: null }, 40), { precoUnitario: 38, totalProduto: 1520, descricao: "5% sobre o preço" });
   const v = n.aplicarDesconto({ precoUnitario: 40, totalProduto: null }, { descontoPercentual: null, descontoValor: 20 }, 40)!;

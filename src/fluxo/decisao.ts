@@ -3,14 +3,14 @@
 // avisados e a confirmação do fornecedor fecha o item. A IA não fecha compra.
 
 import { acharRecompra } from "../agentes/memoria/index.ts";
-import { MAX_RODADAS, planejarNegociacao } from "../agentes/negociador/index.ts";
+import { MAX_RODADAS, planejarNegociacao, preferenciaNaoAtendida } from "../agentes/negociador/index.ts";
 import { dias, MOTIVOS_CANCELAMENTO, quantidade, type MotivoCancelamento } from "../texto.ts";
 import { and, eq, ne } from "drizzle-orm";
 import { formatarBRL, ultimoMapa, type Linha } from "../agentes/comparador/index.ts";
 import { contatoAtivo } from "../agentes/cotador/index.ts";
 import { EMPRESA } from "../config.ts";
 import { db } from "../nucleo/db/cliente.ts";
-import { cotacao, fornecedor, historicoCompra, itemPedido, oferta, pedido } from "../nucleo/db/schema.ts";
+import { contato, cotacao, fornecedor, historicoCompra, itemPedido, oferta, pedido, usuario } from "../nucleo/db/schema.ts";
 import { enviar, type Botao, type Contato } from "../nucleo/mensagens/index.ts";
 import {
   aoEntrarItem,
@@ -240,19 +240,7 @@ async function enviarPedidoDeCompra(m: MudancaItem) {
     return;
   }
 
-  const texto = [
-    `Pedido de compra da ${EMPRESA.nome} (CNPJ ${EMPRESA.cnpj}), referente à cotação ${d.item.id}:`,
-    `${quantidade(d.item.quantidade, d.item.unidade)} de ${o.itemOferecido}`,
-    l ? `Total ${formatarBRL(l.custo!)}, como na sua proposta.` : "",
-    o.formato === "historico" && o.precoUnitario ? `Mesmo preço da última compra: ${formatarBRL(Number(o.precoUnitario))} por ${d.item.unidade}${o.frete ? `, frete ${formatarBRL(Number(o.frete))}` : ""}.` : "",
-    d.pedido.modoEntrega === "retirada" ? "Retirada na loja." : `Entrega: ${d.pedido.destino ?? "a combinar"}${d.pedido.janelaRecebimento ? ` (${d.pedido.janelaRecebimento})` : ""}.`,
-    o.prazoDias !== null ? `Prazo: ${dias(o.prazoDias)}.` : "",
-    `Pagamento: ${pagamentoCombinado(o)}.`,
-    d.pedido.entregas ? `Entregas: ${d.pedido.entregas}.` : "",
-    "Pode confirmar o fornecimento?",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  const texto = textoPedidoDeCompra({ item: d.item, pedido: d.pedido, oferta: o, custo: l?.custo ?? null, comprador: await nomeDoComprador(d.pedido) });
   await enviar(ct.id, texto, {
     itemPedidoId: d.item.id,
     tipo: "pedido_compra",
@@ -275,6 +263,48 @@ async function enviarPedidoDeCompra(m: MudancaItem) {
     itemPedidoId: d.item.id,
     tipo: "aviso",
   });
+}
+
+/**
+ * Nome de quem está comprando: o responsável do card (pedido.responsavel_id) ou o usuário
+ * ligado ao contato que pediu. Só o nome da conta: nunca telefone, e-mail ou o nome do Telegram.
+ */
+export async function nomeDoComprador(p: { responsavelId: string | null; compradorId: string }): Promise<string | null> {
+  const id =
+    p.responsavelId ??
+    (await db.select({ usuarioId: contato.usuarioId }).from(contato).where(eq(contato.id, p.compradorId)))[0]?.usuarioId ??
+    null;
+  if (!id) return null;
+  const [u] = await db.select({ nome: usuario.nome }).from(usuario).where(eq(usuario.id, id));
+  return u?.nome.trim() || null;
+}
+
+/** R11: texto do pedido de compra ao vencedor (U1.1 pagamento combinado; U1 preferência; quem compra). */
+export function textoPedidoDeCompra(p: {
+  item: Pick<typeof itemPedido.$inferSelect, "id" | "quantidade" | "unidade">;
+  pedido: Pick<typeof pedido.$inferSelect, "modoEntrega" | "destino" | "janelaRecebimento" | "entregas" | "pagamentoPreferido">;
+  oferta: Pick<typeof oferta.$inferSelect, "itemOferecido" | "formato" | "precoUnitario" | "frete" | "prazoDias" | "pagamento" | "prazoPagamentoDias">;
+  custo: number | null;
+  comprador: string | null;
+}): string {
+  const { item, pedido: ped, oferta: o } = p;
+  const preferido = preferenciaNaoAtendida(ped.pagamentoPreferido, o.pagamento);
+  return [
+    `Pedido de compra da ${EMPRESA.nome} (CNPJ ${EMPRESA.cnpj}), referente à cotação ${item.id}:`,
+    `${quantidade(item.quantidade, item.unidade)} de ${o.itemOferecido}`,
+    p.custo !== null ? `Total ${formatarBRL(p.custo)}, como na sua proposta.` : "",
+    o.formato === "historico" && o.precoUnitario ? `Mesmo preço da última compra: ${formatarBRL(Number(o.precoUnitario))} por ${item.unidade}${o.frete ? `, frete ${formatarBRL(Number(o.frete))}` : ""}.` : "",
+    ped.modoEntrega === "retirada" ? "Retirada na loja." : `Entrega: ${ped.destino ?? "a combinar"}${ped.janelaRecebimento ? ` (${ped.janelaRecebimento})` : ""}.`,
+    o.prazoDias !== null ? `Prazo: ${dias(o.prazoDias)}.` : "",
+    `Pagamento: ${pagamentoCombinado(o)}.`,
+    // A condição combinada vale; a preferência só vai como pedido, sem mudar o total.
+    preferido ? `Se for possível nas mesmas condições, nossa forma de pagamento preferida é ${preferido}.` : "",
+    ped.entregas ? `Entregas: ${ped.entregas}.` : "",
+    p.comprador ? `Comprador responsável: ${p.comprador}.` : "",
+    "Pode confirmar o fornecimento?",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 /** Forma de pagamento combinada, como a proposta disse (U1.1); sem dado, pede para combinar. */

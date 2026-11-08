@@ -7,7 +7,8 @@
 // Passam direto, sem esta fila: encerramento e cancelamento, "não venceu", respostas
 // (dúvida, recebimento da proposta, que já leva o pedido de desconto), lembrete da
 // mesma cotação e pedido de compra. Entram na fila: rodada de negociação do botão,
-// pergunta de categoria (U5) e qualquer pergunta nova.
+// confirmação de preço retido (R8, confirmar-preco.ts), pergunta de categoria (U5) e
+// qualquer pergunta nova.
 
 import { and, desc, eq, gte, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { prazoRespostasMs } from "../../config.ts";

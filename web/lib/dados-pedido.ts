@@ -93,6 +93,8 @@ export const pedidoCompleto = cache(async (id: number) => {
     // Um mapa por rodada: o último de cada uma (o mapa é refeito quando um fornecedor sai ou confirma o preço).
     const porRodada = [...new Map(doItem.map((m) => [m.rodada, m])).values()];
     const escolhida = i.mapa?.comparacao.validas.find((l) => l.oferta.id === i.item.ofertaEscolhidaId) ?? null;
+    // Q6: quantos mapas a rodada atual já teve (mais de um = o mapa foi atualizado).
+    const versoesDoMapa = i.mapa ? doItem.filter((m) => m.rodada === i.mapa!.rodada).length : 0;
     return {
       ...i,
       coluna: colunaDoItem(d.pedido.estado, i.item.estado),
@@ -100,6 +102,7 @@ export const pedidoCompleto = cache(async (id: number) => {
       cotacoesTodas: cotacoes.filter((c) => c.cotacao.itemPedidoId === id),
       ofertas: ofertas.filter((o) => o.itemPedidoId === id),
       mapasPorRodada: porRodada,
+      versoesDoMapa,
       /** A linha do mapa da oferta aprovada, quando ainda está no mapa atual. */
       escolhida,
       escolhido: i.item.fornecedorEscolhidoId ? (fornecedores[i.item.fornecedorEscolhidoId] ?? null) : null,

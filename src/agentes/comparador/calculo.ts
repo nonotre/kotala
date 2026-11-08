@@ -20,6 +20,34 @@ export const LIMITE_RETENCAO = 0.3;
 export const MINIMO_PROPOSTAS_VALIDAS = 3;
 /** R7: sem frete informado nem outros fretes para comparar, estima esta fração do produto. */
 export const FRETE_ESTIMADO_FRACAO = 0.05;
+/** Q7: diferença para a referência online que vira alerta (nunca corte). */
+export const LIMITE_ALERTA_ONLINE = 0.3;
+
+/**
+ * S: alertas do guardrail do fornecedor (`oferta.extraido.alertas`). Os de corte
+ * tiram a proposta do ranking; os de atenção só aparecem no mapa.
+ */
+export const CORTE_CONDUTA: Record<string, string> = {
+  sem_nota: "Preço sem nota fiscal",
+  item_irregular: "Item irregular (réplica, paralelo ou sem procedência)",
+  produto_controlado: "Produto controlado sem autorização",
+};
+export const ATENCAO_CONDUTA: Record<string, string> = {
+  propina: "Ofereceu comissão ou vantagem ao comprador",
+  pagamento_por_fora: "Pediu pagamento por fora (conta pessoal, link ou cripto)",
+  combinacao_preco: "Tentou saber o preço de concorrentes ou combinar preço",
+  pede_dados: "Pediu dados pessoais ou sigilosos",
+  link_suspeito: "Mandou link ou arquivo suspeito",
+};
+
+/** I1: resumo do pedido automático de desconto (`oferta.extraido.negociacao`), só o que o mapa mostra. */
+export type NegociacaoDaOferta = {
+  resultado: "desconto" | "manteve" | "subiu" | "condicional" | "sem_resposta" | null;
+  /** Quanto o frete baixou (positivo) na resposta ao pedido. */
+  descontoFrete?: number;
+  /** Desconto condicionado, como o fornecedor escreveu; não aplicado ao preço. */
+  condicao?: string;
+};
 
 export type OfertaComparavel = {
   id: string;
@@ -49,8 +77,18 @@ export type OfertaComparavel = {
   precoConfirmado: boolean;
   /** Rodada em que esta proposta foi feita. */
   rodada?: number;
-  /** X3: total do produto na proposta anterior do mesmo fornecedor (antes de negociar). */
+  /** X3 e I1: total do produto na proposta mais antiga do mesmo fornecedor (antes de negociar). */
   produtoAnterior?: number | null;
+  /** I1: como ficou o pedido automático de desconto. */
+  negociacao?: NegociacaoDaOferta | null;
+  /** S: alertas do guardrail na mensagem do fornecedor (ids de ALERTAS do Extrator). */
+  alertasConduta?: string[];
+  /** Q2: o que difere do pedido, como o Extrator escreveu. */
+  divergencias?: string[];
+  /** Q1/Q2: o que ainda espera resposta do fornecedor. */
+  aConfirmar?: ("preco" | "item")[];
+  /** Q1: número lido quando o preço ficou a confirmar (as colunas de preço ficam vazias). */
+  precoLido?: number | null;
   /** Proposta montada do anúncio de uma loja online: preço real, prazo e pagamento simulados. */
   online?: boolean;
   /** Link do anúncio, quando online. */
@@ -65,7 +103,8 @@ export type ItemComparado = {
   urgencia: "normal" | "urgente" | "obra_parada";
 };
 
-export type OrigemFrete = "informado" | "estimado" | "nao_se_aplica";
+/** "a_calcular": loja online sem frete para o CEP; a estimativa só serve para comparar (Q8). */
+export type OrigemFrete = "informado" | "estimado" | "a_calcular" | "nao_se_aplica";
 
 export type Portoes = {
   completo: boolean;
@@ -73,6 +112,10 @@ export type Portoes = {
   itemExato: boolean;
   entregaNoLocal: boolean;
   naoRetida: boolean;
+  /** S: sem alerta de corte do guardrail (sem nota, item irregular, controlado). */
+  conduta?: boolean;
+  /** Q1: preço lido sem saber se é unitário ou total. */
+  precoClaro?: boolean;
 };
 
 export type Linha = {
@@ -88,6 +131,10 @@ export type Linha = {
   valida: boolean;
   motivos: string[];
   alertas: string[];
+  /** I1/X3: "Desconto obtido: ...", "Pedi desconto: manteve o preço"... */
+  negociacao?: string | null;
+  /** Fora só porque espera o fornecedor confirmar (preço ambíguo ou retido). */
+  aConfirmar?: boolean;
   criterios: Record<Criterio, number> | null;
   nota: number | null;
 };
@@ -95,7 +142,12 @@ export type Linha = {
 export type Comparacao = {
   urgente: boolean;
   pesos: Pesos;
+  /** Q7: referência do portão de retenção, só de fornecedores físicos. */
   referenciaUnitaria: number;
+  /** Q7: mediana da internet (lojas online), só para alerta. */
+  referenciaOnline?: number | null;
+  /** I3: busca automática da rodada, preenchida por quem monta o mapa. */
+  buscaAutomatica?: BuscaAutomatica | null;
   validas: Linha[];
   cortadas: Linha[];
   vencedora: Linha | null;
@@ -104,6 +156,9 @@ export type Comparacao = {
   podeDizerMelhor: boolean;
   alertasGerais: string[];
 };
+
+/** I3: quantos fornecedores a busca automática acrescentou e em quantas levas. */
+export type BuscaAutomatica = { fornecedores: number; levas: number; teto: number };
 
 const centavos = (v: number) => Math.round(v * 100) / 100;
 const umaCasa = (v: number) => Math.round(v * 10) / 10;
@@ -150,8 +205,45 @@ function escalaMenorMelhor(valor: number, todos: number[]): number {
 }
 
 /**
+ * I1 e X3: o que a negociação deu, em texto para o mapa, e o que vai para "Atenção".
+ * Compara o produto da proposta mais antiga do fornecedor com o atual; sem mudança de
+ * preço, lê o resultado do pedido automático de desconto.
+ */
+export function negociacaoDaLinha(o: OfertaComparavel, produto: number | null): { texto: string | null; alertas: string[] } {
+  const alertas: string[] = [];
+  let texto: string | null = null;
+  const antes = o.produtoAnterior ?? null;
+  const n = o.negociacao ?? null;
+  if (antes !== null && produto !== null) {
+    const diferenca = centavos(antes - produto);
+    if (diferenca >= 0.01) texto = `Desconto obtido: ${formatarBRL(diferenca)} (de ${formatarBRL(antes)} para ${formatarBRL(produto)})`;
+    else if (diferenca <= -0.01) alertas.push(`Subiu o preço depois do pedido de desconto (de ${formatarBRL(antes)} para ${formatarBRL(produto)})`);
+  }
+  if (n) {
+    if ((n.descontoFrete ?? 0) >= 0.01) texto = `${texto ? `${texto}; ` : "Desconto obtido: "}frete ${formatarBRL(n.descontoFrete!)} mais barato`;
+    if (!texto) {
+      if (n.resultado === "manteve") texto = "Pedi desconto: manteve o preço";
+      else if (n.resultado === "condicional") texto = "Pedi desconto: só com condição";
+      else if (n.resultado === "sem_resposta" || n.resultado === null) texto = "Pedi desconto: não respondeu";
+    }
+    if (n.resultado === "subiu" && !alertas.length) alertas.push("Subiu o preço depois do pedido de desconto");
+    if (n.condicao) alertas.push(`Desconto condicionado, não aplicado ao total: "${n.condicao}"`);
+  }
+  return { texto, alertas };
+}
+
+/** Q1/R8: a proposta está fora só porque espera o fornecedor confirmar o preço. */
+function soFaltaConfirmar(p: Portoes): boolean {
+  const { naoRetida, precoClaro, completo, ...resto } = p;
+  if (naoRetida && precoClaro !== false) return false;
+  // Preço a confirmar não tem número: o "completo" falha junto e não conta como outro motivo.
+  return (completo || precoClaro === false) && Object.values(resto).every((v) => v !== false);
+}
+
+/**
  * Compara as ofertas de um item.
- * @param referenciaMercado preço unitário de mercado (busca pública), quando houver.
+ * @param referenciaMercado preço unitário de mercado (busca pública, lojas online), quando houver.
+ * Q7: ele não entra no portão de retenção; vira só alerta.
  */
 export function comparar(item: ItemComparado, ofertas: OfertaComparavel[], referenciaMercado?: number | null): Comparacao {
   const urgente = item.urgencia !== "normal";
@@ -162,12 +254,13 @@ export function comparar(item: ItemComparado, ofertas: OfertaComparavel[], refer
   const fretesInformados = ofertas.filter((o) => o.frete !== null).map((o) => o.frete!);
   const freteMediano = fretesInformados.length ? mediana(fretesInformados) : null;
 
-  const unitariosExatos = ofertas
-    .map((o, i) => (o.itemExato && produtos[i] !== null ? produtos[i]! / item.quantidade : null))
+  // Q7: a referência do portão sai só de fornecedores físicos; o preço de loja online
+  // (proposta ou referência pública) nunca corta sozinho uma proposta.
+  const unitariosFisicos = ofertas
+    .map((o, i) => (!o.online && o.itemExato && produtos[i] !== null ? produtos[i]! / item.quantidade : null))
     .filter((v): v is number => v !== null);
-  const med = unitariosExatos.length >= 2 ? mediana(unitariosExatos) : 0;
-  const referenciaUnitaria =
-    med && referenciaMercado ? centavos((med + referenciaMercado) / 2) : med || (referenciaMercado ?? 0);
+  const referenciaUnitaria = unitariosFisicos.length >= 2 ? mediana(unitariosFisicos) : 0;
+  const referenciaOnline = referenciaMercado && referenciaMercado > 0 ? referenciaMercado : null;
 
   const linhas: Linha[] = ofertas.map((o, i) => {
     const produto = produtos[i]!;
@@ -178,40 +271,62 @@ export function comparar(item: ItemComparado, ofertas: OfertaComparavel[], refer
         frete = o.frete;
         origemFrete = "informado";
       } else {
+        // Q8: loja online sem frete para o CEP é "a calcular no site". A estimativa fica só
+        // para a comparação não favorecer quem não disse o frete; o mapa a mostra separada.
         frete = freteMediano ?? centavos((produto ?? 0) * FRETE_ESTIMADO_FRACAO);
-        origemFrete = "estimado";
+        origemFrete = o.online ? "a_calcular" : "estimado";
       }
     }
     const impostos = o.impostosValor ?? 0;
     const custo = produto === null ? null : centavos(produto + frete + impostos);
     const unit = produto === null ? null : produto / item.quantidade;
     const abaixo = unit !== null && referenciaUnitaria > 0 ? (referenciaUnitaria - unit) / referenciaUnitaria : 0;
+    const conduta = o.alertasConduta ?? [];
+    const precoAConfirmar = !!o.aConfirmar?.includes("preco");
 
     const portoes: Portoes = {
       completo: produto !== null && o.prazoDias !== null,
       dentroDoPrazo: item.prazoMaxDias === null || (o.prazoDias !== null && o.prazoDias <= item.prazoMaxDias),
       itemExato: o.itemExato || item.aceitaSimilar,
       entregaNoLocal: retirada || o.entregaNoLocal !== false,
-      naoRetida: !(abaixo >= LIMITE_RETENCAO && !o.precoConfirmado),
+      // Loja online não tem com quem confirmar: o preço do anúncio é real e nunca fica retido.
+      naoRetida: !!o.online || !(abaixo >= LIMITE_RETENCAO && !o.precoConfirmado),
+      conduta: !conduta.some((a) => a in CORTE_CONDUTA),
+      precoClaro: !precoAConfirmar,
     };
     const motivos: string[] = [];
-    if (!portoes.completo) motivos.push(produto === null ? "Sem preço" : "Sem prazo de entrega");
+    for (const a of conduta) if (a in CORTE_CONDUTA) motivos.push(CORTE_CONDUTA[a]!);
+    if (precoAConfirmar) motivos.push(`Preço a confirmar (${o.precoLido ? `${formatarBRL(o.precoLido)}: ` : ""}por unidade ou total?)`);
+    else if (!portoes.completo) motivos.push(produto === null ? "Sem preço" : "Sem prazo de entrega");
     if (portoes.completo && !portoes.dentroDoPrazo) motivos.push("Entrega depois do prazo do pedido");
     if (!portoes.itemExato) motivos.push("Item parecido sem aceite do comprador");
     if (!portoes.entregaNoLocal) motivos.push("Não entrega no local");
     if (!portoes.naoRetida) motivos.push(`Preço ${Math.round(abaixo * 100)}% abaixo da referência: aguardando confirmação`);
 
+    const neg = negociacaoDaLinha(o, produto);
     const alertas: string[] = [];
+    // Conduta primeiro: é o que o comprador mais precisa ver.
+    for (const a of conduta) if (a in ATENCAO_CONDUTA) alertas.push(ATENCAO_CONDUTA[a]!);
+    alertas.push(...neg.alertas);
     if (origemFrete === "estimado") alertas.push("Frete não informado: valor estimado");
+    if (origemFrete === "a_calcular") alertas.push("Frete a calcular no site: a estimativa serve só para comparar");
     if (o.prazoPagamentoDias === 0 && !o.conhecido) alertas.push("Pagamento antecipado com fornecedor novo");
     if (o.impostosValor === null && !o.impostosNaoInclusos) alertas.push("Não disse se há impostos ou taxas fora do preço");
     if (!retirada && o.entregaNoLocal === null) alertas.push("Não confirmou a entrega no local");
     if (o.validadeDias === null) alertas.push("Sem validade da proposta");
     if (o.online) alertas.push("Loja online: prazo e pagamento simulados");
     if (!o.itemExato && item.aceitaSimilar) alertas.push(`Item equivalente: ${o.itemOferecido}`);
+    if (o.aConfirmar?.includes("item")) alertas.push("Item a confirmar com o fornecedor");
+    if (o.divergencias?.length) alertas.push(`Difere do pedido: ${o.divergencias.join("; ")}`);
     if (abaixo >= 0.15 && portoes.naoRetida) alertas.push(`Preço ${Math.round(abaixo * 100)}% abaixo da referência`);
+    if (referenciaOnline && unit !== null && !o.online) {
+      const diferenca = (unit - referenciaOnline) / referenciaOnline;
+      if (diferenca <= -LIMITE_ALERTA_ONLINE) alertas.push(`Preço ${Math.round(-diferenca * 100)}% abaixo da referência online`);
+      if (diferenca >= LIMITE_ALERTA_ONLINE) alertas.push(`Preço ${Math.round(diferenca * 100)}% acima da referência online`);
+    }
     for (const a of o.alertasFornecedor ?? []) alertas.push(a);
 
+    const valida = Object.values(portoes).every((v) => v !== false);
     return {
       oferta: o,
       produto,
@@ -222,9 +337,11 @@ export function comparar(item: ItemComparado, ofertas: OfertaComparavel[], refer
       precoUnitarioEfetivo: unit === null ? null : centavos(unit),
       abaixoDaReferencia: abaixo,
       portoes,
-      valida: Object.values(portoes).every(Boolean),
+      valida,
       motivos,
       alertas,
+      negociacao: neg.texto,
+      aConfirmar: !valida && soFaltaConfirmar(portoes),
       criterios: null,
       nota: null,
     };
@@ -262,6 +379,7 @@ export function comparar(item: ItemComparado, ofertas: OfertaComparavel[], refer
     urgente,
     pesos,
     referenciaUnitaria,
+    referenciaOnline,
     validas,
     cortadas,
     vencedora,
@@ -270,4 +388,23 @@ export function comparar(item: ItemComparado, ofertas: OfertaComparavel[], refer
     podeDizerMelhor: validas.length >= MINIMO_PROPOSTAS_VALIDAS,
     alertasGerais,
   };
+}
+
+/**
+ * Q6: o que mudou de um mapa para o refeito na mesma rodada ("Mapa atualizado: ...").
+ * Compara quem está entre as válidas e quem ficou na frente.
+ */
+export function mudancasDoMapa(anterior: Pick<Comparacao, "validas" | "vencedora">, novo: Pick<Comparacao, "validas" | "vencedora">): string[] {
+  const nomes = (c: Pick<Comparacao, "validas">) => new Map(c.validas.map((l) => [l.oferta.fornecedorId, l.oferta.fornecedorNome]));
+  const antes = nomes(anterior);
+  const agora = nomes(novo);
+  const entraram = [...agora].filter(([id]) => !antes.has(id)).map(([, n]) => n);
+  const sairam = [...antes].filter(([id]) => !agora.has(id)).map(([, n]) => n);
+  const partes: string[] = [];
+  if (entraram.length) partes.push(`${entraram.join(", ")} ${entraram.length === 1 ? "entrou" : "entraram"} na comparação`);
+  if (sairam.length) partes.push(`${sairam.join(", ")} ${sairam.length === 1 ? "saiu" : "saíram"}`);
+  const vAntes = anterior.vencedora?.oferta.fornecedorId;
+  const vAgora = novo.vencedora?.oferta.fornecedorId;
+  if (vAgora && vAntes !== vAgora) partes.push(`agora na frente: ${novo.vencedora!.oferta.fornecedorNome}`);
+  return partes;
 }
