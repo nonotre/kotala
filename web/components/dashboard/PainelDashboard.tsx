@@ -50,10 +50,13 @@ const SEM_SETOR = "Sem setor";
 const OUTROS = "Outros";
 const MAX_SETORES = 5;
 
-type Filtros = { periodo: Periodo; setor: string; status: FiltroStatus; fatia: Fatia };
+const SEM_COMPRADOR = "Sem responsável";
+
+type Filtros = { periodo: Periodo; setor: string; comprador: string; status: FiltroStatus; fatia: Fatia };
 type Dimensao = keyof Filtros;
 
 const setorDe = (p: LinhaPedido) => p.setor ?? SEM_SETOR;
+const compradorDe = (p: LinhaPedido) => p.comprador ?? SEM_COMPRADOR;
 const fechado = (p: LinhaPedido) => p.gasto !== null && p.inicial !== null && p.inicial > 0;
 const saving = (p: LinhaPedido) => (fechado(p) ? p.inicial! - p.gasto! : 0);
 const savingPct = (p: LinhaPedido) => (saving(p) / p.inicial!) * 100;
@@ -64,6 +67,7 @@ function filtrar(pedidos: LinhaPedido[], f: Filtros, ignorar: Dimensao[] = []) {
   return pedidos.filter((p) => {
     if (!ignorar.includes("periodo") && desde !== null && new Date(p.criadoEm).getTime() < desde) return false;
     if (!ignorar.includes("setor") && f.setor !== "todos" && setorDe(p) !== f.setor) return false;
+    if (!ignorar.includes("comprador") && f.comprador !== "todos" && compradorDe(p) !== f.comprador) return false;
     if (!ignorar.includes("status")) {
       if (f.status === "todas" && p.status === "cancelada") return false;
       if (f.status === "atraso" && !p.atrasado) return false;
@@ -84,10 +88,28 @@ const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um :
 
 export function PainelDashboard({ dados }: { dados: Dashboard }) {
   const router = useRouter();
-  const [f, setF] = useState<Filtros>({ periodo: "tudo", setor: "todos", status: "todas", fatia: null });
+  const [f, setF] = useState<Filtros>({ periodo: "tudo", setor: "todos", comprador: "todos", status: "todas", fatia: null });
   const mudar = (parcial: Partial<Filtros>) => setF((atual) => ({ ...atual, ...parcial }));
 
   const setores = useMemo(() => [...new Set(dados.pedidos.map(setorDe))].sort((a, b) => (a === SEM_SETOR ? 1 : b === SEM_SETOR ? -1 : a.localeCompare(b, "pt-BR"))), [dados.pedidos]);
+  const compradores = useMemo(
+    () => [...new Set(dados.pedidos.map(compradorDe))].sort((a, b) => (a === SEM_COMPRADOR ? 1 : b === SEM_COMPRADOR ? -1 : a.localeCompare(b, "pt-BR"))),
+    [dados.pedidos],
+  );
+
+  // Por comprador: tudo menos o filtro do próprio comprador, para a tabela seguir dando escolha.
+  const porComprador = useMemo<LinhaComprador[]>(() => {
+    const grupos = new Map<string, LinhaPedido[]>();
+    for (const p of filtrar(dados.pedidos, f, ["comprador"])) grupos.set(compradorDe(p), [...(grupos.get(compradorDe(p)) ?? []), p]);
+    return [...grupos]
+      .map(([comprador, ps]) => {
+        const fs = ps.filter(fechado);
+        const gasto = fs.reduce((t, p) => t + p.gasto!, 0);
+        const inicial = fs.reduce((t, p) => t + p.inicial!, 0);
+        return { comprador, requisicoes: ps.length, fechados: fs.length, gasto, saving: inicial - gasto, savingPct: inicial > 0 ? ((inicial - gasto) / inicial) * 100 : null };
+      })
+      .sort((a, b) => b.gasto - a.gasto || b.requisicoes - a.requisicoes || a.comprador.localeCompare(b.comprador, "pt-BR"));
+  }, [dados.pedidos, f]);
 
   const visiveis = useMemo(() => filtrar(dados.pedidos, f), [dados.pedidos, f]);
   const fechados = visiveis.filter(fechado);
@@ -131,6 +153,7 @@ export function PainelDashboard({ dados }: { dados: Dashboard }) {
   const filtrosAtivos = [
     f.periodo !== "tudo" ? { chave: "periodo" as const, texto: PERIODOS.find((p) => p.valor === f.periodo)!.texto, limpar: { periodo: "tudo" as const } } : null,
     f.setor !== "todos" ? { chave: "setor" as const, texto: `Setor: ${f.setor}`, limpar: { setor: "todos" } } : null,
+    f.comprador !== "todos" ? { chave: "comprador" as const, texto: `Comprador: ${f.comprador}`, limpar: { comprador: "todos" } } : null,
     f.status !== "todas" ? { chave: "status" as const, texto: STATUS.find((x) => x.valor === f.status)!.texto, limpar: { status: "todas" as const } } : null,
     f.fatia ? { chave: "fatia" as const, texto: f.fatia === "Saving" ? "Só pedidos com saving" : "Só pedidos com compra", limpar: { fatia: null } } : null,
   ].filter((x) => x !== null);
@@ -151,6 +174,12 @@ export function PainelDashboard({ dados }: { dados: Dashboard }) {
               <SelectItem value="todos" text="Todos os setores" />
               {setores.map((st) => (
                 <SelectItem key={st} value={st} text={st} />
+              ))}
+            </Select>
+            <Select id="dash-comprador" labelText="Comprador" size="md" value={f.comprador} onChange={(e) => mudar({ comprador: e.target.value })}>
+              <SelectItem value="todos" text="Todos os compradores" />
+              {compradores.map((c) => (
+                <SelectItem key={c} value={c} text={c} />
               ))}
             </Select>
             <Select id="dash-status" labelText="Status" size="md" value={f.status} onChange={(e) => mudar({ status: e.target.value as FiltroStatus })}>
@@ -225,6 +254,19 @@ export function PainelDashboard({ dados }: { dados: Dashboard }) {
               }
             >
               {fechados.length ? <CurvaSaving valores={fechados.map(savingPct)} /> : <EstadoVazio compacto titulo="Nenhum pedido fechado nestes filtros." />}
+            </Bloco>
+          </Column>
+        </GradePagina>
+
+        {/* Recorte por pessoa: o responsável pelo pedido, o mesmo dono do Quadro e da Lista */}
+        <GradePagina>
+          <Column sm={4} md={8} lg={16}>
+            <Bloco
+              titulo="Gasto e economia por comprador"
+              descricao="O comprador é o responsável pelo pedido: o escolhido no pedido ou, sem escolha, quem pediu. Saving em % do valor inicial dos pedidos fechados. Clique numa linha para filtrar."
+              plano
+            >
+              <TabelaCompradores linhas={porComprador} escolhido={f.comprador} aoClicar={(c) => mudar({ comprador: f.comprador === c ? "todos" : c })} />
             </Bloco>
           </Column>
         </GradePagina>
@@ -314,7 +356,7 @@ function TabelaPedidos({ pedidos, abrir }: { pedidos: LinhaPedido[]; abrir: (id:
                     </CarbonLink>
                     {p.simulado ? <SeloSimulado /> : null}
                   </span>
-                  {p.setor ? <span className={s.apoio}>{p.setor}</span> : null}
+                  <span className={s.apoio}>{[p.comprador ?? SEM_COMPRADOR, p.setor].filter(Boolean).join(", ")}</span>
                 </TableCell>
                 <TableCell>{p.categorias.length ? p.categorias.join(", ") : <span className={s.apoio}>—</span>}</TableCell>
                 <TableCell className={s.numero}>{brl(p.mediaMapa)}</TableCell>
@@ -337,6 +379,42 @@ function TabelaPedidos({ pedidos, abrir }: { pedidos: LinhaPedido[]; abrir: (id:
               </TableRow>
             );
           })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+// ---------- Por comprador ----------
+
+type LinhaComprador = { comprador: string; requisicoes: number; fechados: number; gasto: number; saving: number; savingPct: number | null };
+
+function TabelaCompradores({ linhas, escolhido, aoClicar }: { linhas: LinhaComprador[]; escolhido: string; aoClicar: (comprador: string) => void }) {
+  if (!linhas.length) return <EstadoVazio compacto titulo="Nenhuma requisição nestes filtros." />;
+  return (
+    <div className={s.tabela}>
+      <Table size="md" aria-label="Gasto e economia por comprador">
+        <TableHead>
+          <TableRow>
+            <TableHeader>Comprador</TableHeader>
+            <TableHeader>Requisições</TableHeader>
+            <TableHeader>Pedidos fechados</TableHeader>
+            <TableHeader>Valor gasto</TableHeader>
+            <TableHeader>Saving</TableHeader>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {linhas.map((l) => (
+            <TableRow key={l.comprador} className={s.linhaClicavel} isSelected={escolhido === l.comprador} onClick={() => aoClicar(l.comprador)}>
+              <TableCell>{l.comprador}</TableCell>
+              <TableCell className={s.numero}>{l.requisicoes}</TableCell>
+              <TableCell className={s.numero}>{l.fechados}</TableCell>
+              <TableCell className={s.numero}>{l.fechados ? brl(l.gasto) : "—"}</TableCell>
+              <TableCell className={`${s.numero} ${l.saving >= 0.01 ? s.positivo : ""}`}>
+                {l.fechados ? `${brl(l.saving)}${l.savingPct !== null ? ` (${pct(l.savingPct)})` : ""}` : "—"}
+              </TableCell>
+            </TableRow>
+          ))}
         </TableBody>
       </Table>
     </div>

@@ -7,7 +7,7 @@
 // ---------- Filtros no topo ----------
 .filtros {
   display: grid;
-  grid-template-columns: repeat(3, minmax(spacing.$spacing-13, 1fr));
+  grid-template-columns: repeat(4, minmax(spacing.$spacing-13, 1fr));
   gap: spacing.$spacing-03;
 
   @include breakpoint.breakpoint-down(md) {
