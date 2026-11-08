@@ -8,6 +8,7 @@ import { EstadoVazio } from "@/components/EstadoVazio";
 import { CorpoPagina, GradePagina, Pagina } from "@/components/Pagina";
 import { AvisoDemonstracao, CabecalhoConta, Campo, plural } from "./Comum";
 import { useConta } from "./demo";
+import { Gestores } from "./Gestores";
 import { SuaConta } from "./SuaConta";
 import s from "./conta.module.scss";
 
@@ -24,6 +25,11 @@ export function VisaoGeral() {
         <GradePagina>
           <Column sm={4} md={8} lg={16}>
             <SuaConta />
+          </Column>
+        </GradePagina>
+        <GradePagina>
+          <Column sm={4} md={8} lg={16}>
+            <Gestores />
           </Column>
         </GradePagina>
         <AvisoDemonstracao />
