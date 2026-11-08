@@ -12,6 +12,7 @@ import {
   unitarioDe,
   validarTextoNegociacao,
 } from "../negociador/index.ts";
+import { contatosComConfirmacao, perguntasDeConfirmacao } from "./confirmar-preco.ts";
 import { aoProcurarPerguntas, aoVarrerFila, esperaMaxMs, liberarFila, pedirAoFornecedor, type Pergunta } from "./cadencia.ts";
 import { escaparHtml, html, Html, htmlParaTexto, negrito, quando, quantidade, quantidadeDe } from "../../texto.ts";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
@@ -882,6 +883,9 @@ export function ligarCotador() {
   aoVarrer(fecharJanelasVencidas);
   aoProcurarPerguntas(perguntasDaRodadaDoBotao);
   aoVarrerFila(contatosComRodadaSegurada);
+  // R8: confirmação de preço retido, uma pergunta por vez (confirmar-preco.ts).
+  aoProcurarPerguntas(perguntasDeConfirmacao);
+  aoVarrerFila(contatosComConfirmacao);
   aoVarrer(liberarFila);
 }
 
