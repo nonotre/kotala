@@ -543,14 +543,15 @@ test("fornecedores sem filtro: sem bloqueado nem PARAR, pontos em ordem decresce
   }
 });
 
-test("item resumo traz a categoria da base; fora da base fica null", { skip: pular }, async () => {
+test("item resumo traz a categoria da base; fora da base, a deduzida pelas palavras da categoria", { skip: pular }, async () => {
   const { p, A, B } = cena;
   // Sem carregarCatalogo() neste processo: só a base fixa conhece os itens.
   const categoriaDe = async (ctx: ContextoAssistente, pedidoId: number) => (await q.detalhePedido(ctx, pedidoId))!.itens.map((i) => i.categoria);
   assert.deepEqual(await categoriaDe(A, p.confirmaA), ["Cimentícios"]);
   assert.deepEqual(await categoriaDe(B, p.decisaoB), ["Agregados"]);
   assert.deepEqual(await categoriaDe(B, p.concluidoB), ["Aço e ferragens estruturais"]);
-  assert.deepEqual(await categoriaDe(A, p.cotandoA), [null], "tijolo não está na base");
+  // Tijolo não está na base: a categoria sai das palavras de src/dominio/categorias.json (furo da Frente 3).
+  assert.deepEqual(await categoriaDe(A, p.cotandoA), ["Alvenaria e cerâmicos"]);
   // Mesma categoria nos resumos de lista e do cartão.
   const lista = await q.buscarPedidos(A, { texto: "cimento", estado: "todos" });
   assert.ok(lista.length > 0 && lista.every((r) => r.itens.every((i) => "categoria" in i)));

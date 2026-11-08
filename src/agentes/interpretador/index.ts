@@ -42,6 +42,11 @@ export const Interpretacao = z.object({
   prazoDias: z.number().int().nullable().describe("Dias corridos a partir de hoje até o prazo"),
   urgencia: z.enum(["normal", "urgente", "obra_parada"]),
   setor: z.string().nullable().describe("Setor ou área que pede (ex.: estrutura, elétrica, manutenção, escritório); null se não disse"),
+  pagamento: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("Forma de pagamento que o comprador prefere ou exige (ex.: 'pix', 'boleto 28 dias', 'à vista', 'cartão'); null se não disse"),
   entregas: z.string().nullable().describe("Entrega em data marcada ou em partes, como o comprador combinou (ex.: 'metade em 20 dias, o resto em 30'); null se não disse"),
   faltando: z.array(z.string()).describe("Perguntas curtas sobre o que falta e é essencial para cotar"),
   suposicoes: z.array(z.string()).describe("O que você assumiu sem o comprador dizer"),
@@ -70,6 +75,7 @@ Regras:
 - Se o comprador não disser o destino, deixe destino e cep null e não pergunte: o sistema usa o endereço padrão da empresa.
 - "cep": só se o comprador escrever o CEP. Nunca invente CEP.
 - "setor": o setor ou área que está pedindo, se o comprador disser. Não pergunte em "faltando": o sistema pergunta.
+- "pagamento": só se o comprador disser como prefere pagar ("no pix", "boleto 30 dias", "à vista"). Nunca pergunte nem invente.
 - Agregados (areia, brita, pedra, pó de pedra) usam m³, t, kg, saco ou L. Se o comprador disser carrada ou caminhão, mantenha a unidade dita e o sistema pergunta o volume.
 - Nunca invente quantidade: se não foi dita, use 0. Não pergunte a quantidade em "faltando": o sistema pergunta.
 - Marca: "marca" é a marca citada ou vista na foto ou no print (texto marcado com [Foto] ou [Print de loja]). "marcaExigida" só é true se o comprador disser que quer só aquela marca. "aceitaSimilar": true se disse que aceita similar; false se exigiu a marca; null se não disse.
@@ -106,6 +112,7 @@ export type EntendimentoAtual = {
   setor: string | null;
   prazoTexto: string | null;
   entregas: string | null;
+  pagamento?: string | null;
 };
 
 function prompt(textoOriginal: string, correcoes: readonly string[], atual?: EntendimentoAtual) {

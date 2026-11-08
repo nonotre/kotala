@@ -64,6 +64,26 @@ export const AVISO_PRIVACIDADE =
 
 const TEXTO_FALHA_IA = "Não consegui ler seu pedido agora. Pode mandar de novo em instantes?";
 
+/** Mostra o aviso curto de privacidade (R5) uma vez por contato. Também usado pelo Assistente. */
+export async function garantirAvisoPrivacidade(contato: Pick<MensagemRecebida["contato"], "id" | "avisoPrivacidadeEm">) {
+  if (contato.avisoPrivacidadeEm) return;
+  await db.update(tContato).set({ avisoPrivacidadeEm: new Date() }).where(eq(tContato.id, contato.id));
+  await enviar(contato.id, AVISO_PRIVACIDADE);
+}
+
+/** Resposta de uma consulta ("como está o pedido 12?"): texto e, se houver, botões do fluxo. */
+export type RespostaConsulta = { texto: string; botoes?: Botao[] };
+type RespondedorConsulta = (c: { contatoId: string; canal: Canal; texto: string }) => Promise<RespostaConsulta | null>;
+let respondedorConsulta: RespondedorConsulta | null = null;
+
+/**
+ * Quem responde as consultas que o Interpretador classifica (classe "consulta"). O Assistente da
+ * Frente 3 se registra aqui ao ligar; sem ele (ASSISTENTE=desligado), vale a resposta curta de antes.
+ */
+export function definirRespondedorDeConsulta(fn: RespondedorConsulta | null) {
+  respondedorConsulta = fn;
+}
+
 export { plural } from "../texto.ts";
 const quantidadeTexto = quantidade;
 
@@ -92,6 +112,7 @@ export function textoConfirmacao(p: {
   id: number;
   setor?: string | null;
   entregas?: string | null;
+  pagamento?: string | null;
   itens: ItemResumo[];
   destino: string | null;
   cep?: string | null;
@@ -120,7 +141,8 @@ export function textoConfirmacao(p: {
     : "não informado";
   linhas.push(`Prazo: ${prazo}`);
   if (p.entregas) linhas.push(`Entregas: ${p.entregas}`);
-  if (p.urgencia === "obra_parada") linhas.push("Obra parada: o prazo pesa mais que o preço.");
+  if (p.pagamento) linhas.push(`Pagamento preferido: ${p.pagamento}`);
+  if (p.urgencia === "obra_parada") linhas.push("Operação parada: o prazo pesa mais que o preço.");
   else if (p.urgencia === "urgente") linhas.push("Urgente.");
   if (p.suposicoes.length) {
     linhas.push("", "Considerei:");
@@ -188,6 +210,7 @@ export async function interpretarEResponder(pedidoId: number, opcoes: { lida?: L
         setor: p.setor,
         prazoTexto: p.prazoTexto,
         entregas: p.entregas,
+        pagamento: p.pagamentoPreferido,
       }
     : undefined;
   let lida = opcoes.lida;
@@ -332,6 +355,7 @@ export async function interpretarEResponder(pedidoId: number, opcoes: { lida?: L
     urgencia: i.urgencia,
     setor: i.setor ?? p.setor,
     entregas: i.entregas ?? p.entregas,
+    pagamentoPreferido: i.pagamento ?? p.pagamentoPreferido,
     faltando: i.faltando,
     suposicoes: i.suposicoes,
     perguntasFeitas: p.perguntasFeitas + (perguntar ? 1 : 0),
@@ -360,6 +384,7 @@ export async function interpretarEResponder(pedidoId: number, opcoes: { lida?: L
     cep: i.cep,
     setor: i.setor ?? p.setor,
     entregas: i.entregas ?? p.entregas,
+    pagamento: i.pagamento ?? p.pagamentoPreferido,
     prazoTexto: i.prazoTexto,
     prazoMaxDias: i.prazoDias,
     urgencia: i.urgencia,
@@ -506,6 +531,7 @@ async function mostrarConfirmacao(pedidoId: number, antes = "") {
     cep: p.cep,
     setor: p.setor,
     entregas: p.entregas,
+    pagamento: p.pagamentoPreferido,
     prazoTexto: p.prazoTexto,
     prazoMaxDias: p.prazoMaxDias,
     urgencia: p.urgencia,
@@ -683,15 +709,32 @@ async function responderClasse(
     });
   }
   let resposta = respostaDaClasse({ classe, subtipo: i.subtipo, vez, empresa: EMPRESA.nome, comOutrosItens: c.d.outrosItens > 0 });
-  if (classe === "consulta") resposta = await textoConsulta(contatoId, texto, resposta);
+  let botoesConsulta: Botao[] | undefined;
+  if (classe === "consulta") {
+    const r = await responderConsulta(contatoId, texto);
+    resposta = r?.texto ?? (await textoConsulta(contatoId, texto, resposta));
+    botoesConsulta = r?.botoes;
+  }
   if (opcoes.enviarResposta !== false && resposta) {
-    const botoes = classe === "proibido" ? [{ rotulo: ROTULO_CONTESTAR, dado: `g:${ev.id}:contestar` }] : undefined;
+    const botoes = classe === "proibido" ? [{ rotulo: ROTULO_CONTESTAR, dado: `g:${ev.id}:contestar` }] : botoesConsulta;
     await enviar(contatoId, resposta, { pedidoId: opcoes.pedidoId, botoes });
   }
   return resposta;
 }
 
-/** Consulta pelo Telegram: por ora, só o estado do pedido citado (ou do último). */
+/** Consulta pelo Assistente, quando ligado. Falha dele não derruba a resposta: cai no texto curto. */
+async function responderConsulta(contatoId: string, texto: string): Promise<RespostaConsulta | null> {
+  if (!respondedorConsulta) return null;
+  const [c] = await db.select({ canal: tContato.canal }).from(tContato).where(eq(tContato.id, contatoId));
+  try {
+    return await respondedorConsulta({ contatoId, canal: c?.canal ?? "web", texto });
+  } catch (erro) {
+    console.error("[comprador] consulta pelo Assistente", erro);
+    return null;
+  }
+}
+
+/** Consulta sem o Assistente: só o estado do pedido citado (ou do último). */
 async function textoConsulta(contatoId: string, texto: string, padrao: string): Promise<string> {
   const n = /\bpedido\s*(?:n[º°o.]?\s*)?(\d+)/i.exec(texto)?.[1];
   const [p] = n
@@ -873,7 +916,15 @@ async function aoBotaoGuardrail(c: MensagemRecebida["contato"], eventoId: string
   }
 }
 
-export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: MensagemRecebida) {
+export type OpcoesMensagemComprador = {
+  /**
+   * Quem chamou já sabe que a mensagem não responde à dúvida de fornecedor pendente (o Assistente
+   * leu como pedido novo, correção ou confirmação): não repassa ao fornecedor.
+   */
+  naoEhRespostaFornecedor?: boolean;
+};
+
+export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: MensagemRecebida, opcoes: OpcoesMensagemComprador = {}) {
   if (entrada.botao) {
     const g = /^g:([0-9a-f-]{36}):(sim|nao|o\d|contestar)$/.exec(entrada.botao);
     if (g) return aoBotaoGuardrail(contato, g[1]!, g[2]!);
@@ -931,10 +982,7 @@ export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: Me
     return;
   }
 
-  if (!contato.avisoPrivacidadeEm) {
-    await db.update(tContato).set({ avisoPrivacidadeEm: new Date() }).where(eq(tContato.id, contato.id));
-    await enviar(contato.id, AVISO_PRIVACIDADE);
-  }
+  await garantirAvisoPrivacidade(contato);
 
   // S, barreira 1: triagem em código, antes da IA e antes de repassar ao fornecedor.
   const t = triagem(texto);
@@ -960,7 +1008,7 @@ export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: Me
   }
 
   // Dúvida de fornecedor esperando o comprador: esta mensagem é a resposta.
-  if (await repassarRespostaDoComprador(contato.id, texto)) return;
+  if (!opcoes.naoEhRespostaFornecedor && (await repassarRespostaDoComprador(contato.id, texto))) return;
 
   const achado = await pedidoPendente(contato.id);
   // Pedido velho (fora da janela) continua aberto, mas não captura mensagem nova como correção.

@@ -7,7 +7,7 @@
 // ---------- Filtros no topo ----------
 .filtros {
   display: grid;
-  grid-template-columns: repeat(4, minmax(spacing.$spacing-13, 1fr));
+  grid-template-columns: repeat(3, minmax(spacing.$spacing-13, 1fr));
   gap: spacing.$spacing-03;
 
   @include breakpoint.breakpoint-down(md) {
@@ -82,7 +82,7 @@
 
   table {
     @include breakpoint.breakpoint-down(lg) {
-      min-inline-size: calc(6 * #{spacing.$spacing-13});
+      min-inline-size: calc(5 * #{spacing.$spacing-13});
     }
   }
 }
@@ -110,14 +110,26 @@
   white-space: nowrap;
 }
 
-.etiquetas {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: spacing.$spacing-02;
+// Busca e categoria, à direita do título da tabela.
+.ferramentas {
+  display: grid;
+  grid-template-columns: minmax(calc(2 * #{spacing.$spacing-13}), 1fr) minmax(spacing.$spacing-13, 1fr);
+  gap: spacing.$spacing-03;
+  align-items: end;
+
+  @include breakpoint.breakpoint-down(md) {
+    grid-template-columns: 1fr;
+    inline-size: 100%;
+  }
 }
 
-.trabalho {
-  @include type.type-style('body-01');
+// ---------- Trabalho feito pelo assistente ----------
+.cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: spacing.$spacing-05;
 
-  color: theme.$text-secondary;
+  @include breakpoint.breakpoint-down(md) {
+    grid-template-columns: 1fr;
+  }
 }

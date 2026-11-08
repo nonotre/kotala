@@ -1,7 +1,7 @@
 "use client";
 
 import { SideNav, SideNavDivider, SideNavItems, SideNavLink } from "@carbon/react";
-import { Analytics, Chat, Dashboard, DeliveryParcel, Home, Logout, Partnership, QrCode, Settings } from "@carbon/react/icons";
+import { Analytics, Chat, Dashboard, DataBase, Home, Logout, QrCode, Settings } from "@carbon/react/icons";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { sair as sairDaConta } from "./conta/sessao";
@@ -16,8 +16,7 @@ const TRABALHO: Item[] = [
 ];
 
 const CONSULTA: Item[] = [
-  { href: "/fornecedores", rotulo: "Fornecedores", icone: Partnership },
-  { href: "/itens", rotulo: "Itens", icone: DeliveryParcel },
+  { href: "/fornecedores", rotulo: "Base de Dados", icone: DataBase },
   { href: "/dashboard", rotulo: "Dashboard", icone: Analytics },
   { href: "/convite", rotulo: "Convite", icone: QrCode },
 ];
@@ -26,6 +25,8 @@ function ativo(rota: string, href: string) {
   if (href === "/") return rota === "/";
   // Quadro e Lista são o mesmo item; um pedido é visto a partir do quadro, e a ligação por voz é de um pedido.
   if (href === "/quadro") return rota === "/quadro" || rota === "/pedidos" || rota.startsWith("/pedidos/") || rota.startsWith("/voz/");
+  // Base de Dados: as abas Fornecedores e Itens, e a ficha de cada fornecedor.
+  if (href === "/fornecedores") return rota === "/fornecedores" || rota.startsWith("/fornecedores/") || rota === "/itens";
   return rota === href || rota.startsWith(`${href}/`);
 }
 

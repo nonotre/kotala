@@ -135,7 +135,7 @@ function ferramentas(e: EstadoTurno) {
   const { ctx, consultas: c } = e;
   return {
     listar_pendencias: tool({
-      description: "Lista o que espera o comprador agora (pedidos a confirmar, mapas a decidir, recompras, itens sem proposta), obra parada primeiro.",
+      description: "Lista o que espera o comprador agora (pedidos a confirmar, mapas a decidir, recompras, itens sem proposta), operação parada primeiro.",
       inputSchema: z.object({}),
       execute: medir("listar_pendencias", () => c.pendencias(ctx)),
     }),

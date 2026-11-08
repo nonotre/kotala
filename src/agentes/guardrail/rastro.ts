@@ -4,9 +4,9 @@
 // gestor: o aviso vai a GESTOR_CONTATO_ID, se houver; GUARDRAIL_MODO_DEMO=1
 // desliga o aviso. O evento é registrado sempre.
 
-import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import { db } from "../../nucleo/db/cliente.ts";
-import { evento, pedido } from "../../nucleo/db/schema.ts";
+import { contato, evento, pedido, usuario } from "../../nucleo/db/schema.ts";
 import { enviar } from "../../nucleo/mensagens/index.ts";
 import { avancarItem, TransicaoConcorrente, TransicaoInvalida } from "../../nucleo/orquestrador/index.ts";
 import { registrar } from "../../nucleo/registro.ts";
@@ -58,8 +58,29 @@ export const modoDemo = () => process.env.GUARDRAIL_MODO_DEMO === "1";
 export const gestorContatoId = () => process.env.GESTOR_CONTATO_ID?.trim() || null;
 
 /**
+ * Para onde vai o aviso: um contato por usuário com papel de gestor (Telegram antes do chat web,
+ * que só é visto com a tela aberta); sem gestor marcado, o GESTOR_CONTATO_ID de antes.
+ */
+export async function contatosDosGestores(): Promise<string[]> {
+  const linhas = await db
+    .select({ usuarioId: usuario.id, contatoId: contato.id, canal: contato.canal })
+    .from(usuario)
+    .innerJoin(contato, and(eq(contato.usuarioId, usuario.id), isNull(contato.parouEm)))
+    .where(eq(usuario.papel, "gestor"));
+  const porUsuario = new Map<string, { contatoId: string; canal: string }>();
+  for (const l of linhas) {
+    const atual = porUsuario.get(l.usuarioId);
+    if (!atual || (atual.canal === "web" && l.canal !== "web")) porUsuario.set(l.usuarioId, l);
+  }
+  const ids = [...porUsuario.values()].map((l) => l.contatoId);
+  const doEnv = gestorContatoId();
+  return ids.length ? ids : doEnv ? [doEnv] : [];
+}
+
+/**
  * Aviso ao gestor, um por chave em 24 h. Registra sempre; só manda a mensagem
- * quando há GESTOR_CONTATO_ID e não está no modo demo. Devolve se avisou.
+ * quando há gestor (usuário com papel gestor, ou GESTOR_CONTATO_ID) e não está no modo demo.
+ * Devolve se avisou alguém.
  */
 export async function avisarGestor(p: { chave: string; texto: string; contatoId: string; pedidoId?: number; itemPedidoId?: number }): Promise<boolean> {
   const desde = new Date(Date.now() - DIA_MS);
@@ -69,23 +90,26 @@ export async function avisarGestor(p: { chave: string; texto: string; contatoId:
     .where(and(eq(evento.agente, "Guardrail"), gte(evento.criadoEm, desde), sql`${evento.dados}->>'avisoGestor' = ${p.chave}`))
     .limit(1);
   if (ja) return true;
-  const gestor = gestorContatoId();
+  // O próprio comprador nunca recebe o aviso sobre ele, mesmo que seja gestor.
+  const gestores = (await contatosDosGestores()).filter((id) => id !== p.contatoId);
   const demo = modoDemo();
   let enviado = false;
   let falha: string | undefined;
-  if (gestor && !demo) {
-    try {
-      const r = await enviar(gestor, `Aviso de conduta: ${p.texto}`, { pedidoId: p.pedidoId, itemPedidoId: p.itemPedidoId, tipo: "aviso" });
-      enviado = r.situacao === "enviada";
-      if (!enviado) falha = r.situacao;
-    } catch (erro) {
-      falha = erro instanceof Error ? erro.message : String(erro);
+  if (gestores.length && !demo) {
+    for (const gestor of gestores) {
+      try {
+        const r = await enviar(gestor, `Aviso de conduta: ${p.texto}`, { pedidoId: p.pedidoId, itemPedidoId: p.itemPedidoId, tipo: "aviso" });
+        if (r.situacao === "enviada") enviado = true;
+        else falha = r.situacao;
+      } catch (erro) {
+        falha = erro instanceof Error ? erro.message : String(erro);
+      }
     }
   }
   await registrar(db, {
     agente: "Guardrail",
     acao: enviado ? "Avisou o gestor de compras." : "Aviso ao gestor de compras registrado, sem envio.",
-    motivo: enviado ? p.texto : demo ? "Modo demo (GUARDRAIL_MODO_DEMO=1)." : !gestor ? "Sem GESTOR_CONTATO_ID: ainda não há papel de gestor." : `Falha no envio: ${falha}.`,
+    motivo: enviado ? p.texto : demo ? "Modo demo (GUARDRAIL_MODO_DEMO=1)." : !gestores.length ? "Sem gestor: marque um usuário como gestor em Configurações (ou use GESTOR_CONTATO_ID)." : `Falha no envio: ${falha}.`,
     pedidoId: p.pedidoId,
     itemPedidoId: p.itemPedidoId,
     dados: { contatoId: p.contatoId, classe: "aviso_gestor", avisoGestor: p.chave, texto: p.texto, enviado },

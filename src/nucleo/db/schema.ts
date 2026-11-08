@@ -59,6 +59,8 @@ export const situacaoEnvioEnum = pgEnum("situacao_envio", ["recebida", "enviada"
 
 export const fornecedor = pgTable("fornecedor", {
   id: uuid("id").primaryKey().defaultRandom(),
+  /** Número curto para as telas (#1, #42): sequencial, na ordem de cadastro. */
+  numero: serial("numero").notNull().unique(),
   /** Chave estável dos simulados ("sim-perto"), para o seed não duplicar. */
   chave: text("chave").unique(),
   nome: text("nome").notNull(),
@@ -203,7 +205,7 @@ export const itemPedido = pgTable(
     justificativaMenosDeTres: text("justificativa_menos_de_tres"),
     /** I3: levas de busca automática já feitas na rodada atual (volta a 0 em rodada nova). */
     ampliacoes: integer("ampliacoes").notNull().default(0),
-    /** Categoria do item (ids de src/dominio/categorias.json), gravada na confirmação. Null = deduzir da base. */
+    /** Nome da categoria (o de src/dominio/categorias.json, como em fornecedor.categorias), gravado na confirmação. Null = deduzir. */
     categoria: text("categoria"),
     criadoEm: criadoEm(),
     atualizadoEm: atualizadoEm(),

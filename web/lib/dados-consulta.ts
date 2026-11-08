@@ -17,11 +17,29 @@ import {
   referenciaPreco,
   sancao,
 } from "../../src/nucleo/db/schema.ts";
+// O JSON direto, e não src/dominio/categorias.ts: lá o arquivo é lido com new URL(import.meta.url), que o Turbopack não resolve.
+import dominio from "../../src/dominio/categorias.json";
 import { listaFornecedores } from "./dados";
 import type { Comparacao } from "./dados";
 
 const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
 const num = (v: string | number | null | undefined) => (v === null || v === undefined ? null : Number(v));
+
+const CATEGORIAS: { id: string; nome: string; cadastro?: boolean }[] = dominio.categorias;
+const semAcento = (t: string) =>
+  t
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim();
+
+/** Nome da categoria como em src/dominio/categorias.json, a partir do id ("agregados") ou do nome; desconhecida fica como veio. */
+function nomeCategoria(c: string | null | undefined): string | null {
+  const t = c?.trim();
+  if (!t) return null;
+  const n = semAcento(t);
+  return CATEGORIAS.find((x) => x.id === n || semAcento(x.nome) === n)?.nome ?? t;
+}
 
 /** O que o Q8 grava em fornecedor.verificacao. Tudo opcional: só aparece o que veio. */
 export type Verificacao = {
@@ -42,6 +60,8 @@ export type Verificacao = {
 
 export type LinhaFornecedor = {
   id: string;
+  /** Número curto para as telas: #1, #42. */
+  numero: number;
   nome: string;
   cnpj: string | null;
   simulado: boolean;
@@ -52,6 +72,10 @@ export type LinhaFornecedor = {
   parouEm: string | null;
   fonte: string | null;
   regiao: string | null;
+  /** E-mail comercial conhecido: dá para mandar o convite, mesmo sem conversa aberta. */
+  email: string | null;
+  /** Categorias que vende; vazio = não informou. */
+  categorias: string[];
   verificacao: Verificacao | null;
   /** Como lib/dados mostra: "telegram", "telegram (parou)". */
   canais: string[];
@@ -66,6 +90,7 @@ export async function fornecedoresDaLista(): Promise<LinhaFornecedor[]> {
   const lista = await listaFornecedores();
   return lista.map((f) => ({
     id: f.id,
+    numero: f.numero,
     nome: f.nome,
     cnpj: f.cnpj,
     simulado: f.origem === "simulado",
@@ -76,6 +101,8 @@ export async function fornecedoresDaLista(): Promise<LinhaFornecedor[]> {
     parouEm: iso(f.parouEm),
     fonte: f.fonte,
     regiao: f.regiao,
+    email: f.email,
+    categorias: f.categorias.flatMap((c) => nomeCategoria(c) ?? []),
     verificacao: f.verificacao as Verificacao | null,
     canais: f.canais,
     canaisAtivos: f.canais.filter((c) => !c.endsWith("(parou)")).length,
@@ -324,7 +351,7 @@ function mediana(v: number[]): number | null {
 export async function itensDaBase(): Promise<ItemDaBase[]> {
   const catalogo = await db.select().from(itemCatalogo).orderBy(asc(itemCatalogo.id));
   const pedidos = await db
-    .select({ id: itemPedido.id, pedidoId: itemPedido.pedidoId, itemChave: itemPedido.itemChave, descricao: itemPedido.descricao, quantidade: itemPedido.quantidade, unidade: itemPedido.unidade, especificacao: itemPedido.especificacao, estado: itemPedido.estado, criadoEm: itemPedido.criadoEm })
+    .select({ id: itemPedido.id, pedidoId: itemPedido.pedidoId, itemChave: itemPedido.itemChave, descricao: itemPedido.descricao, quantidade: itemPedido.quantidade, unidade: itemPedido.unidade, especificacao: itemPedido.especificacao, categoria: itemPedido.categoria, estado: itemPedido.estado, criadoEm: itemPedido.criadoEm })
     .from(itemPedido)
     .orderBy(desc(itemPedido.criadoEm));
   const compras = await db
@@ -361,7 +388,7 @@ export async function itensDaBase(): Promise<ItemDaBase[]> {
 
   for (const c of catalogo) {
     const g = novo(c.codigo, c.descricao, c.unidade, c.especificacao);
-    g.categoria = c.categoria;
+    g.categoria = nomeCategoria(c.categoria);
     g.cadastradoNoPedido = c.pedidoId;
     grupos.set(c.codigo, g);
   }
@@ -372,6 +399,8 @@ export async function itensDaBase(): Promise<ItemDaBase[]> {
     // O mais novo vem primeiro: ele dá o nome e a especificação, se o catálogo não deu.
     const g = grupos.get(chave) ?? novo(chave, p.descricao, p.unidade, p.especificacao);
     grupos.set(chave, g);
+    // Sem categoria no catálogo, vale a do pedido mais novo que a tiver.
+    g.categoria ??= nomeCategoria(p.categoria);
     g.pedidos.push({ pedidoId: p.pedidoId, itemId: p.id, quantidade: Number(p.quantidade), unidade: p.unidade, estado: p.estado, em: p.criadoEm.toISOString() });
   }
   for (const { h, nome, origem } of compras) {
@@ -409,4 +438,19 @@ export async function itensDaBase(): Promise<ItemDaBase[]> {
     g.propostas.sort((a, b) => b.quantas - a.quantas || a.fornecedor.localeCompare(b.fornecedor, "pt-BR"));
   }
   return [...grupos.values()].sort((a, b) => a.descricao.localeCompare(b.descricao, "pt-BR"));
+}
+
+// ---------- Base de Dados ----------
+
+/**
+ * Categorias do filtro comum às duas abas: as do cadastro (src/dominio/categorias.json),
+ * mais qualquer outra que já esteja gravada em fornecedor, catálogo ou pedido.
+ */
+export async function categoriasDaBase(): Promise<string[]> {
+  const fs = await db.select({ categorias: fornecedor.categorias }).from(fornecedor);
+  const cat = await db.selectDistinct({ categoria: itemCatalogo.categoria }).from(itemCatalogo);
+  const ped = await db.selectDistinct({ categoria: itemPedido.categoria }).from(itemPedido);
+  const gravadas = [...fs.flatMap((f) => f.categorias), ...cat.map((c) => c.categoria), ...ped.map((p) => p.categoria)];
+  const todas = new Set([...CATEGORIAS.filter((c) => c.cadastro !== false).map((c) => c.nome), ...gravadas.flatMap((c) => nomeCategoria(c) ?? [])]);
+  return [...todas].sort((a, b) => a.localeCompare(b, "pt-BR"));
 }
