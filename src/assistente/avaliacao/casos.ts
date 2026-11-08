@@ -38,6 +38,74 @@ const FERRAMENTAS_DE_DADOS = ["buscar_pedidos", "detalhe_pedido", "mapa_cotacao"
 
 const ACAO_DO_CIMENTO = "item:34:aprovar:of34-casa|item:34:confirmar:of34-casa";
 
+/** Assistente generalista (Frente 3): pedidos e perguntas de escritório, EPI, limpeza, informática e copa. O fixture é de obra. */
+const SO_OBRA = /(s[óo]|apenas|somente) (cot[oa]mos |trabalhamos com |atendemos )?(material(is)? de )?(constru[çc][ãa]o|obra)/i;
+const CASOS_FORA_DA_OBRA: Caso[] = [
+  {
+    id: "pedido-escritorio",
+    descricao: "Pedido de papelaria vai para o fluxo, como o de obra",
+    variante: {},
+    mensagem: "preciso de 50 resmas de papel A4 75g e 10 caixas de caneta azul pro escritório até sexta",
+    esperado: { tipo: "encaminhar" },
+  },
+  {
+    id: "pedido-epi",
+    descricao: "Pedido de EPI vai para o fluxo",
+    variante: {},
+    mensagem: "20 pares de luva de vaqueta com CA e 10 capacetes classe B pra equipe de manutenção",
+    esperado: { tipo: "encaminhar" },
+  },
+  {
+    id: "pedido-limpeza",
+    descricao: "Pedido de limpeza vai para o fluxo",
+    variante: {},
+    mensagem: "manda cotar 10 galões de desinfetante 5 L e 5 fardos de papel toalha",
+    esperado: { tipo: "encaminhar" },
+  },
+  {
+    id: "pedido-informatica",
+    descricao: "Pedido de informática vai para o fluxo",
+    variante: {},
+    mensagem: "3 notebooks i5 16 GB SSD 512 pro financeiro",
+    esperado: { tipo: "encaminhar" },
+  },
+  {
+    id: "pedido-copa",
+    descricao: "Pedido da copa vai para o fluxo",
+    variante: {},
+    mensagem: "10 kg de café e 20 pacotes de copo descartável 200 ml pra copa",
+    esperado: { tipo: "encaminhar" },
+  },
+  {
+    id: "so-o-nome-escritorio",
+    descricao: "Só o nome do produto (\"clips de papel\"): o fluxo pergunta \"Quer que eu cote?\"; o Assistente não responde como pergunta",
+    variante: {},
+    mensagem: "clips de papel",
+    esperado: { tipo: "encaminhar" },
+  },
+  {
+    id: "cotam-limpeza",
+    descricao: "\"Vocês cotam material de limpeza?\": não diz que só cota obra",
+    variante: {},
+    mensagem: "vocês cotam material de limpeza?",
+    esperado: { tipo: "resposta", textoDeve: [/limpeza/i], textoNaoDeve: [SO_OBRA, /n[ãa]o (cotamos|trabalhamos com|atendemos) (material de )?limpeza/i] },
+  },
+  {
+    id: "status-item-de-escritorio",
+    descricao: "Status de um item de escritório que não existe no cenário: diz que não achou, sem inventar",
+    variante: {},
+    mensagem: "como tá o pedido do papel A4?",
+    esperado: { tipo: "resposta", textoDeve: [/(n[ãa]o (encontr|achei|h[áa]|tem|localiz|consta)|nenhum)/i], textoNaoDeve: [/R\$/, SO_OBRA] },
+  },
+  {
+    id: "escrever-email-papelaria",
+    descricao: "Fora do escopo com tema de escritório: não escreve o e-mail ao fornecedor",
+    variante: {},
+    mensagem: "escreve um e-mail pra papelaria pedindo desconto nas canetas",
+    esperado: { tipo: "resposta", ferramentasProibidas: FERRAMENTAS_DE_DADOS, textoNaoDeve: [/^(prezad|ol[áa],? (equipe|papelaria))/im, /assunto:/i], maxCaracteres: 600 },
+  },
+];
+
 export const casos: Caso[] = [
   {
     id: "pendencias",
@@ -388,4 +456,5 @@ export const casos: Caso[] = [
     mensagem: "quanto a gente economizou?",
     esperado: { tipo: "resposta", ferramentasAceitas: ["economia"], textoDeve: [/(nenhuma|ainda n[ãa]o|n[ãa]o (h[áa]|tem|houve|tivemos|teve)|sem compra)/i], textoNaoDeve: [/R\$\s?[1-9]/] },
   },
+  ...CASOS_FORA_DA_OBRA,
 ];
