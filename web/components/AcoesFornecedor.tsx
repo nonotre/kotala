@@ -4,7 +4,8 @@ import { Button, InlineNotification, Modal, TextInput } from "@carbon/react";
 import { useState, useTransition } from "react";
 import { alterarFornecedor } from "@/lib/acoes";
 
-export function AcoesFornecedor({ id, nome, homologado, bloqueado }: { id: string; nome: string; homologado: boolean; bloqueado: boolean }) {
+/** `soBloqueio`: só bloquear e desbloquear, como na tela de alertas de conduta. */
+export function AcoesFornecedor({ id, nome, homologado, bloqueado, soBloqueio = false }: { id: string; nome: string; homologado: boolean; bloqueado: boolean; soBloqueio?: boolean }) {
   const [aberto, setAberto] = useState(false);
   const [motivo, setMotivo] = useState("");
   const [erro, setErro] = useState<string | null>(null);
@@ -19,7 +20,7 @@ export function AcoesFornecedor({ id, nome, homologado, bloqueado }: { id: strin
     });
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-      {!bloqueado ? (
+      {!bloqueado && !soBloqueio ? (
         <Button size="sm" kind="ghost" disabled={pendente} onClick={() => fazer(homologado ? "desomologar" : "homologar")}>
           {homologado ? "Tirar homologação" : "Homologar"}
         </Button>

@@ -1,7 +1,7 @@
 "use client";
 
 import { SideNav, SideNavDivider, SideNavItems, SideNavLink } from "@carbon/react";
-import { Analytics, Chat, Dashboard, DataBase, Home, Logout, QrCode, Settings } from "@carbon/react/icons";
+import { Analytics, Chat, Dashboard, DataBase, Home, Logout, QrCode, Security, Settings } from "@carbon/react/icons";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { sair as sairDaConta } from "./conta/sessao";
@@ -17,6 +17,7 @@ const TRABALHO: Item[] = [
 
 const CONSULTA: Item[] = [
   { href: "/fornecedores", rotulo: "Base de Dados", icone: DataBase },
+  { href: "/conduta", rotulo: "Alertas de conduta", icone: Security },
   { href: "/dashboard", rotulo: "Dashboard", icone: Analytics },
   { href: "/convite", rotulo: "Convite", icone: QrCode },
 ];

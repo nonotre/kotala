@@ -1,0 +1,30 @@
+// Alertas de conduta: casos dos guardrails e alertas de fornecedor. Só tokens do Carbon.
+@use '@carbon/react/scss/theme';
+@use '@carbon/react/scss/spacing';
+@use '@carbon/react/scss/type';
+
+.apoio {
+  @include type.type-style('helper-text-01');
+
+  display: block;
+  color: theme.$text-secondary;
+}
+
+.trecho {
+  @include type.type-style('body-compact-01');
+
+  display: block;
+  max-inline-size: 40ch;
+  color: theme.$text-secondary;
+  font-style: italic;
+}
+
+.quando {
+  white-space: nowrap;
+}
+
+.etiquetas {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: spacing.$spacing-02;
+}
