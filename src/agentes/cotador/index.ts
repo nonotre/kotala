@@ -12,13 +12,13 @@ import {
   unitarioDe,
   validarTextoNegociacao,
 } from "../negociador/index.ts";
-import { aoProcurarPerguntas, aoVarrerFila, liberarFila, pedirAoFornecedor, type Pergunta } from "./cadencia.ts";
+import { aoProcurarPerguntas, aoVarrerFila, esperaMaxMs, liberarFila, pedirAoFornecedor, type Pergunta } from "./cadencia.ts";
 import { escaparHtml, html, Html, htmlParaTexto, negrito, quando, quantidade, quantidadeDe } from "../../texto.ts";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { EMPRESA, FRACAO_LEMBRETE, MAX_AMPLIACOES, prazoRespostasMs } from "../../config.ts";
 import { db } from "../../nucleo/db/cliente.ts";
-import { contato, cotacao, evento, fornecedor, itemPedido, oferta, pedido } from "../../nucleo/db/schema.ts";
+import { contato, cotacao, evento, fornecedor, itemPedido, mensagem, oferta, pedido } from "../../nucleo/db/schema.ts";
 import { gerarObjeto } from "../../nucleo/ia/index.ts";
 import { contatoAtivoDoFornecedor, enviar } from "../../nucleo/mensagens/index.ts";
 import {
@@ -214,12 +214,28 @@ async function enviarCotacoes(m: MudancaItem) {
   if (!enviadas) await encerrarSeTodosResponderam(d.item.id);
 }
 
+/** Tentativas de mandar a cotação a um fornecedor (a primeira e as do varredor) antes de desistir. */
+export const MAX_TENTATIVAS_ENVIO = 3;
+
+/** Envios da cotação que falharam neste contato e item (sem coluna nova: vêm da tabela mensagem). */
+async function falhasDeEnvio(contatoId: string, itemPedidoId: number): Promise<number> {
+  const [l] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(mensagem)
+    .where(and(eq(mensagem.contatoId, contatoId), eq(mensagem.itemPedidoId, itemPedidoId), eq(mensagem.direcao, "saida"), eq(mensagem.situacao, "falhou")));
+  return l?.n ?? 0;
+}
+
 /**
  * Manda a cotação a quem ainda não recebeu (só `aguardando`: quem parou ou ficou sem
  * resposta não é reenviado). Devolve null se a conferência de saída barrou o texto e o
- * item foi cancelado.
+ * item foi cancelado. Cada cotação é reservada antes do envio (enviadaEm), para o
+ * varredor e o envio normal não mandarem duas vezes.
+ * `reter`: falha de envio (canal fora do ar) não tira o fornecedor; a cotação fica
+ * `aguardando`, sem contato (sem lembrete nem "encerrado"), e o varredor tenta de novo
+ * até MAX_TENTATIVAS_ENVIO (retentarEnvios).
  */
-async function enviarPendentes(d: Dados) {
+async function enviarPendentes(d: Dados, opcoes: { reter?: boolean } = {}) {
   const pendentes = await db
     .select({ cotacao, nome: fornecedor.nome })
     .from(cotacao)
@@ -235,28 +251,39 @@ async function enviarPendentes(d: Dados) {
   }
 
   let enviadas = 0;
+  let retidas = 0;
   const falhas: string[] = [];
   for (const { cotacao: c, nome } of pendentes) {
     const ct = await contatoAtivo(c.fornecedorId);
     if (!ct) {
-      await db.update(cotacao).set({ situacao: "parou" }).where(eq(cotacao.id, c.id));
+      await db.update(cotacao).set({ situacao: "parou" }).where(and(eq(cotacao.id, c.id), isNull(cotacao.enviadaEm)));
       falhas.push(`${nome}: sem canal ativo`);
       continue;
     }
+    const reservada = await db
+      .update(cotacao)
+      .set({ enviadaEm: new Date() })
+      .where(and(eq(cotacao.id, c.id), isNull(cotacao.enviadaEm), eq(cotacao.situacao, "aguardando")))
+      .returning({ id: cotacao.id });
+    if (!reservada.length) continue; // outro envio pegou
     const r = await enviar(ct.id, htmlCotacao(d, nome).valor, { pedidoId: d.pedido.id, itemPedidoId: d.item.id, tipo: "cotacao", formato: "html" });
     if (r.situacao === "enviada") {
       await db.update(cotacao).set({ enviadaEm: new Date(), contatoId: ct.id }).where(eq(cotacao.id, c.id));
       enviadas++;
+    } else if (opcoes.reter && r.situacao === "falhou" && (await falhasDeEnvio(ct.id, d.item.id)) < MAX_TENTATIVAS_ENVIO) {
+      await db.update(cotacao).set({ enviadaEm: null }).where(eq(cotacao.id, c.id));
+      retidas++;
+      falhas.push(`${nome}: falha no envio (${r.erro ?? ""}); tento de novo`);
     } else {
       await db
         .update(cotacao)
-        .set({ situacao: r.situacao === "bloqueada_parar" ? "parou" : "sem_resposta", contatoId: ct.id })
+        .set({ enviadaEm: null, situacao: r.situacao === "bloqueada_parar" ? "parou" : "sem_resposta", contatoId: ct.id })
         .where(eq(cotacao.id, c.id));
       falhas.push(`${nome}: ${r.situacao === "bloqueada_parar" ? "pediu PARAR" : `falha no envio (${r.erro ?? ""})`}`);
     }
   }
 
-  return { pendentes, enviadas, falhas };
+  return { pendentes, enviadas, retidas, falhas };
 }
 
 async function avisarComprador(d: Dados, texto: string) {
@@ -483,8 +510,24 @@ export async function ampliarSeFaltarPropostas(itemPedidoId: number): Promise<"a
 
   const atual = await dadosDoItem(item.id);
   if (!atual) return "ampliou";
-  const envio = await enviarPendentes(atual);
+  // O prazo já foi prorrogado: envio que falha fica para o varredor tentar de novo
+  // (retentarEnvios), em vez de deixar a prorrogação sem fornecedor novo avisado.
+  const envio = await enviarPendentes(atual, { reter: true }).catch((erro) => {
+    console.error("[ampliar] envio", item.id, erro);
+    return { enviadas: 0, retidas: novos.length, falhas: [String(erro)] };
+  });
   if (!envio) return "ampliou"; // conferência de saída barrou e cancelou o item
+  if (!envio.enviadas && envio.retidas) {
+    await registrar(db, {
+      agente: "Cotador",
+      acao: "Não conseguiu mandar a cotação aos fornecedores novos; tenta de novo.",
+      motivo: envio.falhas.join("; ") || "Falha no envio.",
+      pedidoId: d.pedido.id,
+      itemPedidoId: item.id,
+      fornecedorIds: novos.map((c) => c.fornecedorId),
+    });
+    return "ampliou";
+  }
   if (envio.enviadas) {
     const ate = quando(prazoRespostasEm).replace(/^às/, "até as").replace(/^em/, "até");
     await avisarComprador(
@@ -495,6 +538,73 @@ export async function ampliarSeFaltarPropostas(itemPedidoId: number): Promise<"a
     await encerrarSeTodosResponderam(item.id);
   }
   return "ampliou";
+}
+
+/** Cotação parada por este tempo sem envio é retomada pelo varredor (o envio normal já teria terminado). */
+const ESPERA_RETENTATIVA_MS = 60_000;
+
+/**
+ * I3: cotações da rodada atual que ficaram sem envio (falha do canal, ou o processo caiu
+ * entre prorrogar e mandar). Tenta de novo enquanto der tempo de responder; sem tempo ou
+ * sem tentativas, o fornecedor sai como "sem resposta" e o fechamento normal segue.
+ * A rodada do botão tem a própria fila (rodadasSeguradas) e fica de fora.
+ */
+export async function retentarEnvios(agora = new Date()) {
+  const itens = await db
+    .selectDistinct({ id: itemPedido.id })
+    .from(cotacao)
+    .innerJoin(itemPedido, and(eq(itemPedido.id, cotacao.itemPedidoId), eq(itemPedido.rodada, cotacao.rodada)))
+    .where(
+      and(
+        eq(itemPedido.estado, "cotando"),
+        eq(cotacao.situacao, "aguardando"),
+        isNull(cotacao.enviadaEm),
+        lte(cotacao.criadoEm, new Date(agora.getTime() - ESPERA_RETENTATIVA_MS)),
+        sql`(${itemPedido.negociacao} is null or (${itemPedido.negociacao}->>'rodada')::int <> ${itemPedido.rodada})`,
+      ),
+    );
+  for (const { id } of itens) {
+    const d = await dadosDoItem(id);
+    if (!d) continue;
+    const resta = d.item.prazoRespostasEm ? d.item.prazoRespostasEm.getTime() - agora.getTime() : 0;
+    if (resta < esperaMaxMs()) {
+      // Sem tempo para o fornecedor responder: desiste deste envio.
+      const desistiu = await db
+        .update(cotacao)
+        .set({ situacao: "sem_resposta" })
+        .where(and(eq(cotacao.itemPedidoId, id), eq(cotacao.rodada, d.item.rodada), eq(cotacao.situacao, "aguardando"), isNull(cotacao.enviadaEm)))
+        .returning({ fornecedorId: cotacao.fornecedorId });
+      if (desistiu.length) {
+        await registrar(db, {
+          agente: "Cotador",
+          acao: `Desistiu de mandar a cotação a ${desistiu.length} ${desistiu.length === 1 ? "fornecedor" : "fornecedores"}.`,
+          motivo: "O envio tinha falhado e já não dá tempo de responder antes do prazo.",
+          pedidoId: d.pedido.id,
+          itemPedidoId: id,
+          fornecedorIds: desistiu.map((x) => x.fornecedorId),
+        });
+      }
+      await encerrarSeTodosResponderam(id);
+      continue;
+    }
+    const envio = await enviarPendentes(d, { reter: true });
+    if (!envio) continue;
+    if (envio.enviadas) {
+      await registrar(db, {
+        agente: "Cotador",
+        acao: `Mandou a cotação a ${envio.enviadas} ${envio.enviadas === 1 ? "fornecedor" : "fornecedores"} numa nova tentativa.`,
+        motivo: envio.falhas.length ? `O envio anterior tinha falhado. Ainda sem envio: ${envio.falhas.join("; ")}.` : "O envio anterior tinha falhado.",
+        pedidoId: d.pedido.id,
+        itemPedidoId: id,
+        fornecedorIds: envio.pendentes.map((p) => p.cotacao.fornecedorId),
+      });
+      await avisarComprador(
+        d,
+        `consegui mandar a cotação de ${d.item.descricao} a mais ${envio.enviadas} ${envio.enviadas === 1 ? "fornecedor" : "fornecedores"} (o primeiro envio tinha falhado)${d.item.prazoRespostasEm ? `. Fecho as respostas ${quando(d.item.prazoRespostasEm)}` : ""}.`,
+      );
+    }
+    if (!envio.retidas) await encerrarSeTodosResponderam(id);
+  }
 }
 
 /** Fim do prazo: antes de o varredor fechar, tenta ampliar. Falha aqui deixa o fechamento normal valer. */
@@ -767,6 +877,7 @@ export function ligarCotador() {
   aoEntrarItem("comparando", marcarSemResposta);
   aoVarrer(ampliarVencidos); // antes de varrerPrazos: a ampliação prorroga o prazo e o item não fecha
   aoVarrer(enviarLembretes);
+  aoVarrer(retentarEnvios);
   // I1 e U3: fecha quando as janelas de desconto vencem; libera a fila de perguntas.
   aoVarrer(fecharJanelasVencidas);
   aoProcurarPerguntas(perguntasDaRodadaDoBotao);
