@@ -466,6 +466,8 @@ function botoesDeAtributos(pedidoId: number, atributos: AtributoPerguntado[]): B
 }
 
 /** Q4: resposta por botão. Entra na especificação do item e vira correção, para valer se o pedido for relido. */
+// Antes da confirmação, evento só no pedido (com a ordem do item nos dados): a correção apaga e recria
+// os itens (definirItens), e um evento ligado ao item travaria a correção pela chave estrangeira.
 async function escolherAtributo(pedidoId: number, ordem: number, chave: string, indice: number, compradorId: string) {
   const [p] = await db.select().from(pedido).where(eq(pedido.id, pedidoId));
   if (!p || p.compradorId !== compradorId) return;
@@ -480,7 +482,7 @@ async function escolherAtributo(pedidoId: number, ordem: number, chave: string, 
   if (!a || !valor) return;
   await db.update(itemPedido).set({ especificacao: { ...it.especificacao, [a.rotulo]: valor } }).where(eq(itemPedido.id, it.id));
   await db.update(pedido).set({ correcoes: [...p.correcoes, `Item ${ordem}: ${a.rotulo}: ${valor}.`] }).where(eq(pedido.id, pedidoId));
-  await registrar(db, { agente: "Comprador", acao: `Informou ${a.rotulo}: ${valor} no item ${ordem}.`, motivo: "Resposta à pergunta do atributo obrigatório da categoria.", pedidoId, itemPedidoId: it.id });
+  await registrar(db, { agente: "Comprador", acao: `Informou ${a.rotulo}: ${valor} no item ${ordem}.`, motivo: "Resposta à pergunta do atributo obrigatório da categoria.", pedidoId, dados: { ordem } });
   await mostrarConfirmacao(pedidoId);
 }
 
@@ -515,7 +517,7 @@ async function escolherMarca(pedidoId: number, ordem: number, escolha: "so" | "s
   const frase = so ? `Item ${ordem}: só a marca ${marca}.` : `Item ${ordem}: aceita similar à marca ${marca}.`;
   await db.update(itemPedido).set({ aceitaSimilar: !so }).where(eq(itemPedido.id, it.id));
   await db.update(pedido).set({ correcoes: [...p.correcoes, frase] }).where(eq(pedido.id, pedidoId));
-  await registrar(db, { agente: "Comprador", acao: so ? `Exigiu a marca ${marca} no item ${ordem}.` : `Aceitou similar à marca ${marca} no item ${ordem}.`, motivo: "Resposta à pergunta da marca vista na imagem.", pedidoId, itemPedidoId: it.id });
+  await registrar(db, { agente: "Comprador", acao: so ? `Exigiu a marca ${marca} no item ${ordem}.` : `Aceitou similar à marca ${marca} no item ${ordem}.`, motivo: "Resposta à pergunta da marca vista na imagem.", pedidoId, dados: { ordem } });
   await mostrarConfirmacao(pedidoId);
 }
 
@@ -549,7 +551,7 @@ async function escolherDaBase(pedidoId: number, ordem: number, idBase: string, c
     .update(itemPedido)
     .set({ descricao: b.descricao, itemChave: b.id, especificacao: { ...it.especificacao, ...especificacaoEmTexto(b) } })
     .where(eq(itemPedido.id, it.id));
-  await registrar(db, { agente: "Comprador", acao: `Escolheu ${b.id} (${b.descricao}) para o item ${ordem}.`, motivo: "Escolha na base de itens.", pedidoId, itemPedidoId: it.id });
+  await registrar(db, { agente: "Comprador", acao: `Escolheu ${b.id} (${b.descricao}) para o item ${ordem}.`, motivo: "Escolha na base de itens.", pedidoId, dados: { ordem } });
   await mostrarConfirmacao(pedidoId);
 }
 

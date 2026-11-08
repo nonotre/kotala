@@ -95,3 +95,14 @@ test("U1: o botão da forma de pagamento grava a preferência e mostra a confirm
   assert.match(ultima.texto, /Pagamento preferido: boleto 28 dias/);
   assert.ok(!ultima.opcoes.botoes?.some((b) => b.dado.includes(":pag:")), "com a forma escolhida, não pergunta de novo");
 });
+
+test("escolher atributo antes de confirmar e depois corrigir: a correção recria os itens sem travar", { skip: pular }, async () => {
+  const { db, schema } = m!;
+  const [comp] = await db.insert(schema.contato).values({ canal: "web", endereco: `fk-${crypto.randomUUID()}`, papel: "comprador" }).returning();
+  const ped = await m!.o.abrirPedido({ compradorId: comp!.id, canalOrigem: "web", textoOriginal: "extintor" });
+  await m!.o.definirItens(db, ped.id, [{ descricao: "Extintor", quantidade: 2, unidade: "unidade" }]);
+  const { registrar } = await import("../src/nucleo/registro.ts");
+  // O que escolherAtributo grava agora: só o pedido, com a ordem nos dados.
+  await registrar(db, { agente: "Comprador", acao: "Informou Carga: 6 kg no item 1.", motivo: "teste", pedidoId: ped.id, dados: { ordem: 1 } });
+  await m!.o.definirItens(db, ped.id, [{ descricao: "Extintor ABC 6 kg", quantidade: 2, unidade: "unidade" }]);
+});
