@@ -9,9 +9,9 @@ export const brl = (v: number) => v.toLocaleString("pt-BR", { minimumFractionDig
 const centavos = (v: number) => Math.round(v * 100) / 100;
 const dias = (n: number) => `${n} ${n === 1 ? "dia" : "dias"}`;
 
-/** Dias para pagar, como o Extrator leria: à vista = 0; "boleto 28 dias" = 28. */
+/** Dias para pagar, como o Extrator leria (o schema dele diz "0 se à vista ou antecipado"): "boleto 28 dias" = 28. */
 export function prazoPagamento(pagamento: string): number | null {
-  if (/vista|pix/i.test(pagamento)) return 0;
+  if (/vista|pix|antecipad|sinal|entrada/i.test(pagamento)) return 0;
   const m = /(\d+)\s*dias/.exec(pagamento);
   return m ? Number(m[1]) : null;
 }

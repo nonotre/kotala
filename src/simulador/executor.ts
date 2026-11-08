@@ -9,7 +9,7 @@
 import { and, asc, eq, sql } from "drizzle-orm";
 import { db, conexao } from "../nucleo/db/cliente.ts";
 import { contato, cotacao, evento, fornecedor, itemPedido, mapaCotacao, pedido } from "../nucleo/db/schema.ts";
-import { aoRegistrarUso } from "../nucleo/ia/index.ts";
+import { aoRegistrarUso, gerarTexto } from "../nucleo/ia/index.ts";
 import { receber, registrarCanal, type AdaptadorCanal, type OpcoesEnvio } from "../nucleo/mensagens/index.ts";
 import { iniciarVarredor } from "../nucleo/orquestrador/index.ts";
 import type { EstadoItem } from "../nucleo/orquestrador/estados.ts";
@@ -17,7 +17,7 @@ import type { Comparacao } from "../agentes/comparador/calculo.ts";
 import { carregarCatalogo } from "../agentes/interpretador/catalogo.ts";
 import { ambienteIaFalsa, iaFalsa, limparIaFalsa, registrarInterpretacao, registrarLeitura, semResposta } from "./ia-falsa.ts";
 import { instalarTravaDeRede, zerarContadoresDeRede } from "./rede.ts";
-import type { Cenario, ContextoFala, Gatilho, ItemDaConversa, MensagemRastro, PersonaCenario, Rastro } from "./cenarios/tipos.ts";
+import type { Cenario, CompradorIa, ContextoFala, Gatilho, ItemDaConversa, ItemRastro, MensagemRastro, PersonaCenario, Rastro } from "./cenarios/tipos.ts";
 
 export type OpcoesSimulador = {
   /** IA real (Gemini) no Interpretador, no Extrator e nos outros agentes. Sem isto, a IA falsa responde. */
@@ -38,6 +38,8 @@ export const AMBIENTE_PADRAO: Record<string, string> = {
   SERPER_API_KEY: "",
   PORTAL_TRANSPARENCIA_CHAVE: "",
   SIM_SEM_REDE: "1",
+  // A IA falsa espera um pouco, como a real, para as corridas entre mensagens aparecerem.
+  SIM_IA_LATENCIA_MS: "300",
 };
 
 const TABELAS =
@@ -211,15 +213,15 @@ async function contatoComprador() {
 
 async function itensDoPedido() {
   const c = await contatoComprador();
-  if (!c) return { pedido: null, itens: [] as { id: number; descricao: string; estado: string; rodada: number }[] };
-  const [p] = await db.select({ id: pedido.id, estado: pedido.estado }).from(pedido).where(eq(pedido.compradorId, c.id)).orderBy(sql`${pedido.id} desc`).limit(1);
+  if (!c) return { pedido: null, itens: [] as ItemRastro[] };
+  const [p] = await db.select({ id: pedido.id, estado: pedido.estado, urgencia: pedido.urgencia }).from(pedido).where(eq(pedido.compradorId, c.id)).orderBy(sql`${pedido.id} desc`).limit(1);
   if (!p) return { pedido: null, itens: [] };
   const itens = await db
-    .select({ id: itemPedido.id, descricao: itemPedido.descricao, estado: itemPedido.estado, rodada: itemPedido.rodada })
+    .select({ id: itemPedido.id, descricao: itemPedido.descricao, quantidade: itemPedido.quantidade, unidade: itemPedido.unidade, estado: itemPedido.estado, rodada: itemPedido.rodada })
     .from(itemPedido)
     .where(eq(itemPedido.pedidoId, p.id))
     .orderBy(asc(itemPedido.ordem));
-  return { pedido: p, itens };
+  return { pedido: p, itens: itens.map((i) => ({ ...i, quantidade: Number(i.quantidade) })) };
 }
 
 async function aguardar(cond: () => Promise<boolean>, timeoutSeg: number): Promise<boolean> {
@@ -231,15 +233,45 @@ async function aguardar(cond: () => Promise<boolean>, timeoutSeg: number): Promi
   return cond();
 }
 
+/**
+ * 3.3: a IA faz o papel do comprador (uma chamada por mensagem, papel "rapido"). Só na rodada com IA
+ * real; na determinística, ou se a chamada falhar, vale a reserva escrita no cenário.
+ */
+async function falaDoComprador(c: CompradorIa, reserva: string): Promise<string> {
+  if (!preparado?.ia) return reserva;
+  const conversa = rodada!.mensagens
+    .filter((m) => m.com === "comprador")
+    .slice(-6)
+    .map((m) => `${m.direcao === "saida" ? "Assistente" : "Você"}: ${m.texto.replace(/\s+/g, " ").slice(0, 400)}`)
+    .join("\n");
+  try {
+    const r = await gerarTexto({
+      papel: "rapido",
+      sistema:
+        "Você faz o papel de um comprador de uma empresa brasileira, escrevendo para o assistente de cotações pelo chat. " +
+        "Escreva só a próxima mensagem do comprador, do jeito dele (curta, informal, como no WhatsApp), sem aspas e sem explicar nada. " +
+        "Não invente itens nem quantidades além do objetivo.",
+      prompt: `Quem você é: ${c.quem}\nO que você quer: ${c.objetivo}${conversa ? `\n\nConversa até aqui:\n${conversa}` : ""}\n\nSua próxima mensagem:`,
+      contexto: { agente: "Comprador simulado" },
+    });
+    const texto = r.valor.trim().replace(/^["“]|["”]$/g, "");
+    return texto || reserva;
+  } catch (erro) {
+    rodada?.erros.push(`comprador por IA: ${erro instanceof Error ? erro.message : String(erro)}`);
+    return reserva;
+  }
+}
+
 async function executarPassos(c: Cenario, falhos: string[]) {
   const r = rodada!;
   const clicados = new Set<string>();
   let n = 0;
   for (const passo of c.passos) {
-    if ("diz" in passo) {
-      if (passo.interpretacao) registrarInterpretacao(passo.diz, passo.interpretacao);
-      anotar({ com: "comprador", direcao: "entrada", texto: passo.diz });
-      await receber({ canal: "web", endereco: ENDERECO_COMPRADOR, idExterno: `cen-c-${++n}`, texto: passo.diz });
+    if ("diz" in passo || "comprador" in passo) {
+      const texto = "diz" in passo ? passo.diz : await falaDoComprador(passo.comprador, passo.reserva);
+      if (passo.interpretacao) registrarInterpretacao(texto, passo.interpretacao);
+      anotar({ com: "comprador", direcao: "entrada", texto });
+      await receber({ canal: "web", endereco: ENDERECO_COMPRADOR, idExterno: `cen-c-${++n}`, texto });
     } else if ("clica" in passo) {
       let alvo: { dado: string; rotulo: string; chave: string } | null = null;
       const achou = await aguardar(async () => {
@@ -346,6 +378,7 @@ async function lerRastro(c: Cenario, falhos: string[]): Promise<Rastro> {
     cenario: c.chave,
     pedidoId: p?.id ?? null,
     pedidoEstado: p?.estado ?? null,
+    pedidoUrgencia: p?.urgencia ?? null,
     itens,
     mensagens: [...r.mensagens],
     eventos,

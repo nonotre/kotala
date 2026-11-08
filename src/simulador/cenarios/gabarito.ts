@@ -42,6 +42,24 @@ export function estadoDoItem(estados: string | string[], regra = "Estado"): Expe
   };
 }
 
+/** O pedido virou o item certo (descrição, quantidade e unidade): confere o Interpretador. */
+export function itemPedido(o: { descricao: RegExp; quantidade: number; unidade?: RegExp }, regra = "Interpretador"): Expectativa {
+  return {
+    descricao: `pedido vira ${o.quantidade} ${o.unidade ?? ""} de ${o.descricao}`.replace(/\s+/g, " "),
+    regra,
+    conferir: (r) => {
+      const i = r.itens[0];
+      if (!i) return falha("nenhum item");
+      const certo = o.descricao.test(i.descricao) && i.quantidade === o.quantidade && (!o.unidade || o.unidade.test(i.unidade));
+      return certo ? ok(`${i.quantidade} ${i.unidade} de ${i.descricao}`) : falha(`${i.quantidade} ${i.unidade} de ${i.descricao}`);
+    },
+  };
+}
+
+export function urgenciaDoPedido(urgencia: string, regra = "Interpretador"): Expectativa {
+  return { descricao: `pedido com urgência ${urgencia}`, regra, conferir: (r) => (r.pedidoUrgencia === urgencia ? ok() : falha(`urgência ${r.pedidoUrgencia ?? "(sem pedido)"}`)) };
+}
+
 // ---------- Mapa ----------
 
 export function mapaSai(o: { validas: number; cortadas?: number; contem?: string[]; semFornecedor?: string[]; recomendada?: string }, regra = "R14"): Expectativa {
@@ -80,6 +98,21 @@ export function linhaDoMapa(fornecedor: string, padrao: RegExp, regra: string, c
       if (!l) return falha(`${fornecedor} não está no mapa`);
       const textos = campo === "alertas" ? l.alertas : l.negociacao ? [l.negociacao] : [];
       return textos.some((t) => padrao.test(t)) ? ok(textos.find((t) => padrao.test(t))) : falha(`${campo}: ${textos.join(" | ") || "(vazio)"}`);
+    },
+  };
+}
+
+/** Nenhuma linha do último mapa (ou só a do fornecedor dado) tem alerta que casa com o padrão. */
+export function semAlertaNoMapa(padrao: RegExp, regra: string, fornecedor?: string): Expectativa {
+  return {
+    descricao: `no mapa, ${fornecedor ?? "nenhuma linha"} ${fornecedor ? "sem" : "com"} o alerta ${padrao}`,
+    regra,
+    conferir: (r) => {
+      const m = ultimoMapa(r);
+      if (!m) return falha("nenhum mapa");
+      const linhas = [...m.validas, ...m.cortadas].filter((l) => !fornecedor || l.fornecedor === fornecedor);
+      const com = linhas.filter((l) => l.alertas.some((a) => padrao.test(a)));
+      return com.length ? falha(com.map((l) => `${l.fornecedor}: ${l.alertas.find((a) => padrao.test(a))}`).join("; ")) : ok();
     },
   };
 }

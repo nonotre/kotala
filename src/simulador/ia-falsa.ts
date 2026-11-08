@@ -196,8 +196,19 @@ export function responderComoGemini(corpo: CorpoGemini): { ok: true; valor: unkn
   return { ok: false, erro: "IA falsa do simulador: este agente não tem resposta simulada (o código usa a reserva sem IA)." };
 }
 
+/**
+ * Latência da IA falsa (SIM_IA_LATENCIA_MS, padrão 0). A IA real leva de 1 a 2 s por leitura:
+ * sem essa espera, corridas entre mensagens quase juntas somem no modo determinístico.
+ */
+export const latenciaIaFalsaMs = (env: NodeJS.ProcessEnv = process.env) => {
+  const n = Number(env.SIM_IA_LATENCIA_MS);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+};
+
 /** O respondedor que a trava de rede usa no lugar do Gemini. */
 export const iaFalsa: RespondedorGemini = async (_url, init) => {
+  const espera = latenciaIaFalsaMs();
+  if (espera) await new Promise((r) => setTimeout(r, espera));
   let corpo: CorpoGemini = {};
   try {
     corpo = JSON.parse(typeof init?.body === "string" ? init.body : "{}") as CorpoGemini;

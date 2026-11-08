@@ -46,13 +46,22 @@ export type PersonaCenario = {
   roteiro: Gatilho[];
 };
 
+/**
+ * Comprador guiado por IA (3.3): quem ele é e o que quer. Na rodada com IA real, a IA escreve
+ * a mensagem dele a partir disto e da conversa até aqui; na determinística, vale a `reserva`.
+ */
+export type CompradorIa = { quem: string; objetivo: string };
+
 /** Passos do comprador. `clica` espera o botão aparecer (até o tempo limite). */
 export type Passo =
   | { diz: string; interpretacao?: InterpretacaoSimulada }
+  | { comprador: CompradorIa; reserva: string; interpretacao?: InterpretacaoSimulada }
   | { clica: RegExp; timeoutSeg?: number }
   | { espera: EstadoItem | EstadoItem[]; timeoutSeg?: number }
   | { esperaEvento: RegExp; timeoutSeg?: number }
   | { dorme: number };
+
+export type ItemRastro = { id: number; descricao: string; quantidade: number; unidade: string; estado: string; rodada: number };
 
 export type MensagemRastro = {
   /** "comprador" ou a chave da persona. */
@@ -85,7 +94,8 @@ export type Rastro = {
   cenario: string;
   pedidoId: number | null;
   pedidoEstado: string | null;
-  itens: { id: number; descricao: string; estado: string; rodada: number }[];
+  pedidoUrgencia: string | null;
+  itens: ItemRastro[];
   mensagens: MensagemRastro[];
   eventos: EventoRastro[];
   mapas: MapaRastro[];
