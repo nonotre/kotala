@@ -78,6 +78,22 @@ async function rodapeFornecedor(endereco: string, usuarioBot: string | undefined
   return linhas.join("\n");
 }
 
+/** E-mail de teste: só o fornecedor, a cotação e o link do bot. Toda a conversa segue no Telegram. */
+export function textoLinkTeste(l: { fornecedor: string; codigo: string; cotacao: string }, usuarioBot: string | undefined): string {
+  return [
+    `FORNECEDOR: ${l.fornecedor}`,
+    l.cotacao,
+    "",
+    usuarioBot
+      ? `Para responder como ${l.fornecedor}, abra este link no Telegram e toque em Iniciar:\n${linkConvite(usuarioBot, l.codigo)}`
+      : `Bot do fornecedor sem usuário configurado; código do convite: ${l.codigo}`,
+    "",
+    "A conversa toda (cotação, desconto, pedido de compra) acontece no Telegram. Este e-mail só traz o link.",
+    "Abrir o link de outro fornecedor troca a conversa para ele; o anterior volta a responder sozinho.",
+    `E-mail de teste do assistente de compras da ${EMPRESA.nome}.`,
+  ].join("\n");
+}
+
 export type OpcoesEmail = {
   /** Para os testes; sem ele, usa o Gmail com senha de app. */
   transporte?: Transporte;
@@ -126,7 +142,7 @@ export function adaptadorEmail(op: OpcoesEmail = {}): AdaptadorCanal {
               : ehMapa(opcoes.anexos)
                 ? `Mapa de cotação${opcoes.pedidoId ? ` · pedido ${opcoes.pedidoId}` : ""} · ${EMPRESA.nome}`
                 : `Mensagem de ${EMPRESA.nome}`;
-      const assuntoFinal = opcoes.copiaDe ? `[${opcoes.copiaDe}] ${assunto} (cópia de teste)` : assunto;
+      const assuntoFinal = opcoes.linkTeste ? `[${opcoes.linkTeste.fornecedor}] Responda como este fornecedor pelo Telegram (teste)` : assunto;
       // O convite já traz o link e o aviso no corpo.
       const { lista, faltaram } = await anexosDoEmail(opcoes.anexos ?? []);
       const completo =
@@ -134,7 +150,11 @@ export function adaptadorEmail(op: OpcoesEmail = {}): AdaptadorCanal {
         (opcoes.botoes?.length ? opcoesEmTexto(opcoes.botoes) : "") +
         (faltaram.length ? `\n\nNão consegui anexar: ${faltaram.join(", ")}.` : "");
       // A cópia de teste não leva o rodapé do fornecedor (o link pessoal é dele, não de quem testa).
-      const corpo = opcoes.tipo === "convite" || opcoes.copiaDe ? completo : completo + (await rodapeFornecedor(endereco, op.usuarioBot));
+      const corpo = opcoes.linkTeste
+        ? textoLinkTeste(opcoes.linkTeste, op.usuarioBot)
+        : opcoes.tipo === "convite"
+          ? completo
+          : completo + (await rodapeFornecedor(endereco, op.usuarioBot));
       const r = await t.sendMail({ from: remetente(), to: normalizarEmail(endereco), subject: assuntoFinal, text: corpo, ...(lista.length ? { attachments: lista } : {}) });
       return { idExterno: r.messageId };
     },

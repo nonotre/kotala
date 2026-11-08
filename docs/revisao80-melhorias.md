@@ -53,9 +53,14 @@ Testes da Ester em 08/11/2026, das 14:14 às 14:53, pedidos 29 a 33 (chat web e 
 
 **O que mudou** (`src/agentes/busca/filtro.ts`): as medidas do pedido (comprimento, bitola em mm, polegada, voltagem, potência) são comparadas com as do título do anúncio. Se o título traz uma medida do mesmo tipo e nenhuma bate, o anúncio sai, com o motivo "Medida diferente do pedido (3 metros no anúncio; pedido 6 m)". Título sem medida fica, para o comprador conferir no link. A marca 3M não é confundida com "3 metros".
 
-## 7. E-mail de teste para todo fornecedor
+## 7. E-mail de teste: só o link do Telegram
 
-Pedido do dono: com `EMAIL_FORNECEDOR_TESTE=<e-mail removido>,<e-mail removido>` (já no `.env`; vários endereços separados por vírgula), toda cotação, negociação, lembrete, pedido de compra e aviso de resultado a **qualquer** fornecedor (simulado ou real, por qualquer canal) também sai como cópia para esse endereço. O assunto começa pelo nome do fornecedor ("[Casa do Construtor (simulado)] Pedido de compra ... (cópia de teste)") e o corpo abre com um cabeçalho "FORNECEDOR: ...", com CNPJ e canal. Nunca vai ao e-mail do fornecedor: a trava de `src/canais/email.ts` continua igual, e esse endereço só entra na lista liberada. Falha no e-mail não atrapalha o envio principal. Só funciona nos bots (é lá que o canal de e-mail é registrado). O simulador e os testes não mandam e-mail.
+Pedido do dono: com `EMAIL_FORNECEDOR_TESTE=<e-mail removido>,<e-mail removido>` (já no `.env`; vários endereços separados por vírgula), quando uma cotação sai para um fornecedor que não está no Telegram (os simulados, por exemplo), esses endereços recebem um e-mail **só com o link pessoal do bot** daquele fornecedor. O e-mail não leva cotação nem conversa: tudo acontece no Telegram.
+
+- Assunto: `[Casa do Construtor Lagoa Exemplo (simulado)] Responda como este fornecedor pelo Telegram (teste)`. O corpo abre com `FORNECEDOR: ...` e a cotação (item e quantidade), e depois o link.
+- Um e-mail por fornecedor e cotação. O fornecedor sem código de convite ganha um na hora.
+- Abrindo o link, a conversa do Telegram passa a ser a daquele fornecedor, a cotação aberta chega lá e a persona automática dele para de responder. Abrir o link de outro fornecedor troca a conversa para ele, e o anterior volta ao automático (essa troca só vale com `EMAIL_FORNECEDOR_TESTE` ligado).
+- Nunca vai ao e-mail do fornecedor: a trava de `src/canais/email.ts` continua igual, e esses endereços só entram na lista liberada. Só funciona nos bots; o simulador e os testes não mandam e-mail.
 
 ## O harness
 

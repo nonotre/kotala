@@ -149,3 +149,11 @@ test("suposições com jargão interno não chegam ao comprador", () => {
   });
   assert.deepEqual(i.suposicoes, ["Barra de 6 m"]);
 });
+
+test("e-mail de teste: só o fornecedor, a cotação e o link do bot", async () => {
+  const { textoLinkTeste } = await import("../src/canais/email.ts");
+  const t = textoLinkTeste({ fornecedor: "Casa do Construtor Lagoa Exemplo (simulado)", codigo: "fABC123", cotacao: "Cotação 64: 15 barra de Tubo de PVC" }, "Kotala_bot");
+  assert.match(t, /^FORNECEDOR: Casa do Construtor Lagoa Exemplo \(simulado\)\nCotação 64/);
+  assert.match(t, /https:\/\/t\.me\/Kotala_bot\?start=fABC123/);
+  assert.doesNotMatch(t, /R\$/);
+});

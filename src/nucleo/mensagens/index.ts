@@ -5,7 +5,8 @@
 import { mascararDadosPessoais } from "../../agentes/guardrail/index.ts";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "../db/cliente.ts";
-import { contato, fornecedor, mensagem, type Anexo, type Canal } from "../db/schema.ts";
+import { contato, fornecedor, itemPedido, mensagem, type Anexo, type Canal } from "../db/schema.ts";
+import { randomBytes } from "node:crypto";
 import { registrar } from "../registro.ts";
 import { arquivoGuardado, salvarArquivo } from "../arquivos.ts";
 import { htmlParaTexto } from "../../texto.ts";
@@ -60,8 +61,8 @@ export type OpcoesEnvio = {
   formato?: "html";
   /** idExterno de uma mensagem anterior a editar no lugar de mandar outra (se o canal souber). */
   substitui?: string;
-  /** Cópia de teste por e-mail (EMAIL_FORNECEDOR_TESTE): para quem a mensagem foi de verdade. */
-  copiaDe?: string;
+  /** Teste pelo Telegram (EMAIL_FORNECEDOR_TESTE): e-mail só com o link pessoal do bot para responder como este fornecedor. */
+  linkTeste?: { fornecedor: string; codigo: string; cotacao: string };
 };
 
 /** Cada canal implementa isto (Telegram, WhatsApp simulado, e-mail, web...). */
@@ -250,7 +251,7 @@ export async function enviar(contatoId: string, texto: string, opcoes: OpcoesEnv
       .insert(mensagem)
       .values({ ...base, situacao: "enviada", idExterno })
       .returning({ id: mensagem.id });
-    if (c.papel === "fornecedor" && c.canal !== "email") void copiaPorEmailDeTeste(c, simples, opcoes);
+    if (c.papel === "fornecedor" && opcoes.tipo === "cotacao" && c.canal !== "telegram" && c.canal !== "email") void linkDeTestePorEmail(c, opcoes);
     return { situacao: "enviada", mensagemId: m!.id };
   } catch (e) {
     const erro = e instanceof Error ? e.message : String(e);
@@ -259,39 +260,39 @@ export async function enviar(contatoId: string, texto: string, opcoes: OpcoesEnv
   }
 }
 
-/** Tipos de mensagem a fornecedor que ganham cópia por e-mail de teste (o resto é conversa miúda). */
-const TIPOS_COPIA_EMAIL = new Set<TipoEnvio>(["cotacao", "negociacao", "pedido_compra", "lembrete", "nao_venceu", "encerrada", "completar_proposta", "confirmar_preco"]);
+/** Fornecedor e item que já ganharam o e-mail com o link (uma vez por cotação). */
+const linksEnviados = new Set<string>();
 
 /**
- * Teste do envio de e-mail (pedido do dono, 08/11/2026): com EMAIL_FORNECEDOR_TESTE, toda cotação,
- * negociação e pedido de compra a qualquer fornecedor (simulado ou real, por qualquer canal) também
- * sai por e-mail para esse endereço, com o nome do fornecedor no assunto. Nunca vai ao e-mail do
- * fornecedor: a trava de canais/email.ts continua valendo. Falha aqui não atrapalha o envio principal.
+ * Teste pelo Telegram (pedido do dono, 08/11/2026): com EMAIL_FORNECEDOR_TESTE (endereços separados por
+ * vírgula), quando uma cotação sai para um fornecedor que não está no Telegram (simulado, por exemplo),
+ * quem testa recebe um e-mail só com o link pessoal do bot desse fornecedor. Abrindo o link, a conversa
+ * do Telegram passa a ser a do fornecedor e tudo segue por lá (o e-mail não leva cotação nem conversa).
+ * Nunca vai ao e-mail do fornecedor. Falha aqui não atrapalha o envio principal.
  */
-async function copiaPorEmailDeTeste(c: Contato, texto: string, opcoes: OpcoesEnvio) {
-  // Vários endereços, separados por vírgula (o time e a Ester recebem a mesma cópia).
+async function linkDeTestePorEmail(c: Contato, opcoes: OpcoesEnvio) {
   const destinos = (process.env.EMAIL_FORNECEDOR_TESTE ?? "").split(",").map((e) => e.trim()).filter(Boolean);
   const email = adaptadores.get("email");
-  if (!destinos.length || !email || !opcoes.tipo || !TIPOS_COPIA_EMAIL.has(opcoes.tipo)) return;
-  const [f] = c.fornecedorId
-    ? await db.select({ nome: fornecedor.nome, origem: fornecedor.origem, cnpj: fornecedor.cnpj }).from(fornecedor).where(eq(fornecedor.id, c.fornecedorId)).catch(() => [])
-    : [];
-  const quem = `${f?.nome ?? c.nome ?? "fornecedor"}${f?.origem === "simulado" ? " (simulado)" : ""}`;
-  // Cabeçalho que diz de cara qual fornecedor recebeu (o assunto também começa pelo nome dele).
-  const cabecalho = [
-    "==============================",
-    `FORNECEDOR: ${quem}`,
-    ...(f?.cnpj ? [`CNPJ: ${f.cnpj}`] : []),
-    `Canal da conversa: ${c.canal === "simulado" ? "simulado (na tela)" : c.canal}`,
-    "Cópia de teste: o fornecedor recebeu esta mensagem pelo canal acima.",
-    "==============================",
-  ].join("\n");
-  for (const destino of destinos) {
-    try {
-      await email.enviar(destino, `${cabecalho}\n\n${texto}`, { ...opcoes, formato: undefined, copiaDe: quem });
-    } catch (erro) {
-      console.error("[e-mail de teste]", destino, erro instanceof Error ? erro.message : erro);
+  if (!destinos.length || !email || !c.fornecedorId) return;
+  const chave = `${c.fornecedorId}:${opcoes.itemPedidoId ?? ""}`;
+  if (linksEnviados.has(chave)) return;
+  linksEnviados.add(chave);
+  try {
+    let [f] = await db.select().from(fornecedor).where(eq(fornecedor.id, c.fornecedorId));
+    if (!f) return;
+    if (!f.codigoConvite) {
+      // Código só com [A-Za-z0-9_-], como o /start do Telegram exige.
+      const codigo = `f${randomBytes(9).toString("base64url")}`;
+      [f] = await db.update(fornecedor).set({ codigoConvite: codigo }).where(eq(fornecedor.id, f.id)).returning();
     }
+    const [it] = opcoes.itemPedidoId ? await db.select({ descricao: itemPedido.descricao, quantidade: itemPedido.quantidade, unidade: itemPedido.unidade }).from(itemPedido).where(eq(itemPedido.id, opcoes.itemPedidoId)) : [];
+    const cotacao = `${opcoes.itemPedidoId ? `Cotação ${opcoes.itemPedidoId}` : "Cotação"}${it ? `: ${Number(it.quantidade).toLocaleString("pt-BR")} ${it.unidade} de ${it.descricao}` : ""}`;
+    const linkTeste = { fornecedor: `${f!.nome}${f!.origem === "simulado" ? " (simulado)" : ""}`, codigo: f!.codigoConvite!, cotacao };
+    for (const destino of destinos) {
+      await email.enviar(destino, "", { tipo: "convite", itemPedidoId: opcoes.itemPedidoId, pedidoId: opcoes.pedidoId, linkTeste }).catch((erro) => console.error("[e-mail de teste]", destino, erro instanceof Error ? erro.message : erro));
+    }
+  } catch (erro) {
+    console.error("[e-mail de teste]", erro instanceof Error ? erro.message : erro);
   }
 }
 

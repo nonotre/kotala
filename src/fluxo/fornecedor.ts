@@ -103,9 +103,11 @@ async function tratarMensagemDoFornecedor({ contato, mensagemId, entrada }: Mens
   }
 
   // E1: link pessoal do convite. Liga a conversa ao fornecedor já conhecido, sem perguntar o nome.
-  if (!contato.fornecedorId && entrada.convite) {
+  // Teste pelo Telegram (EMAIL_FORNECEDOR_TESTE): o link de outro fornecedor troca a conversa para ele.
+  const modoTeste = !!process.env.EMAIL_FORNECEDOR_TESTE?.trim();
+  if (entrada.convite && (!contato.fornecedorId || modoTeste)) {
     const [f] = await db.select().from(fornecedor).where(eq(fornecedor.codigoConvite, entrada.convite));
-    if (f) {
+    if (f && f.id !== contato.fornecedorId) {
       await ligarPeloConvite(contato, f);
       return;
     }
@@ -417,7 +419,26 @@ export async function convidarPorEmail(dados: { email: string; nome?: string; us
   return { fornecedorId: forn.id, codigo, link, envio };
 }
 
+/**
+ * Chat do fornecedor simulado assumido (true) ou devolvido ao automático (false), pelo mesmo evento que a
+ * tela usa (dados.tipo = "sim_assumido"): a persona confere esse evento antes de cada resposta agendada.
+ */
+async function marcarSimuladoAssumido(fornecedorId: string, assumido: boolean) {
+  const [sim] = await db.select({ id: tContato.id }).from(tContato).where(and(eq(tContato.fornecedorId, fornecedorId), eq(tContato.canal, "simulado")));
+  if (!sim) return;
+  await registrar(db, {
+    agente: "Fornecedor",
+    acao: assumido ? "Usuário assumiu o chat simulado pelo Telegram." : "Chat simulado devolvido ao automático.",
+    motivo: assumido ? "Abriu o link de teste do fornecedor no Telegram; a persona automática para de responder." : "Quem testava passou a responder como outro fornecedor.",
+    fornecedorIds: [fornecedorId],
+    dados: { tipo: "sim_assumido", contatoId: sim.id, assumido },
+  });
+}
+
 async function ligarPeloConvite(contato: Contato, f: typeof fornecedor.$inferSelect) {
+  // Teste: quem respondia como outro fornecedor larga aquele (a persona dele volta ao automático).
+  if (contato.fornecedorId && contato.fornecedorId !== f.id) await marcarSimuladoAssumido(contato.fornecedorId, false);
+  if (f.origem === "simulado") await marcarSimuladoAssumido(f.id, true);
   await db
     .update(tContato)
     .set({ fornecedorId: f.id, papel: "fornecedor", nome: f.nome, avisoPrivacidadeEm: contato.avisoPrivacidadeEm ?? new Date() })
