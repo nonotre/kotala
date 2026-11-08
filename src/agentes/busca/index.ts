@@ -74,6 +74,19 @@ export async function candidatos(item: { descricao: string; itemChave: string | 
   return lista.sort((a, b) => ordem(a) - ordem(b) || a.nome.localeCompare(b.nome));
 }
 
+/**
+ * I3: fornecedores ainda não consultados neste item (rodada atual), prontos para uma
+ * ampliação. Fora quem já tem cotação na rodada (qualquer situação) e quem o comprador
+ * tirou do mapa; o corte em MAX_FORNECEDORES vem depois do filtro, por leva.
+ */
+export async function candidatosNovos(item: { id: number; rodada: number; descricao: string; itemChave: string | null; excluidos: string[] }): Promise<Candidato[]> {
+  const jaConsultados = new Set([
+    ...item.excluidos,
+    ...(await db.select({ f: cotacao.fornecedorId }).from(cotacao).where(and(eq(cotacao.itemPedidoId, item.id), eq(cotacao.rodada, item.rodada)))).map((r) => r.f),
+  ]);
+  return (await candidatos(item)).filter((c) => !c.motivoCorte && !jaConsultados.has(c.fornecedorId)).slice(0, MAX_FORNECEDORES());
+}
+
 async function buscar(m: MudancaItem) {
   // N6: voltar à busca abre uma rodada nova, com todos os fornecedores de novo.
   if (m.evento === "voltar_busca") {
