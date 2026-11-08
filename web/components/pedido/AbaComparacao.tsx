@@ -5,7 +5,7 @@
 import { Column, InlineNotification, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Tile } from "@carbon/react";
 import { CheckmarkFilled } from "@carbon/react/icons";
 import type { ReactNode } from "react";
-import { ROTULO_CRITERIO, type Criterio } from "../../../src/agentes/comparador/calculo.ts";
+import { ROTULO_CRITERIO, textoFreteAnuncio, type Criterio } from "../../../src/agentes/comparador/calculo.ts";
 import { Bloco } from "@/components/Bloco";
 import { EstadoVazio } from "@/components/EstadoVazio";
 import { GradePagina } from "@/components/Pagina";
@@ -28,7 +28,10 @@ type Verificacao = { nivel?: string; pontos?: number } | null | undefined;
 function textoFrete(l: Linha) {
   if (l.origemFrete === "nao_se_aplica") return "Retirada";
   // Q8: loja online sem frete para o CEP; a estimativa não é frete informado.
+  // R7: o anúncio declara o frete, sem regra que cubra o CEP: o valor é do anúncio, com a hora da coleta.
+  if (l.origemFrete === "a_calcular" && l.oferta.freteAnuncio) return `A calcular no site (${textoFreteAnuncio(l.oferta.freteAnuncio)}, sem conferir o CEP)`;
   if (l.origemFrete === "a_calcular") return `A calcular no site (estimado ${brl(l.frete)} só para comparar)`;
+  if (l.origemFrete === "informado" && l.oferta.freteAnuncio?.noCep) return `${brl(l.frete)} (do anúncio, para o CEP)`;
   return `${brl(l.frete)} (${l.origemFrete})`;
 }
 

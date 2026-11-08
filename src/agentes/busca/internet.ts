@@ -11,6 +11,8 @@ import { itemDaBase } from "../interpretador/base-itens.ts";
 import { verificarVarios } from "../verificacao/index.ts";
 import { planejar } from "./entende.ts";
 import { confianca, converter, mediana, normalizar, ordenar, relevante, type Termos } from "./filtro.ts";
+import { formatarBRL } from "../comparador/calculo.ts";
+import { freteDoJsonLd, type FreteDoAnuncio } from "./frete.ts";
 import { baixarPagina, precoDoJsonLd, precoPorIa } from "./pagina.ts";
 import { LimiteDeBusca, MAX_CONSULTAS_ITEM, MODO_SNAPSHOT } from "./rede.ts";
 import * as serper from "./serper.ts";
@@ -74,6 +76,28 @@ function avaliar(c: Coleta, termos: Termos, unidadePedido: string): Avaliada {
   const conv = converter(c.precoFonte, c.titulo, unidadePedido, termos);
   if (conv.corte) return { ...base, aceita: false, motivoCorte: conv.corte };
   return { ...base, aceita: true, motivoCorte: null, precoUnitario: conv.precoUnitario, conversao: conv.conversao };
+}
+
+/** Prefixo do campo regiao_do_preco quando o frete veio do anúncio (o mapa lê isto para mostrar a fonte). */
+export const PREFIXO_FRETE_ANUNCIO = "Frete do anúncio";
+
+/**
+ * R7: campos de frete da coleta a partir do frete declarado no anúncio. Frete que a regra
+ * da loja liga ao CEP vale como entrega no CEP; frete para o Brasil todo fica com o valor,
+ * mas sem `entregaNoCep` (o mapa o mostra como "a calcular no site", com o valor do anúncio).
+ */
+export function freteDaPagina(f: FreteDoAnuncio | null, cep: string | null): Pick<Coleta, "frete" | "fretePrazoDias" | "entregaNoCep" | "regiaoDoPreco"> & { trechoFrete: string | null } {
+  if (!f) return { frete: null, fretePrazoDias: null, entregaNoCep: null, regiaoDoPreco: "Preço do site, sem CEP", trechoFrete: null };
+  if (!f.entrega) return { frete: null, fretePrazoDias: null, entregaNoCep: false, regiaoDoPreco: `O anúncio diz que não entrega no CEP ${cep} (${f.regra})`, trechoFrete: f.trecho };
+  return {
+    frete: f.valor,
+    fretePrazoDias: f.prazoDias,
+    entregaNoCep: f.noCep ? true : null,
+    regiaoDoPreco: f.noCep
+      ? `${PREFIXO_FRETE_ANUNCIO} para o CEP ${cep} (${f.regra})`
+      : `${PREFIXO_FRETE_ANUNCIO}: ${formatarBRL(f.valor)} para o Brasil, sem faixa de CEP conferida`,
+    trechoFrete: f.trecho,
+  };
 }
 
 export type ResultadoBusca = {
@@ -202,6 +226,8 @@ export async function buscarNaInternet(itemPedidoId: number): Promise<ResultadoB
             falhas.push(`${dominioDe(o.link)}: sem preço legível`);
             continue;
           }
+          // R7: frete que a loja declara no JSON-LD do anúncio, com a regra de onde vale.
+          const fr = freteDaPagina(freteDoJsonLd(html, p.cep), p.cep);
           coletas.push({
             loja: dominioDe(o.link),
             dominio: dominioDe(o.link),
@@ -210,11 +236,8 @@ export async function buscarNaInternet(itemPedidoId: number): Promise<ResultadoB
             metodo: lido.metodo,
             precoFonte: lido.preco,
             disponivel: lido.disponivel,
-            frete: null,
-            fretePrazoDias: null,
-            entregaNoCep: null,
-            regiaoDoPreco: "Preço do site, sem CEP",
-            trecho: lido.trecho,
+            ...fr,
+            trecho: fr.trechoFrete ? `${lido.trecho} | frete: ${fr.trechoFrete}` : lido.trecho,
           });
         }
       }
@@ -325,6 +348,16 @@ export async function referenciasDoItem(itemPedidoId: number) {
   return { aceitas, mediana: mediana(precos) };
 }
 
+/**
+ * R7: frete que veio do anúncio (JSON-LD), não da simulação de carrinho da VTEX. Vai em
+ * `oferta.extraido.freteAnuncio` para o mapa mostrar a fonte e a hora; `noCep` diz se a
+ * regra da loja cobre o CEP do pedido.
+ */
+export function freteAnuncioDaReferencia(r: { metodo: string; frete: string | null; entregaNoCep: boolean | null; regiaoDoPreco: string | null; coletadoEm: Date; url: string }) {
+  if (r.metodo === "vtex_api" || r.frete === null || !r.regiaoDoPreco?.startsWith(PREFIXO_FRETE_ANUNCIO)) return null;
+  return { valor: Number(r.frete), noCep: r.entregaNoCep === true, fonte: r.regiaoDoPreco, url: r.url, coletadoEm: r.coletadoEm.toISOString() };
+}
+
 /** Quantas lojas online viram proposta no mapa, no máximo. */
 export const MAX_OFERTAS_ONLINE = 3;
 /** Dados que o anúncio não traz e ficam simulados até a loja confirmar. */
@@ -350,7 +383,14 @@ export async function ofertasDaInternet(itemPedidoId: number): Promise<number> {
   await db.transaction(async (tx) => {
     await tx.delete(oferta).where(and(eq(oferta.itemPedidoId, itemPedidoId), eq(oferta.rodada, item.rodada), eq(oferta.formato, "busca")));
     for (const r of escolhidas) {
-      const simulados = ["pagamento", "validade", ...(r.fretePrazoDias === null ? ["prazo de entrega"] : []), ...(r.frete === null ? ["frete (estimado no mapa)"] : [])];
+      const anuncio = freteAnuncioDaReferencia(r);
+      const conferido = r.entregaNoCep === true && r.frete !== null;
+      const simulados = [
+        "pagamento",
+        "validade",
+        ...(r.fretePrazoDias === null ? ["prazo de entrega"] : []),
+        ...(r.frete === null ? ["frete (estimado no mapa)"] : !conferido ? ["frete (o do anúncio, sem conferir o CEP)"] : []),
+      ];
       await tx.insert(oferta).values({
         itemPedidoId,
         fornecedorId: r.fornecedorId!,
@@ -358,8 +398,8 @@ export async function ofertasDaInternet(itemPedidoId: number): Promise<number> {
         itemOferecido: r.titulo,
         itemExato: true,
         precoUnitario: r.precoUnitario,
-        frete: r.entregaNoCep && r.frete !== null ? r.frete : null,
-        origemFrete: r.entregaNoCep && r.frete !== null ? "informado" : null,
+        frete: conferido ? r.frete : null,
+        origemFrete: conferido ? "informado" : null,
         prazoDias: r.fretePrazoDias ?? SIMULADO_ONLINE.prazoDias,
         validadeDias: SIMULADO_ONLINE.validadeDias,
         pagamento: SIMULADO_ONLINE.pagamento,
@@ -367,7 +407,7 @@ export async function ofertasDaInternet(itemPedidoId: number): Promise<number> {
         entregaNoLocal: r.entregaNoCep === false ? false : r.entregaNoCep,
         formato: "busca",
         fonte: r.url,
-        extraido: { loja: r.loja, metodo: r.metodo, coletadoEm: r.coletadoEm, simulados },
+        extraido: { loja: r.loja, metodo: r.metodo, coletadoEm: r.coletadoEm, simulados, ...(anuncio ? { freteAnuncio: anuncio } : {}) },
       });
     }
   });

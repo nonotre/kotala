@@ -87,7 +87,9 @@ function Referencias({ i }: { i: ItemDoPedido }) {
             {brl(r.precoUnitario ?? r.precoFonte)}
             {r.conversao ? <span className={s.ajudaCelula}>{r.conversao}</span> : null}
           </span>,
-          r.entregaNoCep && r.frete ? `${brl(r.frete)}${r.fretePrazoDias !== null ? ` em ${dias(r.fretePrazoDias)}` : ""}` : (r.regiaoDoPreco ?? "—"),
+          r.entregaNoCep && r.frete
+            ? `${brl(r.frete)}${r.fretePrazoDias !== null ? ` em ${dias(r.fretePrazoDias)}` : ""}${r.regiaoDoPreco?.startsWith("Frete do anúncio") ? " (do anúncio)" : ""}`
+            : (r.regiaoDoPreco ?? "—"),
           r.aceita ? (r.disponivel === false ? "Sem estoque" : "Usado na referência") : `Cortado: ${r.motivoCorte}`,
           dataHora(r.coletadoEm),
         ])}

@@ -28,9 +28,10 @@ export async function baixarPagina(url: string): Promise<string | null> {
   }
 }
 
-type Nodo = Record<string, unknown>;
+export type Nodo = Record<string, unknown>;
 
-function nodosJsonLd(html: string): Nodo[] {
+/** Nós JSON-LD da página (inclusive os de @graph). Também usado pelo frete do anúncio (frete.ts). */
+export function nodosJsonLd(html: string): Nodo[] {
   const nodos: Nodo[] = [];
   for (const m of html.matchAll(/<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
     try {
@@ -50,7 +51,7 @@ function nodosJsonLd(html: string): Nodo[] {
   return nodos;
 }
 
-const ehTipo = (n: Nodo, tipo: string) => {
+export const ehTipo = (n: Nodo, tipo: string) => {
   const t = n["@type"];
   return t === tipo || (Array.isArray(t) && t.includes(tipo));
 };
