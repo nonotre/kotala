@@ -1,6 +1,6 @@
 # Plano: agente do fornecedor robusto e simulador geral
 
-Plano de 08/11/2026, para depois da integração das frentes. O objetivo é que a conversa com fornecedores aguente situações e fornecedores diversos, e que um simulador geral prove isso de forma repetível, sem gastar busca real. A seção 0 diz o que já entrou do simulador e do harness (junção da rodada 2); das regras, entraram as respostas do §7 (R14b, R11, R13 e a regra de R3b), da branch `sim-fornecedor`. O resto continua sendo plano.
+Plano de 08/11/2026, para depois da integração das frentes. O objetivo é que a conversa com fornecedores aguente situações e fornecedores diversos, e que um simulador geral prove isso de forma repetível, sem gastar busca real. A seção 0 diz o que já entrou do simulador e do harness (junção da rodada 2 e Bloco 4: trava de rede, cenários com gabarito e `npm run simulador`); das regras, entraram as respostas do §7 (R14b, R11, R13 e a regra de R3b), da branch `sim-fornecedor`. O resto continua sendo plano.
 
 Leia junto com [frente-3-harness.md](frente-3-harness.md) (Assistente do chat e avaliação), [arquitetura.md](arquitetura.md) e [decisoes.md](decisoes.md).
 
@@ -17,6 +17,52 @@ Leia junto com [frente-3-harness.md](frente-3-harness.md) (Assistente do chat e 
 | Personas de comprador | `compradores.ts` | Roteiros prontos: `obra`, `escritorio`, `clips`, `epi`, `extintor`, `limpeza`, `informatica`, `copa`. |
 | Métricas | `metricas.ts` | Desconto por rodada (automático, por resultado, economia e média; rodada do botão contra a anterior) e mensagens seguidas ao fornecedor sem resposta (U3). |
 | Casos | `casos/guardrails.ts`, `casos/regressao.ts` | Os 60 + 9 casos de guardrail e os erros do plano que dependem da IA. |
+
+### Simulador geral com gabarito (Bloco 4)
+
+O que entrou das seções 3.1 a 3.6, com o comportamento de hoje do `main` (etapa 1 da seção 4; os cenários das regras novas da seção 2 ficam para quando elas existirem).
+
+| Peça | Onde | O que faz |
+|---|---|---|
+| Trava de rede (3.1) | `src/simulador/rede.ts` | Interruptor único `SIM_SEM_REDE=1`. Troca o `fetch` global: só passam o banco local (`127.0.0.1`, `localhost`) e o Gemini (este só na rodada com IA real). Serper, VTEX, páginas de loja, BrasilAPI, Portal, TJSP e Telegram falham alto (`RedeBloqueada`) e cada tentativa reprova o cenário. Não precisou mudar nada fora de `src/simulador/`: toda a rede do sistema passa pelo `fetch` global (`buscarHttp` em `src/agentes/busca/rede.ts`, e o adaptador do Gemini lê `globalThis.fetch` na hora da chamada). O `npm run simulador` liga sempre; o `npm run simular` liga com `SIM_SEM_REDE=1` no ambiente (a trava é instalada ao carregar `src/simulador/index.ts`). |
+| IA falsa (modo determinístico) | `src/simulador/ia-falsa.ts` | Responde no lugar do Gemini, pela trava, sem rede e sem mudar os agentes: o Interpretador recebe a interpretação declarada no cenário e o Extrator recebe a leitura que a persona registrou junto com o texto (a verdade dela), validadas pelos mesmos schemas zod. Os outros agentes recebem erro 400 e usam a reserva que já têm (justificativa padrão do mapa, plano simples de busca, "vou confirmar com o comprador"). Modelo `simulador-ia-falsa` no `uso_ia`. `SIM_IA_LATENCIA_MS` (padrão 300 no simulador) imita a demora da IA real, para as corridas entre mensagens aparecerem. |
+| Cenários (3.4) | `src/simulador/cenarios/*.ts` | Um arquivo por cenário: personas de fornecedor (verdade + roteiro por tipo de mensagem recebida: `cotacao`, `negociacao`, `completar_proposta`, `lembrete`, `pedido_compra`...), passos do comprador (`diz`, `clica`, `espera`, `esperaEvento`, `dorme` e `comprador` por IA) e o gabarito. Falas prontas em `falas.ts` (proposta, sem frete, desconto em percentual ou preço novo, recusa, preço que sobe, PARAR, tocar botão). |
+| Conferidor (3.5) | `cenarios/gabarito.ts`, `executor.ts`, `relatorio.ts` | `executor.ts` limpa o banco de teste, semeia só os fornecedores do cenário (canal `simulado`, chaves `cen-*`), fala pelo canal web (sem o Assistente: o fluxo puro), roda o varredor com prazos de segundos e lê o rastro (mensagens com tipo e botões, eventos, mapas, cotações, contatos, uso de IA, rede). O gabarito são funções puras sobre o rastro: estado do item, mapa (válidas, cortadas, recomendada, custo, alertas, negociação), eventos, mensagens, ordem, desconto em mensagem própria e cotação/contato. Em todo cenário valem ainda: nenhuma chamada bloqueada pela trava, nunca citar a um fornecedor o valor de outro, passos do comprador cumpridos e nenhuma leitura sem gabarito na IA falsa. Relatório: uma linha por cenário, as expectativas que falharam, o resumo por regra e `--json`. Recusa rodar se o nome do banco não tiver "teste". |
+| Comprador guiado por IA (3.3, mínimo) | passo `comprador` em `executor.ts`, cenário `comprador-ia` | Com `--ia`, a IA escreve a mensagem do comprador a partir de quem ele é e do que quer (uma chamada por mensagem); sem `--ia`, vale o texto de reserva do cenário. |
+
+Cenários (`npm run simulador -- --lista`):
+
+| Cenário | Regra | O que confere |
+|---|---|---|
+| `feliz` | R14, R13, I1 | 3 propostas completas; um pedido de desconto a cada um, em mensagem própria depois do recebimento; mapa com 3 e a mais barata recomendada; custo com o desconto (percentual e preço novo); "manteve" para quem recusou; aprova, pedido de compra só ao vencedor, item `confirmado`. |
+| `prazo` | R14b | Só 1 responde; o prazo vence; uma pergunta ao comprador com "Encerrar" e "Estender"; nenhum mapa antes da escolha; estende; pergunta do motivo só a quem não respondeu; um manda proposta, o outro diz que não atende a região (vai ao comprador); mapa com 2, sem "melhor". |
+| `desconto` | R13 (Ester) | Proposta sem frete: primeiro o pedido do frete, sem desconto junto; o desconto só depois de completar, sozinho, e nada sai ao fornecedor por `ESPERA_MIN_DESCONTO_SEG`; preço novo entra no mapa. |
+| `parar` | PARAR (Liria) | PARAR com cotação aberta: cotação `desistiu`, contato ativo, confirmação de saída, nada mais desta cotação a ele, mapa com os outros 3. |
+| `parar-proxima` | PARAR | Depois do PARAR, a cotação do pedido seguinte chega ao mesmo fornecedor. |
+| `sobe-preco` | R3b | Preço novo mais alto antes do mapa: aviso ao comprador com antes e depois ("só vale se você aprovar"), evento `alteracao_valor`, "Subiu" na linha do mapa e custo pela proposta mais recente. |
+| `vou-ver` | I1 | "Vou ver com o gerente" no meio do desconto (lido como pedido de pessoa): não avisa o comprador, o mapa espera o preço novo. |
+| `comprador-ia` | Interpretador | Mestre de obras apressado (IA com `--ia`): 40 sacos de cimento, urgência "parada", mapa com 3. |
+| `servico` | — | **Esperado falhar:** pedido de serviço ainda responde "ainda cotamos só produtos". |
+| `duas-mensagens` | I1 | **Esperado falhar (bug):** proposta e frete em duas mensagens quase juntas. Ver os achados abaixo. |
+| `a-vista` | R13 | **Esperado falhar (bug):** "à vista no recebimento" sai com o alerta de pagamento antecipado. Ver os achados abaixo. |
+
+"Esperado falhar" não reprova a rodada; se o cenário passar, o relatório marca "passou (inesperado)", sinal de que o recurso entrou ou o bug foi corrigido e a marca pode sair.
+
+Teste sem IA na suíte: `testes/simulador-cenarios.test.ts` (trava, IA falsa pelo adaptador de verdade, conferência, relatório, cenários bem formados e, com `DATABASE_URL_TESTE`, `feliz` e `parar` de ponta a ponta, uns 15 s).
+
+### Como rodar o simulador geral
+
+```bash
+npm run simulador -- --lista                # os cenários
+npm run simulador -- todos                  # todos, IA falsa: nenhuma chamada de IA nem de rede (~2,5 min)
+npm run simulador -- feliz prazo -v         # alguns, mostrando a conversa
+npm run simulador -- feliz --ia             # IA real no Interpretador, no Extrator e nos outros (~10 chamadas por cenário)
+npm run simulador -- todos --rep 3 --json /tmp/sim.json
+```
+
+Usa `DATABASE_URL_TESTE` (limpa as tabelas a cada cenário) e aplica as migrações. Prazos da rodada: `PRAZO_RESPOSTAS_SEG=20`, `ESPERA_MIN_DESCONTO_SEG=3`, `BUSCA_MODO=snapshot`, `SERPER_API_KEY` vazia; o cenário pode trocar (`ambiente`). Sai com código 1 se algum cenário falhar sem estar marcado como esperado falhar.
+
+Rodada de 08/11 (Bloco 4): `todos` determinístico passou (8 passam, 3 esperados falhar); com `--ia`, `feliz`, `prazo`, `desconto`, `sobe-preco`, `vou-ver` e `comprador-ia` passaram e `duas-mensagens` falhou pelo mesmo bug (~65 chamadas no total).
 
 ### Testes sem IA (`npm run checar`)
 
@@ -49,7 +95,7 @@ npm run regressao:avaliar -- --juiz
 npm run assistente:avaliar -- --casos pedido-escritorio,so-o-nome-escritorio,cotam-limpeza,status-item-de-escritorio,escrever-email-papelaria
 ```
 
-`npm run simular` usa `DATABASE_URL_TESTE` e aplica as migrações. Sem `SERPER_API_KEY=` vazio e `BUSCA_MODO=snapshot`, a busca pode gastar crédito do Serper (a trava de rede da seção 3.1 ainda não existe).
+`npm run simular` usa `DATABASE_URL_TESTE` e aplica as migrações. Sem `SERPER_API_KEY=` vazio e `BUSCA_MODO=snapshot`, a busca pode gastar crédito do Serper; com `SIM_SEM_REDE=1`, a trava de rede (3.1) bloqueia qualquer chamada fora do banco local e do Gemini.
 
 ### O que os testes e as rodadas acharam (para a Frente 4 e o dono)
 
@@ -61,11 +107,14 @@ Os quatro primeiros foram corrigidos na junção (commit `6fd68e5`): varredor co
 - **"Se fechar hoje" não é condicionado (I1).** `descontoCondicional` só reconhece pagamento ou volume; "5% se fechar hoje" é aplicado como desconto incondicional. Teste `todo` em `testes/simulador-personas.test.ts`.
 - **Extrator, com IA:** "Extintor ABC 6 kg: R$ 300" para 5 unidades sai como unitário, sem pergunta (o prompt manda "ambiguo"); parafuso cotado "o kg" para pedido em unidades sai como `diferente`, que corta (o plano Q2 pede equivalente ou a confirmar). Casos `300-ambiguo` e `kg-sem-unidade` do `npm run regressao:avaliar`.
 - **Assistente, com IA:** a "clips de papel" respondeu "Não trabalhamos com material de escritório" em vez de encaminhar ao fluxo (caso `so-o-nome-escritorio`).
+- **Proposta e complemento quase juntos perdem o complemento (I1, Bloco 4, aberto).** `processarResposta` (`src/fluxo/fornecedor.ts`) lê a oferta anterior antes de chamar o Extrator. Com duas mensagens seguidas (preço e, logo depois, o frete), as duas são lidas em paralelo: a segunda não acha proposta, responde "Não encontrei preço na sua mensagem" e o frete se perde. O mapa estima o frete ("Frete não informado: valor estimado"), o pedido do que falta fica sem resposta e o desconto nunca é pedido. Reprodução sem IA: `npm run simulador -- duas-mensagens -v` (IA falsa com 1,2 s de latência); com IA real, o mesmo com `--ia`.
+- **"À vista no recebimento" vira alerta de pagamento antecipado (R13, Bloco 4, aberto).** O Comparador (`src/agentes/comparador/calculo.ts`) põe "Pagamento antecipado com fornecedor novo" quando `prazoPagamentoDias === 0`, mas o Extrator usa 0 para à vista e para antecipado. O padrão da empresa (à vista, no recebimento) sai com alerta em toda proposta de fornecedor novo. Junto: `notaPagamento` dá 0 ao à vista e 100 a 30 dias no boleto (regra anterior à R13, que pede à vista como padrão). Visto também com a IA real (o Extrator devolve 0 para "à vista no recebimento"). Reprodução: `npm run simulador -- a-vista`.
 - **Cadência (U3):** a confirmação de preço abaixo da referência sai logo depois do "Recebi sua proposta", sem resposta entre as duas; a métrica de mensagens seguidas mostra isso (já anotado para a Frente 1 em `frentes.md`).
 
 ### O que ficou de fora
 
-- Trava de rede, cenários com gabarito e personas guiadas por IA (seções 3.1 a 3.4): dependem das mudanças do agente do fornecedor (seção 2).
+- Cenários das regras novas (R3, R4b, R5 com pendência, R7, R9, R10, R12, golpe e hostil da tabela 3.2) e personas de fornecedor guiadas por IA: dependem das mudanças do agente do fornecedor (seção 2). A base (trava, cenário, gabarito, relatório) já entrou no Bloco 4.
+- Juiz de qualidade nas mensagens (3.5) e relógio virtual no varredor: os prazos são de segundos, com o varredor a cada 1 s.
 - Foto com marca e foto imprópria (casos Q5 e 40) com anexo de verdade: o caso de texto da foto já está no `regressao:avaliar`; falta uma imagem de teste.
 - Comparação de modelos no conjunto misto: fora desta rodada (sem rodadas grandes de IA).
 

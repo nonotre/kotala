@@ -31,7 +31,8 @@
     "mock:dashboard": "node --env-file=.env scripts/mock-dashboard.ts",
     "guardrails:avaliar": "node --env-file=.env scripts/avaliar-guardrails.ts",
     "regressao:avaliar": "node --env-file=.env scripts/avaliar-regressao.ts",
-    "simular:metricas": "node --env-file=.env scripts/metricas-pedido.ts"
+    "simular:metricas": "node --env-file=.env scripts/metricas-pedido.ts",
+    "simulador": "node --env-file=.env scripts/simulador.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.113",
