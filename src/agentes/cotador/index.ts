@@ -8,7 +8,7 @@ import { and, asc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-
 import { z } from "zod";
 import { EMPRESA, FRACAO_LEMBRETE, prazoRespostasMs } from "../../config.ts";
 import { db } from "../../nucleo/db/cliente.ts";
-import { contato, cotacao, fornecedor, itemPedido, oferta, pedido } from "../../nucleo/db/schema.ts";
+import { contato, cotacao, evento, fornecedor, itemPedido, oferta, pedido } from "../../nucleo/db/schema.ts";
 import { gerarObjeto } from "../../nucleo/ia/index.ts";
 import { contatoAtivoDoFornecedor, enviar } from "../../nucleo/mensagens/index.ts";
 import {
@@ -21,8 +21,17 @@ import {
 } from "../../nucleo/orquestrador/index.ts";
 import { registrar } from "../../nucleo/registro.ts";
 import { liberarSaida } from "../guardrail/rastro.ts";
+import { candidatosNovos } from "../busca/index.ts";
+import { referenciasDoItem } from "../busca/internet.ts";
+import { comparar, MINIMO_PROPOSTAS_VALIDAS, type OfertaComparavel } from "../comparador/calculo.ts";
 
 export const TEXTO_ENCERRADO = "Este pedido de cotação foi encerrado. Obrigado.";
+
+/**
+ * I3: ampliações da busca por rodada (urgente: 1). Deveria ir para as regras da Frente 1
+ * (`src/config.ts`), junto de MAX_RODADAS.
+ */
+const MAX_AMPLIACOES = 2;
 
 
 /** Canal ativo do fornecedor: Telegram primeiro, depois qualquer outro que não parou. */
@@ -145,11 +154,46 @@ async function enviarCotacoes(m: MudancaItem) {
     return enviarCotacoes({ ...m, evento: "busca_concluida" });
   }
 
+  const envio = await enviarPendentes(d);
+  if (!envio) return;
+  const { pendentes, enviadas, falhas } = envio;
+
+  await registrar(db, {
+    agente: "Cotador",
+    acao: `Pediu cotação a ${enviadas} ${enviadas === 1 ? "fornecedor" : "fornecedores"}${d.item.rodada > 1 ? ` (rodada ${d.item.rodada})` : ""}.`,
+    motivo: falhas.length ? `Não enviou para: ${falhas.join("; ")}.` : "A busca terminou.",
+    pedidoId: d.pedido.id,
+    itemPedidoId: d.item.id,
+    fornecedorIds: pendentes.map((p) => p.cotacao.fornecedorId),
+  });
+  const [online] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(oferta)
+    .where(and(eq(oferta.itemPedidoId, d.item.id), eq(oferta.rodada, d.item.rodada), eq(oferta.formato, "busca")));
+  const lojas = online?.n ?? 0;
+  const textoLojas = lojas ? `${lojas} ${lojas === 1 ? "loja online entra" : "lojas online entram"} no mapa com o preço do anúncio` : "";
+  if (enviadas) {
+    await avisarComprador(
+      d,
+      `Pedi cotação de ${quantidade(d.item.quantidade, d.item.unidade)} de ${d.item.descricao} a ${enviadas} ${enviadas === 1 ? "fornecedor" : "fornecedores"}${textoLojas ? `, e ${textoLojas}` : ""}${d.item.prazoRespostasEm ? `. Fecho as respostas ${quando(d.item.prazoRespostasEm)}` : ""}.`,
+    );
+  } else {
+    await avisarComprador(d, `Nenhum fornecedor cadastrado vende ${d.item.descricao}${textoLojas ? `; ${textoLojas}. Monto o mapa agora` : ""}.`);
+  }
+  if (!enviadas) await encerrarSeTodosResponderam(d.item.id);
+}
+
+/**
+ * Manda a cotação a quem ainda não recebeu (só `aguardando`: quem parou ou ficou sem
+ * resposta não é reenviado). Devolve null se a conferência de saída barrou o texto e o
+ * item foi cancelado.
+ */
+async function enviarPendentes(d: Dados) {
   const pendentes = await db
     .select({ cotacao, nome: fornecedor.nome })
     .from(cotacao)
     .innerJoin(fornecedor, eq(fornecedor.id, cotacao.fornecedorId))
-    .where(and(eq(cotacao.itemPedidoId, m.itemPedidoId), eq(cotacao.rodada, d.item.rodada), isNull(cotacao.enviadaEm)));
+    .where(and(eq(cotacao.itemPedidoId, d.item.id), eq(cotacao.rodada, d.item.rodada), eq(cotacao.situacao, "aguardando"), isNull(cotacao.enviadaEm)));
 
   // S: o texto da cotação leva campos livres do comprador; confere antes de mandar a qualquer fornecedor.
   if (pendentes.length && !(await liberarSaida(textoCotacao(d, pendentes[0]!.nome), { compradorId: d.pedido.compradorId, pedidoId: d.pedido.id, itemPedidoId: d.item.id, oQue: "o pedido de cotação" }))) {
@@ -181,29 +225,7 @@ async function enviarCotacoes(m: MudancaItem) {
     }
   }
 
-  await registrar(db, {
-    agente: "Cotador",
-    acao: `Pediu cotação a ${enviadas} ${enviadas === 1 ? "fornecedor" : "fornecedores"}${d.item.rodada > 1 ? ` (rodada ${d.item.rodada})` : ""}.`,
-    motivo: falhas.length ? `Não enviou para: ${falhas.join("; ")}.` : "A busca terminou.",
-    pedidoId: d.pedido.id,
-    itemPedidoId: d.item.id,
-    fornecedorIds: pendentes.map((p) => p.cotacao.fornecedorId),
-  });
-  const [online] = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(oferta)
-    .where(and(eq(oferta.itemPedidoId, d.item.id), eq(oferta.rodada, d.item.rodada), eq(oferta.formato, "busca")));
-  const lojas = online?.n ?? 0;
-  const textoLojas = lojas ? `${lojas} ${lojas === 1 ? "loja online entra" : "lojas online entram"} no mapa com o preço do anúncio` : "";
-  if (enviadas) {
-    await avisarComprador(
-      d,
-      `Pedi cotação de ${quantidade(d.item.quantidade, d.item.unidade)} de ${d.item.descricao} a ${enviadas} ${enviadas === 1 ? "fornecedor" : "fornecedores"}${textoLojas ? `, e ${textoLojas}` : ""}${d.item.prazoRespostasEm ? `. Fecho as respostas ${quando(d.item.prazoRespostasEm)}` : ""}.`,
-    );
-  } else {
-    await avisarComprador(d, `Nenhum fornecedor cadastrado vende ${d.item.descricao}${textoLojas ? `; ${textoLojas}. Monto o mapa agora` : ""}.`);
-  }
-  if (!enviadas) await encerrarSeTodosResponderam(d.item.id);
+  return { pendentes, enviadas, falhas };
 }
 
 async function avisarComprador(d: Dados, texto: string) {
@@ -238,6 +260,148 @@ export async function reenviarCotacaoAberta(fornecedorId: string, contatoId: str
   if (r.situacao !== "enviada") return false;
   await db.update(cotacao).set({ contatoId, enviadaEm: c.enviadaEm ?? new Date() }).where(eq(cotacao.id, c.id));
   return true;
+}
+
+const num = (v: string | null) => (v === null ? null : Number(v));
+
+/** Propostas válidas do item pelo portão do comparador (sem verificação externa de CNPJ: ela só muda nota). */
+async function contarPropostasValidas(d: Dados): Promise<number> {
+  const { item, pedido: p } = d;
+  const todas = await db
+    .select({ oferta, fornecedor, situacao: cotacao.situacao })
+    .from(oferta)
+    .innerJoin(fornecedor, eq(fornecedor.id, oferta.fornecedorId))
+    .leftJoin(cotacao, eq(cotacao.id, oferta.cotacaoId))
+    .where(and(eq(oferta.itemPedidoId, item.id), lte(oferta.rodada, item.rodada)))
+    .orderBy(sql`${oferta.rodada} desc, ${oferta.criadoEm} desc`);
+  // Mesma regra do mapa: a proposta mais recente de cada fornecedor; fora quem desistiu, parou ou foi excluído.
+  const fora = new Set([...item.excluidos, ...todas.filter((x) => x.situacao === "desistiu" || x.situacao === "parou" || x.fornecedor.parouEm).map((x) => x.fornecedor.id)]);
+  const vistos = new Set<string>();
+  const ofertas: OfertaComparavel[] = [];
+  for (const { oferta: o, fornecedor: f } of todas) {
+    if (fora.has(f.id) || vistos.has(f.id)) continue;
+    vistos.add(f.id);
+    ofertas.push({
+      id: o.id,
+      fornecedorId: f.id,
+      fornecedorNome: f.nome,
+      simulado: f.origem === "simulado",
+      verificado: f.verificado,
+      homologado: f.homologado,
+      conhecido: false,
+      itemOferecido: o.itemOferecido,
+      itemExato: o.itemExato,
+      precoUnitario: num(o.precoUnitario),
+      totalProduto: num(o.totalProduto),
+      frete: num(o.frete),
+      impostosValor: num(o.impostosValor),
+      impostosNaoInclusos: o.impostosNaoInclusos,
+      prazoDias: o.prazoDias,
+      validadeDias: o.validadeDias,
+      pagamento: o.pagamento,
+      prazoPagamentoDias: o.prazoPagamentoDias,
+      entregaNoLocal: o.entregaNoLocal,
+      precoConfirmado: o.precoConfirmado,
+      rodada: o.rodada,
+      online: o.formato === "busca",
+      fonte: o.fonte,
+    });
+  }
+  const refs = await referenciasDoItem(item.id);
+  const c = comparar(
+    { quantidade: Number(item.quantidade), aceitaSimilar: item.aceitaSimilar, prazoMaxDias: p.prazoMaxDias, modoEntrega: p.modoEntrega, urgencia: p.urgencia },
+    ofertas,
+    refs.mediana,
+  );
+  return c.validas.length;
+}
+
+/** Quantas vezes a busca já foi ampliada na rodada atual: o rastro guarda a rodada, e rodada nova zera a conta. */
+async function ampliacoesDaRodada(itemPedidoId: number, rodada: number): Promise<number> {
+  const [r] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(evento)
+    .where(and(eq(evento.itemPedidoId, itemPedidoId), eq(evento.agente, "Cotador"), sql`${evento.dados}->>'tipo' = 'ampliacao'`, sql`${evento.dados}->>'rodada' = ${String(rodada)}`));
+  return r?.n ?? 0;
+}
+
+/**
+ * I3: com menos de 3 propostas válidas, consulta mais fornecedores e prorroga o prazo,
+ * sem mudar de estado nem de rodada (quem já foi consultado ainda pode responder).
+ * Devolve "ampliou"; "encerrar" quando o fluxo normal deve seguir (já há propostas,
+ * teto, sem candidatos ou negociação em curso); "pular" quando não é a vez (outro
+ * varredor ampliou) e quem chamou não deve encerrar.
+ */
+export async function ampliarSeFaltarPropostas(itemPedidoId: number): Promise<"ampliou" | "encerrar" | "pular"> {
+  const d = await dadosDoItem(itemPedidoId);
+  if (!d || d.item.estado !== "cotando") return "pular";
+  const { item } = d;
+  // A rodada de negociação usa o mesmo estado e o mesmo varredor: nunca amplia nela.
+  if (item.negociacao?.rodada === item.rodada) return "encerrar";
+  const teto = d.pedido.urgencia === "normal" ? MAX_AMPLIACOES : 1;
+  const feitas = await ampliacoesDaRodada(item.id, item.rodada);
+  if (feitas >= teto) return "encerrar";
+  const validas = await contarPropostasValidas(d);
+  if (validas >= MINIMO_PROPOSTAS_VALIDAS) return "encerrar";
+  const novos = await candidatosNovos(item);
+  if (!novos.length) return "encerrar";
+
+  const refs = await referenciasDoItem(item.id);
+  const valorEstimado = refs.mediana ? refs.mediana * Number(item.quantidade) : null;
+  const agora = Date.now();
+  const prazoMs = prazoRespostasMs(valorEstimado);
+  const prazoRespostasEm = new Date(agora + prazoMs);
+  // Claim atômico: só vence quem ainda vê o mesmo prazo. Prazo, cotações novas e rastro
+  // (que é o contador de ampliações) entram na mesma transação.
+  const ganhou = await db.transaction(async (tx) => {
+    const claim = await tx
+      .update(itemPedido)
+      .set({ prazoRespostasEm, lembreteEm: new Date(agora + prazoMs * FRACAO_LEMBRETE) })
+      .where(and(eq(itemPedido.id, item.id), eq(itemPedido.estado, "cotando"), item.prazoRespostasEm ? eq(itemPedido.prazoRespostasEm, item.prazoRespostasEm) : isNull(itemPedido.prazoRespostasEm)))
+      .returning({ id: itemPedido.id });
+    if (!claim.length) return false;
+    await tx
+      .insert(cotacao)
+      .values(novos.map((c) => ({ itemPedidoId: item.id, fornecedorId: c.fornecedorId, rodada: item.rodada })))
+      .onConflictDoNothing();
+    await registrar(tx, {
+      agente: "Cotador",
+      acao: `Ampliou a busca: mais ${novos.length} ${novos.length === 1 ? "fornecedor" : "fornecedores"} (ampliação ${feitas + 1} de ${teto}).`,
+      motivo: `Só ${validas} ${validas === 1 ? "proposta válida" : "propostas válidas"} até o fim do prazo; o mínimo é ${MINIMO_PROPOSTAS_VALIDAS}.`,
+      pedidoId: d.pedido.id,
+      itemPedidoId: item.id,
+      fornecedorIds: novos.map((c) => c.fornecedorId),
+      dados: { tipo: "ampliacao", rodada: item.rodada, ampliacao: feitas + 1, validas },
+    });
+    return true;
+  });
+  if (!ganhou) return "pular";
+
+  const atual = await dadosDoItem(item.id);
+  if (!atual) return "ampliou";
+  const envio = await enviarPendentes(atual);
+  if (!envio) return "ampliou"; // conferência de saída barrou e cancelou o item
+  if (envio.enviadas) {
+    const ate = quando(prazoRespostasEm).replace(/^às/, "até as").replace(/^em/, "até");
+    await avisarComprador(
+      atual,
+      `só ${validas} ${validas === 1 ? "proposta válida" : "propostas válidas"} de ${atual.item.descricao} até agora. Consultei mais ${envio.enviadas} ${envio.enviadas === 1 ? "fornecedor" : "fornecedores"} e prorroguei ${ate}. Quem já respondeu continua valendo.`,
+    );
+  } else {
+    await encerrarSeTodosResponderam(item.id);
+  }
+  return "ampliou";
+}
+
+/** Fim do prazo: antes de o varredor fechar, tenta ampliar. Falha aqui deixa o fechamento normal valer. */
+async function ampliarVencidos(agora: Date) {
+  const vencidos = await db
+    .select({ id: itemPedido.id })
+    .from(itemPedido)
+    .where(and(eq(itemPedido.estado, "cotando"), lte(itemPedido.prazoRespostasEm, agora)));
+  for (const { id } of vencidos) {
+    await ampliarSeFaltarPropostas(id).catch((e) => console.error("[ampliar]", id, e));
+  }
 }
 
 /** Fecha a cotação assim que ninguém mais está devendo resposta. */
@@ -319,11 +483,14 @@ async function enviarLembretes(agora: Date) {
     const devendo = await db
       .select()
       .from(cotacao)
-      .where(and(eq(cotacao.itemPedidoId, item.id), eq(cotacao.rodada, item.rodada), eq(cotacao.situacao, "aguardando")))
+      .where(and(eq(cotacao.itemPedidoId, item.id), eq(cotacao.rodada, item.rodada), eq(cotacao.situacao, "aguardando"), isNull(cotacao.lembreteEm)))
       .orderBy(asc(cotacao.criadoEm));
+    if (!devendo.length) continue;
+    const texto = `Lembrete: ainda dá tempo de mandar sua proposta para a cotação ${item.id} (${quantidade(item.quantidade, item.unidade)} de ${item.descricao})${item.prazoRespostasEm ? ` ${quando(item.prazoRespostasEm).replace(/^às/, "até as").replace(/^em/, "até")}` : ""}.`;
+    // S: o texto leva a descrição do item; confere antes de mandar.
+    if (!(await liberarSaida(texto, { compradorId: (await dadosDoItem(item.id))?.pedido.compradorId ?? "", pedidoId: item.pedidoId, itemPedidoId: item.id, oQue: "o lembrete" }))) continue;
     for (const c of devendo) {
       if (!c.contatoId) continue;
-      const texto = `Lembrete: ainda dá tempo de mandar sua proposta para a cotação ${item.id} (${quantidade(item.quantidade, item.unidade)} de ${item.descricao})${item.prazoRespostasEm ? ` ${quando(item.prazoRespostasEm).replace(/^às/, "até as").replace(/^em/, "até")}` : ""}.`;
       const r = await enviar(c.contatoId, texto, { itemPedidoId: item.id, tipo: "lembrete" });
       if (r.situacao === "enviada") await db.update(cotacao).set({ lembreteEm: new Date() }).where(eq(cotacao.id, c.id));
     }
@@ -410,6 +577,7 @@ export async function responderDuvida(cotacaoId: string, contatoId: string, duvi
 export function ligarCotador() {
   aoEntrarItem("cotando", enviarCotacoes);
   aoEntrarItem("comparando", marcarSemResposta);
+  aoVarrer(ampliarVencidos); // antes de varrerPrazos: a ampliação prorroga o prazo e o item não fecha
   aoVarrer(enviarLembretes);
 }
 
