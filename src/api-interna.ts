@@ -14,6 +14,7 @@ import { registrarCotacaoPorVoz, registrarFimDaLigacao } from "./agentes/voz/ind
 import { TEXTO_FIM, type MotivoFim } from "./agentes/voz/sessao.ts";
 import { alterarFornecedor, type AcaoFornecedor } from "./agentes/fornecedores/index.ts";
 import { assumirChat } from "./simulador/index.ts";
+import { enderecoWebDoUsuario } from "./contas.ts";
 
 /** Teto do corpo: 20 kB para ações; o chat com anexos aceita até 3 arquivos de 10 MB (em base64). */
 async function corpo(req: IncomingMessage, limite = 20_000): Promise<Record<string, unknown>> {
@@ -101,6 +102,8 @@ export function iniciarApiInterna(porta: number, token: string, host = "127.0.0.
       if (req.url === "/chat") {
         const endereco = String(b.endereco ?? "");
         if (!/^[a-z0-9-]{8,64}$/i.test(endereco)) return responder(400, { erro: "endereço inválido" });
+        // As telas mandam o usuário da sessão (cookie): a conversa tem de ser dele. Sem usuário, vale o de antes.
+        if (b.usuarioId !== undefined && !(await enderecoWebDoUsuario(endereco, String(b.usuarioId)))) return responder(403, { erro: "conversa de outra pessoa" });
         const anexos = await guardarAnexosDoChat(b.anexos);
         const r = await receber({
           canal: "web",

@@ -75,9 +75,11 @@ export function MenuLateral({ aberto, expandido, aoFechar }: Props) {
             as={Link}
             href="/login"
             renderIcon={Logout}
-            onClick={() => {
+            onClick={(e: { preventDefault: () => void }) => {
+              // A ida a /login espera o servidor apagar a sessão (senão o proxy volta ao Início).
+              e.preventDefault();
               aoFechar();
-              sairDaConta();
+              void sairDaConta();
             }}
           >
             Sair

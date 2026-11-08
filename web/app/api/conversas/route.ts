@@ -1,9 +1,11 @@
 import { conversasDoUsuario } from "@/lib/dados-conversas";
+import { usuarioDaSessao } from "@/lib/sessao-servidor";
 
 export const dynamic = "force-dynamic";
 
-/** Lista da tela Conversar: só as conversas ligadas à conta de quem entrou (`usuario` = id dele). */
-export async function GET(req: Request) {
-  const usuario = new URL(req.url).searchParams.get("usuario") ?? "";
-  return Response.json(await conversasDoUsuario(usuario));
+/** Lista da tela Conversar: só as conversas ligadas à conta da sessão (cookie). */
+export async function GET() {
+  const u = await usuarioDaSessao();
+  if (!u) return Response.json({ erro: "Entre de novo para continuar." }, { status: 401 });
+  return Response.json(await conversasDoUsuario(u.id));
 }

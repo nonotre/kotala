@@ -134,6 +134,13 @@
       "when": 1794156247464,
       "tag": "0018_bloco4",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794156883620,
+      "tag": "0019_vincular_telegram",
+      "breakpoints": true
     }
   ]
 }

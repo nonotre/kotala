@@ -35,6 +35,12 @@ export const donoDoPedido = sql<string | null>`coalesce(
   (select u.nome from contato c join usuario u on u.id = c.usuario_id where c.id = ${pedido.compradorId})
 )`;
 
+/** O id do mesmo dono de donoDoPedido: o responsável escolhido ou o usuário do contato que pediu. Para "Só os meus". */
+export const donoIdDoPedido = sql<string | null>`coalesce(
+  ${pedido.responsavelId},
+  (select c.usuario_id from contato c where c.id = ${pedido.compradorId})
+)`;
+
 export type Etiqueta = { texto: string; tipo: "atencao" | "info" | "ok" | "alerta" | "urgente" };
 
 export type Cartao = {
@@ -105,14 +111,17 @@ function etiquetasDo(
   return e;
 }
 
-/** R10: todos os itens, em 4 colunas. Cancelados ficam ocultos, a não ser que peça para ver. */
-export async function quadro(mostrarCanceladas = false): Promise<Record<Coluna, Cartao[]>> {
+/**
+ * R10: todos os itens, em 4 colunas. Cancelados ficam ocultos, a não ser que peça para ver.
+ * `donoId` ("Só os meus"): só as cotações de que essa pessoa é dona ou responsável.
+ */
+export async function quadro(mostrarCanceladas = false, donoId?: string | null): Promise<Record<Coluna, Cartao[]>> {
   const linhas = await db
     .select({ item: itemPedido, pedido, escolhido: fornecedor.nome, dono: donoDoPedido })
     .from(itemPedido)
     .innerJoin(pedido, eq(pedido.id, itemPedido.pedidoId))
     .leftJoin(fornecedor, eq(fornecedor.id, itemPedido.fornecedorEscolhidoId))
-    .where(mostrarCanceladas ? sql`true` : sql`${itemPedido.estado} <> 'cancelado'`)
+    .where(and(mostrarCanceladas ? undefined : sql`${itemPedido.estado} <> 'cancelado'`, donoId ? sql`${donoIdDoPedido} = ${donoId}` : undefined))
     .orderBy(desc(itemPedido.atualizadoEm))
     .limit(200);
 
@@ -166,10 +175,12 @@ export async function quadro(mostrarCanceladas = false): Promise<Record<Coluna, 
   return saida;
 }
 
-export async function listaPedidos() {
+/** As cotações mais novas. `donoId` ("Só os meus"): só as de que essa pessoa é dona ou responsável. */
+export async function listaPedidos(donoId?: string | null) {
   return db
     .select({ id: pedido.id, estado: pedido.estado, texto: pedido.textoOriginal, criadoEm: pedido.criadoEm, canal: pedido.canalOrigem, dono: donoDoPedido, itens: sql<number>`(select count(*)::int from item_pedido where pedido_id = ${pedido.id})` })
     .from(pedido)
+    .where(donoId ? sql`${donoIdDoPedido} = ${donoId}` : undefined)
     .orderBy(desc(pedido.id))
     .limit(100);
 }

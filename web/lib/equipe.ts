@@ -1,14 +1,15 @@
 "use server";
 // Pessoas da empresa nas telas: quem é responsável por um pedido e quem é gestor.
 // Como lib/contas.ts, grava direto no banco (não roda agente nenhum) e deixa o
-// rastro em `evento`, como ação do comprador. Sem segurança de verdade: quem age
-// é o id da sessão guardada no navegador (ver docs/perfil-login.md).
+// rastro em `evento`, como ação do comprador. Quem age é o usuário da sessão do
+// cookie (lib/sessao-servidor.ts); qualquer um que entrou pode trocar, de propósito.
 
 import { revalidatePath } from "next/cache";
 import { asc, eq } from "drizzle-orm";
 import { db } from "../../src/nucleo/db/cliente.ts";
 import { pedido, usuario } from "../../src/nucleo/db/schema.ts";
 import { registrar } from "../../src/nucleo/registro.ts";
+import { usuarioDaSessao } from "./sessao-servidor.ts";
 
 export type Pessoa = { id: string; nome: string; login: string; papel: "comprador" | "gestor" };
 type Resultado = { ok: boolean; erro?: string };
@@ -21,8 +22,11 @@ async function nomeDe(id: string | null | undefined): Promise<string | null> {
   return u?.nome ?? null;
 }
 
+const SEM_SESSAO: Resultado = { ok: false, erro: "Entre de novo para continuar." };
+
 /** Todos os usuários, para escolher o responsável e marcar o gestor. */
 export async function listarPessoas(): Promise<Pessoa[]> {
+  if (!(await usuarioDaSessao())) return [];
   return db.select({ id: usuario.id, nome: usuario.nome, login: usuario.login, papel: usuario.papel }).from(usuario).orderBy(asc(usuario.nome));
 }
 
@@ -30,7 +34,10 @@ export async function listarPessoas(): Promise<Pessoa[]> {
  * Troca o responsável pelo pedido (`pedido.responsavel_id`). `null` volta ao padrão:
  * o usuário ligado ao contato que pediu.
  */
-export async function trocarResponsavel(pedidoId: number, usuarioId: string | null, porId: string | null): Promise<Resultado> {
+export async function trocarResponsavel(pedidoId: number, usuarioId: string | null): Promise<Resultado> {
+  const quem = await usuarioDaSessao();
+  if (!quem) return SEM_SESSAO;
+  const porId = quem.id;
   if (!Number.isSafeInteger(pedidoId) || pedidoId <= 0) return { ok: false, erro: "Pedido inválido." };
   const [p] = await db.select({ id: pedido.id, responsavelId: pedido.responsavelId }).from(pedido).where(eq(pedido.id, pedidoId));
   if (!p) return { ok: false, erro: "Pedido não encontrado." };
@@ -53,7 +60,10 @@ export async function trocarResponsavel(pedidoId: number, usuarioId: string | nu
 }
 
 /** Marca ou desmarca um usuário como gestor (`usuario.papel`). O gestor recebe os avisos de conduta. */
-export async function marcarGestor(usuarioId: string, gestor: boolean, porId: string | null): Promise<Resultado> {
+export async function marcarGestor(usuarioId: string, gestor: boolean): Promise<Resultado> {
+  const quem = await usuarioDaSessao();
+  if (!quem) return SEM_SESSAO;
+  const porId = quem.id;
   if (!UUID.test(String(usuarioId))) return { ok: false, erro: "Usuário inválido." };
   const [u] = await db.select({ nome: usuario.nome, papel: usuario.papel }).from(usuario).where(eq(usuario.id, usuarioId));
   if (!u) return { ok: false, erro: "Usuário não encontrado." };

@@ -163,13 +163,19 @@ export function PrecisaDeVoce({ avisos }: { avisos: AvisoSerial[] }) {
 type Props = {
   colunas: Record<Coluna, CartaoSerial[]>;
   extras: Record<number, ExtraDoItem>;
+  /** "Só os meus" ligado: o vazio diz que pode haver cotações de outras pessoas. */
+  meus?: boolean;
 };
 
 /** As 4 raias do quadro, sem cabeçalho: quem usa põe o título e os controles. */
-export function QuadroRaias({ colunas, extras }: Props) {
+export function QuadroRaias({ colunas, extras, meus = false }: Props) {
   const total = COLUNAS.reduce((t, c) => t + colunas[c].length, 0);
   if (total === 0) {
-    return <EstadoVazio compacto titulo="Nenhuma cotação ainda." proximoPasso="Peça uma cotação pelo Telegram ou em Conversas." />;
+    return meus ? (
+      <EstadoVazio compacto titulo="Nenhuma cotação sua por aqui." proximoPasso="Desligue “Só os meus” para ver as de todos." />
+    ) : (
+      <EstadoVazio compacto titulo="Nenhuma cotação ainda." proximoPasso="Peça uma cotação pelo Telegram ou em Conversas." />
+    );
   }
   // A raia da vez é a do primeiro card que espera o comprador; sem colunas lado a lado, ela vem primeiro.
   const colunaDaVez = COLUNAS.find((c) => colunas[c].some(esperaVoce)) ?? null;

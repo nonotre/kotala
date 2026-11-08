@@ -2,7 +2,6 @@
 
 import { Button, Form, InlineLoading, InlineNotification, Link as CarbonLink, PasswordInput, Stack, TextInput } from "@carbon/react";
 import { Chat, DocumentTasks, UserCertification } from "@carbon/react/icons";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Pagina } from "@/components/Pagina";
 import { criarConta, entrar } from "@/lib/contas";
@@ -17,9 +16,8 @@ const PASSOS = [
 
 type Modo = "entrar" | "criar";
 
-/** Entrar ou criar conta. Login simples: usuário e senha conferidos no banco, sessão guardada neste navegador. */
+/** Entrar ou criar conta: usuário e senha conferidos no banco; a sessão vai num cookie httpOnly. */
 export function Entrar() {
-  const router = useRouter();
   const [modo, setModo] = useState<Modo>("entrar");
   const [nome, setNome] = useState("");
   const [login, setLogin] = useState("");
@@ -39,7 +37,8 @@ export function Entrar() {
         return;
       }
       guardarSessao(r.sessao);
-      router.push("/");
+      // Carga inteira: o layout (servidor) passa a ler o cookie novo e monta o topo com a conta.
+      window.location.assign("/");
     } catch {
       setErro("Não deu para falar com o servidor. Tente de novo.");
       setEnviando(false);

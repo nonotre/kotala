@@ -377,7 +377,7 @@ function textoDeBusca(l: LinhaPedido): string {
 export const hrefLista = (f: Filtro) => (f === "todos" ? "/?vista=lista" : `/?vista=lista&filtro=${f}`);
 
 /** Só o corpo da lista: o cabeçalho e a troca de vista são do Início, que também guarda o filtro. */
-export function ListaPedidos({ linhas: todasBrutas, filtro, aoMudarFiltro }: { linhas: LinhaPedido[]; filtro: Filtro; aoMudarFiltro: (f: Filtro) => void }) {
+export function ListaPedidos({ linhas: todasBrutas, filtro, aoMudarFiltro, meus = false }: { linhas: LinhaPedido[]; filtro: Filtro; aoMudarFiltro: (f: Filtro) => void; meus?: boolean }) {
   const conteiner = useRef<HTMLDivElement>(null);
   // 0: linhas; 1: tabela com o filtro em seletor; 2: tabela com os filtros em botões. Nulo até medir.
   const faixa = useFaixaDoConteiner(conteiner, LIMITES_REM);
@@ -420,6 +420,7 @@ export function ListaPedidos({ linhas: todasBrutas, filtro, aoMudarFiltro }: { l
   const props: PropsVista = { linhas, total: todas.length, filtro, contagens, aoFiltrar, chaveBusca, aoBuscar: setBusca, vazio };
 
   if (todas.length === 0) {
+    if (meus) return <EstadoVazio titulo="Nenhuma cotação sua por aqui." proximoPasso="Desligue “Só os meus” para ver as de todos." />;
     return (
       <EstadoVazio
         titulo="Nenhuma cotação ainda."

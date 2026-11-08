@@ -120,7 +120,9 @@ test("R14b: resposta escrita à pergunta do prazo", async () => {
 test("Conversar: só as conversas da conta, Telegram à parte, e Nova conversa cria um chat novo dela", { skip: pular }, async () => {
   const { db, schema } = m!;
   const { conversasDoUsuario } = await import("../web/lib/dados-conversas.ts");
-  const { novaConversa } = await import("../web/lib/conversas.ts");
+  // A ação da tela (web/lib/conversas.ts) só acrescenta a sessão do cookie a esta regra.
+  const { novaConversaWeb } = await import("../src/contas.ts");
+  const novaConversa = async (usuarioId: string) => ({ ok: true as const, contatoId: await novaConversaWeb({ id: usuarioId, nome: "Ana" }) });
   const [u] = await db.insert(schema.usuario).values({ login: `conv-${crypto.randomUUID()}`, nome: "Ana" }).returning();
   const [outro] = await db.insert(schema.usuario).values({ login: `conv-${crypto.randomUUID()}`, nome: "Beto" }).returning();
   await db.insert(schema.contato).values({ canal: "web", endereco: u!.id, papel: "comprador", usuarioId: u!.id });

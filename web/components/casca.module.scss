@@ -17,6 +17,49 @@
   inline-size: auto;
 }
 
+// Empresa em uso, ao lado do botão da conta (que abre o painel para trocar). Some no celular.
+.empresaNoTopo {
+  display: none;
+  align-items: center;
+  max-width: 14rem;
+  padding-inline: spacing.$spacing-03;
+  overflow: hidden;
+  color: theme.$text-secondary;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  @include type.type-style('body-compact-01');
+
+  @include breakpoint.breakpoint(lg) {
+    display: flex;
+  }
+}
+
+.painelConta {
+  padding-block: spacing.$spacing-05;
+}
+
+.painelQuem {
+  padding-inline: spacing.$spacing-05;
+  padding-block-end: spacing.$spacing-05;
+}
+
+.painelNome {
+  color: theme.$text-primary;
+  @include type.type-style('heading-compact-01');
+}
+
+.painelApoio {
+  color: theme.$text-secondary;
+  @include type.type-style('helper-text-01');
+}
+
+.painelRotulo {
+  padding-inline: spacing.$spacing-05;
+  padding-block-end: spacing.$spacing-03;
+  color: theme.$text-secondary;
+  @include type.type-style('label-01');
+}
+
 .seloFicticio {
   display: none;
   align-items: center;

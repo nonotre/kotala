@@ -4,6 +4,7 @@
 import { Button, Column, ContentSwitcher, Layer, Link as CarbonLink, Select, SelectItem, Switch } from "@carbon/react";
 import { ArrowRight, CheckmarkOutline } from "@carbon/react/icons";
 import NextLink from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, type CSSProperties } from "react";
 import { Bloco } from "@/components/Bloco";
 import { EstadoVazio } from "@/components/EstadoVazio";
@@ -166,9 +167,28 @@ type Props = {
   acontecidos: Acontecido[];
   /** Há algum pedido no banco? Sem nenhum, é a primeira vez. */
   temPedidos: boolean;
+  /** false: só as cotações de quem entrou (padrão, como o sino); true: as de todos (?todos=1). */
+  todos: boolean;
 };
 
-export function CentralAvisos({ avisos, acontecidos, temPedidos }: Props) {
+/** Meus ou de todos: vai para o endereço, e o servidor filtra pela sessão. */
+function DeQuem({ todos }: { todos: boolean }) {
+  const router = useRouter();
+  return (
+    <ContentSwitcher
+      size="md"
+      className={s.deQuem}
+      selectedIndex={todos ? 1 : 0}
+      aria-label="De quem são os avisos"
+      onChange={({ index }) => router.replace(index === 1 ? "/avisos?todos=1" : "/avisos", { scroll: false })}
+    >
+      <Switch name="meus" text="Meus" />
+      <Switch name="todos" text="Todos" />
+    </ContentSwitcher>
+  );
+}
+
+export function CentralAvisos({ avisos, acontecidos, temPedidos, todos }: Props) {
   const [filtro, setFiltro] = useState<string>(TODOS);
 
   // A ordem vem de lib/avisos.ts: obra parada, urgente, depois o mais novo.
@@ -192,7 +212,11 @@ export function CentralAvisos({ avisos, acontecidos, temPedidos }: Props) {
 
   return (
     <Pagina>
-      <CabecalhoPagina titulo="Avisos" contexto="O que espera você agora e o que mudou nas suas compras." />
+      <CabecalhoPagina
+        titulo="Avisos"
+        contexto={todos ? "O que espera a equipe agora e o que mudou nas cotações de todos." : "O que espera você agora e o que mudou nas cotações de que você é responsável."}
+        lado={temPedidos ? <DeQuem todos={todos} /> : undefined}
+      />
       <CorpoPagina>
         {!temPedidos ? (
           <GradePagina>

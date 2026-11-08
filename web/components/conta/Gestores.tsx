@@ -28,7 +28,7 @@ export function Gestores() {
   const trocar = (p: Pessoa, gestor: boolean) =>
     iniciar(async () => {
       setErro(null);
-      const r = await marcarGestor(p.id, gestor, sessao?.id ?? null);
+      const r = await marcarGestor(p.id, gestor);
       if (!r.ok) setErro(r.erro ?? "Não deu certo.");
       await carregar();
     });

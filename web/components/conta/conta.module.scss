@@ -275,7 +275,7 @@
   color: theme.$text-secondary;
 }
 
-// ---------- Demonstração ----------
+// ---------- Cabeçalho ----------
 .lado {
   display: inline-flex;
   flex-wrap: wrap;
@@ -283,7 +283,24 @@
   gap: spacing.$spacing-03 spacing.$spacing-05;
 }
 
-.recomecar {
+// ---------- Ligar o Telegram (/vincular) ----------
+.vincular {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+}
+
+.vincularCodigo {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-02;
+}
+
+.codigo {
+  @include type.type-style('code-02');
+
+  padding: spacing.$spacing-01 spacing.$spacing-02;
+  background: theme.$layer-accent-01;
+  color: theme.$text-primary;
+  user-select: all;
 }

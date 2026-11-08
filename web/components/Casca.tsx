@@ -7,7 +7,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTema } from "@/lib/tema";
-import { QuemEntrou, useGuardaSessao } from "./conta/Guarda";
+import { QuemEntrou, useGuardaSessao, type ContaDoTopo } from "./conta/Guarda";
 import { MenuLateral } from "./MenuLateral";
 import s from "./casca.module.scss";
 
@@ -71,7 +71,7 @@ function TrocaTema() {
   );
 }
 
-export function Casca({ children, avisos }: { children: ReactNode; avisos: number }) {
+export function Casca({ children, avisos, conta }: { children: ReactNode; avisos: number; conta: ContaDoTopo }) {
   const rota = usePathname();
   // Menu aberto como sobreposição (abaixo de `lg`, ou o trilho expandido no pedido). Não vale para o menu fixo.
   const [aberto, setAberto] = useState(false);
@@ -81,8 +81,8 @@ export function Casca({ children, avisos }: { children: ReactNode; avisos: numbe
   const [largo, setLargo] = useState(true);
   const noPedido = /^\/pedidos\/[^/]+/.test(rota);
   const rotaAnterior = useRef(rota);
-  // Frente 2: sem sessão, vai para /login.
-  useGuardaSessao();
+  // Frente 2: acerta o espelho da sessão com o servidor (a proteção das rotas é no proxy.ts).
+  useGuardaSessao(conta.sessao);
 
   useEffect(() => {
     setAberto(false);
@@ -176,7 +176,7 @@ export function Casca({ children, avisos }: { children: ReactNode; avisos: numbe
           </div>
           <Sino n={avisos} />
           <TrocaTema />
-          <QuemEntrou />
+          <QuemEntrou conta={conta} />
         </HeaderGlobalBar>
       </Header>
       <MenuLateral aberto={aberto} expandido={expandido} aoFechar={() => setAberto(false)} />

@@ -142,7 +142,7 @@ export function regrasDeCompra(): GrupoRegras[] {
       descricao: "Dados da empresa usados nas mensagens e no frete.",
       regras: [
         { nome: "Empresa", valor: `${EMPRESA.nome} (CNPJ ${EMPRESA.cnpj})`, explicacao: "Nome e CNPJ que vão para os fornecedores.", variavel: "EMPRESA_NOME, EMPRESA_CNPJ" },
-        { nome: "Entrega padrão", valor: `${EMPRESA.enderecoEntrega}, CEP ${EMPRESA.cep}`, explicacao: "Usado quando o comprador não diz o destino.", variavel: "EMPRESA_ENDERECO, EMPRESA_CEP" },
+        { nome: "Entrega padrão", valor: `${EMPRESA.enderecoEntrega}, CEP ${EMPRESA.cep}`, explicacao: "Reserva: vale quando o pedido não diz o destino e a empresa de quem pediu não tem local padrão em Configurações › Endereços (ou o contato não tem conta).", variavel: "EMPRESA_ENDERECO, EMPRESA_CEP" },
         {
           nome: "Nicho da empresa",
           valor: nicho.join(", ") || "geral",
