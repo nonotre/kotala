@@ -8,11 +8,9 @@ import {
   condicaoDaOferta,
   marcaDe,
   MAX_RODADAS,
-  TEXTO_PEDIDO_DESCONTO,
-  textoNegociacao,
   unitarioDe,
-  validarTextoNegociacao,
 } from "../negociador/index.ts";
+import { redigirRodada } from "../negociador/redacao.ts";
 import { contatosComConfirmacao, perguntasDeConfirmacao } from "./confirmar-preco.ts";
 import { aoProcurarPerguntas, aoVarrerFila, esperaMaxMs, liberarFila, pedirAoFornecedor, type Pergunta } from "./cadencia.ts";
 import { escaparHtml, html, Html, htmlParaTexto, negrito, quando, quantidade, quantidadeDe } from "../../texto.ts";
@@ -306,9 +304,12 @@ async function perguntaDaRodada(d: Dados, c: typeof cotacao.$inferSelect, nome: 
     .orderBy(desc(oferta.rodada), desc(oferta.criadoEm))
     .limit(1);
   const referencia = citarReferencia(ultima ? unitarioDe(condicaoDaOferta(ultima), Number(d.item.quantidade)) : null, plano?.referencia ?? null);
-  const montado = textoNegociacao(nome, d.item, { referencia }, d.item.prazoRespostasEm ? quando(d.item.prazoRespostasEm) : null, { ultima: d.item.rodada >= MAX_RODADAS, pagamento: d.pedido.pagamentoPreferido });
-  const v = validarTextoNegociacao(montado, referencia !== null ? [referencia] : []);
-  const texto = v.ok ? montado : `Sobre a cotação ${d.item.id}: ${TEXTO_PEDIDO_DESCONTO}`;
+  // I2: a IA redige a rodada (redigirRodada confere e, reprovada ou fora do ar, usa o textoNegociacao de antes).
+  const redigido = await redigirRodada(
+    { nome, item: d.item, referencia, respostaAte: d.item.prazoRespostasEm ? quando(d.item.prazoRespostasEm) : null, ultima: d.item.rodada >= MAX_RODADAS, pagamento: d.pedido.pagamentoPreferido },
+    { chave: `${c.id}:${c.rodada}`, contexto: { pedidoId: d.pedido.id, itemPedidoId: d.item.id } },
+  );
+  const texto = redigido.texto;
   return {
     tipo: "negociacao",
     itemPedidoId: d.item.id,
@@ -322,14 +323,15 @@ async function perguntaDaRodada(d: Dados, c: typeof cotacao.$inferSelect, nome: 
         .update(cotacao)
         .set(r.situacao === "enviada" ? { contatoId } : { enviadaEm: null, situacao: r.situacao === "bloqueada_parar" ? "parou" : "sem_resposta", contatoId })
         .where(eq(cotacao.id, c.id));
-      if (!v.ok) {
+      if (r.situacao === "enviada" && (redigido.origem === "ia" || redigido.motivos.length)) {
         await registrar(db, {
           agente: "Negociador",
-          acao: "Mandou a contraproposta com o texto mínimo.",
-          motivo: `O texto montado não passou no validador: ${v.motivos.join("; ")}.`,
+          acao: redigido.origem === "ia" ? "Mandou a contraproposta com texto redigido pela IA." : "Mandou a contraproposta com o texto do template.",
+          motivo: redigido.origem === "ia" ? "Conferido pelo validador: só a referência pública, sem valor de outro fornecedor." : `A redação por IA não foi usada: ${redigido.motivos.join("; ")}.`,
           pedidoId: d.pedido.id,
           itemPedidoId: d.item.id,
           fornecedorIds: [c.fornecedorId],
+          dados: { redacao: redigido.origem, texto },
         });
       }
     },

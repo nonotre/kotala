@@ -20,7 +20,6 @@ import {
   jaPediuDesconto,
   mantemFirme,
   marcaDe,
-  montarNegociacao,
   produtoDe,
   resultadoNegociacao,
   TEXTO_MANTEVE,
@@ -30,6 +29,7 @@ import {
   type CondicaoProposta,
   type MarcaNegociacao,
 } from "../agentes/negociador/index.ts";
+import { redigirPedidoDeDesconto, type OrigemTexto } from "../agentes/negociador/redacao.ts";
 import { referenciasDoItem } from "../agentes/busca/internet.ts";
 import { formatarBRL } from "../agentes/comparador/calculo.ts";
 import { avisarGestor, liberarSaida } from "../agentes/guardrail/rastro.ts";
@@ -604,7 +604,7 @@ async function processarResposta(
 
       // I1: pede desconto em toda proposta completa, uma vez por fornecedor e item, dentro desta mensagem.
       // A marca é gravada antes de tentar fechar a cotação, para o fechamento esperar a janela.
-      let pedido: { marca: MarcaNegociacao; texto: string } | null = null;
+      let pedido: { marca: MarcaNegociacao; texto: string; origem: OrigemTexto } | null = null;
       // R13: pede desconto em qualquer ocasião. Ester (revisaodochat.md): em mensagem separada, nunca junto de
       // outra pergunta; com proposta incompleta, o desconto espera o fornecedor completar e sai depois, sozinho.
       if (nova && !negociacao && !faltam.length && !perguntaPendente) {
@@ -626,7 +626,8 @@ async function processarResposta(
         if (decisao.ok && (await reservarPedidoDeDesconto(c.fornecedorId, l.item.id, l.pedido.id))) {
           const [recompra, refs] = await Promise.all([compraramAntes(c.fornecedorId), referenciasDoItem(l.item.id)]);
           const referencia = citarReferencia(unitarioDe(depois, qtd), refs.mediana);
-          const montado = montarNegociacao({
+          // I2: a IA redige a partir das mesmas alavancas; reprovada ou fora do ar, vale o template.
+          const montado = await redigirPedidoDeDesconto({
             alavancas: escolherAlavancas({
               recompra,
               quantidade: qtd,
@@ -642,7 +643,10 @@ async function processarResposta(
             pagamentoPreferido: l.pedido.pagamentoPreferido,
             janelaAte: decisao.janelaAte,
             agora,
-          });
+          }, { contexto: ctx });
+          if (montado.motivosIa.length) {
+            await registrar(db, { agente: "Negociador", acao: "Usou o template no pedido de desconto, no lugar do texto da IA.", motivo: `A redação por IA não foi usada: ${montado.motivosIa.join("; ")}.`, ...ctx, fornecedorIds: [c.fornecedorId], dados: { redacao: "template", motivosIa: montado.motivosIa } });
+          }
           if (!montado.validado) {
             await registrar(db, { agente: "Negociador", acao: "Usou o texto mínimo no pedido de desconto.", motivo: `O texto montado não passou no validador: ${montado.motivos.join("; ")}.`, ...ctx, fornecedorIds: [c.fornecedorId] });
           }
@@ -651,11 +655,11 @@ async function processarResposta(
             janelaAte: decisao.janelaAte.toISOString(),
             rodadaAuto: 1,
             alavancas: montado.alavancas,
-            referenciaCitada: montado.validado ? referencia : null,
+            referenciaCitada: montado.referenciaCitada,
             antes: depois,
           };
           await gravarExtraido(nova.id, { ...(nova.extraido as Record<string, unknown>), negociacao: marca });
-          pedido = { marca, texto: montado.texto };
+          pedido = { marca, texto: montado.texto, origem: montado.origem };
         }
       }
 
@@ -696,10 +700,10 @@ async function processarResposta(
           await registrar(db, {
             agente: "Negociador",
             acao: "Pediu desconto ao fornecedor, em mensagem separada do recebimento da proposta.",
-            motivo: `Uma vez por fornecedor e item; janela ${quando(new Date(pedido.marca.janelaAte))}. Alavancas: ${pedido.marca.alavancas.join(", ") || "nenhuma"}.${pedido.marca.referenciaCitada !== null ? ` Citou só a referência pública (${formatarBRL(pedido.marca.referenciaCitada)}).` : " Não citou valor de fora."}`,
+            motivo: `Uma vez por fornecedor e item; janela ${quando(new Date(pedido.marca.janelaAte))}. Alavancas: ${pedido.marca.alavancas.join(", ") || "nenhuma"}.${pedido.marca.referenciaCitada !== null ? ` Citou só a referência pública (${formatarBRL(pedido.marca.referenciaCitada)}).` : " Não citou valor de fora."} Texto ${pedido.origem === "ia" ? "redigido pela IA e conferido pelo validador" : "do template"}.`,
             ...ctx,
             fornecedorIds: [c.fornecedorId],
-            dados: { alavancas: pedido.marca.alavancas, janelaAte: pedido.marca.janelaAte, referenciaCitada: pedido.marca.referenciaCitada },
+            dados: { alavancas: pedido.marca.alavancas, janelaAte: pedido.marca.janelaAte, referenciaCitada: pedido.marca.referenciaCitada, redacao: pedido.origem, texto: pedido.texto },
           });
         } else {
           // Não saiu: tira a marca, para a cotação não esperar uma janela que não existe.
