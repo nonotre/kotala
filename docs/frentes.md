@@ -158,6 +158,7 @@ Branch `f4-ia-conversa`, a partir de `368d7fc`. Plano e desenhos: [plano-ia.md](
   - a cotação pode ser prorrogada pela busca automática;
   - a cotação não fecha mais no instante em que o último responde: espera a janela do pedido de desconto (na demo de 15 min, até uns 4 min).
 - **Nomes que mudaram:** `TEXTO_BOAS_VINDAS` virou `textoBoasVindas()`; `ehPedido` é calculado em código a partir da classe; `ATIVIDADE_DA_AREA` saiu de `confianca.ts`; `limpar` e `extrair` do Extrator ganharam parâmetros opcionais.
+- **Junção com o `main` de 08/11 (com a Frente 3 já junta):** a simulação deu conflito só em `.env.exemplo` (manter os blocos das duas) e em `src/nucleo/registro.ts` (manter "Guardrail" e o agente da Frente 3 em `AGENTES`). O Assistente da Frente 3 pode importar `triagem` de `src/agentes/guardrail/`.
 - **Conflitos prováveis:** `src/agentes/cotador/index.ts`, `src/fluxo/comprador.ts` e `src/fluxo/fornecedor.ts` mudaram bastante. `scripts/testar-seguranca.ts` ainda chama `interpretar` sem `posRegras` (funciona, mas não testa as pós-regras).
 
 ### O que a Frente 4 não fez (fica para outras frentes ou para depois)
