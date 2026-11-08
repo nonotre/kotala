@@ -31,7 +31,7 @@ export const Extracao = z.object({
     .enum(["exato", "equivalente", "diferente", "a_confirmar"])
     .describe(
       "Compare tipo, especificação e dimensão com o pedido. exato: é o pedido; equivalente: mesmo tipo, especificação e dimensão, com diferença só de forma " +
-        "(nome abreviado, marca citada que o pedido não exigiu, unidade sinônima como kg e quilo); diferente: outro tipo, especificação ou dimensão; " +
+        "(nome abreviado, marca citada que o pedido não exigiu, unidade sinônima como kg e quilo); diferente: outro tipo, especificação ou dimensão (qualquer número da especificação diferente, como 6 kg para um pedido de 4 kg); " +
         "a_confirmar: falta dado para saber (por exemplo, não disse a especificação ou a dimensão)",
     ),
   divergencias: z
@@ -99,6 +99,7 @@ Regras:
 - "Frete grátis", "frete incluso" ou "CIF" é frete 0. "FOB" ou "retirar na loja" é entregaNoLocal false.
 - "Impostos inclusos" ou "preço final" vira impostosNaoInclusos = "inclusos".
 - Compare o item oferecido com o pedido por tipo, especificação e dimensão, não por texto igual. Nome abreviado, marca citada que o pedido não exigiu e unidade sinônima (kg e quilo, un e unidade) não tornam o item "diferente".
+- Número da especificação diferente do pedido (capacidade, peso, tamanho, bitola, diâmetro, potência, voltagem, quantidade por embalagem) torna o item "diferente", nunca "equivalente". Se a proposta não diz o número, é "a_confirmar".
 - Se o pedido diz "Aceita equivalente: não" e cita marca ou modelo, outra marca ou outro modelo é "diferente", mesmo com a mesma especificação.
 - Se o fornecedor já mandou preço e agora diz que "não consegue desconto", "já está no limite" ou "o preço é esse", isso NÃO é recusa: classificacao = "outro". Recusa é só não ter o item ou não atender o local.
 - Desconto oferecido ("faço 5% à vista", "tiro R$ 20"): preencha descontoPercentual ou descontoValor. Não aplique o desconto ao preço.
