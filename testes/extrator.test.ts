@@ -5,7 +5,7 @@ process.env.DATABASE_URL ??= "postgres://x@127.0.0.1:1/x"; // nada conecta aqui
 const { limpar } = await import("../src/agentes/extrator/index.ts");
 
 const base = {
-  classificacao: "outro" as const, duvida: null, itemOferecido: null, itemExato: true, precoUnitario: null, quantidadeOfertada: null,
+  classificacao: "outro" as const, duvida: null, itemOferecido: null, itemExato: true, aderencia: "exato" as const, divergencias: [] as string[], leituraPreco: "unitario" as const, trechoPreco: null, alertas: [] as never[], descontoPercentual: null, descontoValor: null, precoUnitario: null, quantidadeOfertada: null,
   unidadeOfertada: null, embalagem: null, totalProduto: null, frete: null, impostosValor: null, impostosNaoInclusos: null,
   prazoDias: null, validadeDias: null, pagamento: null, prazoPagamentoDias: null, entregaNoLocal: null, cnpj: null,
 };
