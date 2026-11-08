@@ -1,8 +1,71 @@
 # Plano: agente do fornecedor robusto e simulador geral
 
-Plano de 08/11/2026, para depois da integração das frentes. Nada daqui foi implementado. O objetivo é que a conversa com fornecedores aguente situações e fornecedores diversos, e que um simulador geral prove isso de forma repetível, sem gastar busca real.
+Plano de 08/11/2026, para depois da integração das frentes. O objetivo é que a conversa com fornecedores aguente situações e fornecedores diversos, e que um simulador geral prove isso de forma repetível, sem gastar busca real. A seção 0 diz o que já entrou (junção da rodada 2); o resto continua sendo plano.
 
 Leia junto com [frente-3-harness.md](frente-3-harness.md) (Assistente do chat e avaliação), [arquitetura.md](arquitetura.md) e [decisoes.md](decisoes.md).
+
+## 0. O que entrou na junção da rodada 2
+
+### Simulador (`src/simulador/`)
+
+| Peça | Onde | O que faz |
+|---|---|---|
+| Catálogo por categoria | `catalogo.json`, `catalogo.ts` | Preços fictícios por item, com a categoria de `src/dominio/categorias.json`. Por categoria: onde entrega ("aí na obra", "no escritório"), frete "até a obra" ou "até o endereço", conversões (carrada = 6 m³, milheiro = 1000 unidades) e preço sintético para item da categoria sem preço na lista. Construção dá os mesmos preços de antes (conferido nos 42 itens da base). |
+| Personas de área | `personas.ts` (`PERSONAS_AREAS`) | Papelaria, escritório, EPI, limpeza, informática e copa. Vendem pela categoria do domínio, não pelo catálogo de obra. Entram na demo (não vendem item de obra, então construção não muda). |
+| Resposta ao pedido automático de desconto | `personas.ts` (`respostaAoDesconto`), `index.ts` | Corrige o simulador que reenviava o mesmo preço (virava "manteve"). Cada persona tem `desconto`: `novo_preco`, `percentual`, `condicionado` (Pix), `fechar_hoje`, `vou_ver` (responde depois), `recusa` ou `ignora`. A rodada do botão do comprador continua baixando o preço como antes. |
+| Personas difíceis | `PERSONAS_EXTRAS` | Unitário ambíguo (só "fica R$ 877,10" para 5 extintores, sem "cada" nem "total"), proposta em duas mensagens, só Pix e orçamento em PDF anexo (o canal simulado agora tem `baixar`). Só entram no banco com `semearSimulados({ extras: true })` ou `SIM_PERSONAS=todas`. |
+| Personas de comprador | `compradores.ts` | Roteiros prontos: `obra`, `escritorio`, `clips`, `epi`, `extintor`, `limpeza`, `informatica`, `copa`. |
+| Métricas | `metricas.ts` | Desconto por rodada (automático, por resultado, economia e média; rodada do botão contra a anterior) e mensagens seguidas ao fornecedor sem resposta (U3). |
+| Casos | `casos/guardrails.ts`, `casos/regressao.ts` | Os 60 + 9 casos de guardrail e os erros do plano que dependem da IA. |
+
+### Testes sem IA (`npm run checar`)
+
+| Arquivo | O quê |
+|---|---|
+| `testes/simulador-personas.test.ts` | Catálogo por categoria, áreas, preço sintético, estilos de desconto lidos pelo negociador, personas difíceis e o PDF. "Se fechar hoje" como condicionado fica `todo` (ver abaixo). |
+| `testes/simulador-metricas.test.ts` | As contas das métricas. |
+| `testes/regressao-plano.test.ts` | Clips de papel, "R$ 300" para 5 unidades, kg e marca não exigida, extintor sem kg, botões do mapa, só Pix. |
+| `testes/guardrails-casos.test.ts` | O piso sem IA: nenhum legítimo bloqueado pelo código; lista dura e controlados seguram mesmo com a IA dizendo "pedido" (só o caso 39, conteúdo sexual, depende da IA). Falso positivo e falso negativo por classe. |
+| `testes/ampliacao-casos.integracao.test.ts` | I3: dois varredores, fornecedor com dois contatos, teto pela coluna `item_pedido.ampliacoes`, fornecedor antigo na leva 2. Q6: um mapa por item e rodada com fechamento concorrente. O varredor com a lista velha fica `todo` (bug, ver abaixo). |
+| `testes/dono-pedido.integracao.test.ts` | Pedido do chat web aparece com o nome do usuário no Quadro, na Lista e no detalhe (`web/lib/dados.ts`). |
+
+### Como rodar
+
+```bash
+# Ciclo completo, IA real, banco de teste, sem busca paga:
+SERPER_API_KEY= BUSCA_MODO=snapshot npm run simular -- persona:obra
+SERPER_API_KEY= BUSCA_MODO=snapshot SIM_PERSONAS=todas npm run simular -- persona:escritorio
+# No fim, imprime as métricas do pedido. Para um pedido já rodado:
+npm run simular:metricas -- 12
+
+# Guardrails: só código (sem chamada) ou com IA (~80 chamadas; use --so para poucas)
+npm run guardrails:avaliar -- --sem-ia
+npm run guardrails:avaliar -- --so 3,19,39,47,53,54,F1,F9
+
+# Erros do plano com IA (~14 chamadas) e, opcional, o juiz de clareza (3 chamadas, modelo forte)
+npm run regressao:avaliar -- --juiz
+
+# Assistente generalista: os casos novos fora da obra
+npm run assistente:avaliar -- --casos pedido-escritorio,so-o-nome-escritorio,cotam-limpeza,status-item-de-escritorio,escrever-email-papelaria
+```
+
+`npm run simular` usa `DATABASE_URL_TESTE` e aplica as migrações. Sem `SERPER_API_KEY=` vazio e `BUSCA_MODO=snapshot`, a busca pode gastar crédito do Serper (a trava de rede da seção 3.1 ainda não existe).
+
+### O que os testes e as rodadas acharam (para a Frente 4 e o dono)
+
+- **Varredor com a lista velha amplia de novo (I3).** `ampliarSeFaltarPropostas` não confere se o prazo ainda está vencido. Dois processos com varredor (bots e `npm run simular` no mesmo banco), ou um varredor lento: o segundo lê a lista de vencidos, o primeiro amplia e prorroga, e o segundo amplia de novo na hora, gastando a segunda leva. Reprodução: teste `todo` em `testes/ampliacao-casos.integracao.test.ts`.
+- **Pedido de desconto duplicado com proposta em duas mensagens (I1).** Duas mensagens do mesmo fornecedor quase juntas, que completam a proposta, são lidas em paralelo e as duas pedem desconto (dois "Pediu desconto" e duas mensagens). Visto com `SIM_PERSONAS=todas npm run simular -- persona:escritorio` antes de o simulador deixar de mandar o complemento junto com a segunda parte.
+- **"Vou ver com o gerente" vira pedido de pessoa (I1).** O Extrator classifica como `responsavel`, e o fluxo responde "Vou avisar o comprador responsável" antes do `vaiResponderDepois`, que só roda na classe `outro`. Visto com a persona `sim-aurora` em `npm run simular -- persona:obra`.
+- **"Se fechar hoje" não é condicionado (I1).** `descontoCondicional` só reconhece pagamento ou volume; "5% se fechar hoje" é aplicado como desconto incondicional. Teste `todo` em `testes/simulador-personas.test.ts`.
+- **Extrator, com IA:** "Extintor ABC 6 kg: R$ 300" para 5 unidades sai como unitário, sem pergunta (o prompt manda "ambiguo"); parafuso cotado "o kg" para pedido em unidades sai como `diferente`, que corta (o plano Q2 pede equivalente ou a confirmar). Casos `300-ambiguo` e `kg-sem-unidade` do `npm run regressao:avaliar`.
+- **Assistente, com IA:** a "clips de papel" respondeu "Não trabalhamos com material de escritório" em vez de encaminhar ao fluxo (caso `so-o-nome-escritorio`).
+- **Cadência (U3):** a confirmação de preço abaixo da referência sai logo depois do "Recebi sua proposta", sem resposta entre as duas; a métrica de mensagens seguidas mostra isso (já anotado para a Frente 1 em `frentes.md`).
+
+### O que ficou de fora
+
+- Trava de rede, cenários com gabarito e personas guiadas por IA (seções 3.1 a 3.4): dependem das mudanças do agente do fornecedor (seção 2).
+- Foto com marca e foto imprópria (casos Q5 e 40) com anexo de verdade: o caso de texto da foto já está no `regressao:avaliar`; falta uma imagem de teste.
+- Comparação de modelos no conjunto misto: fora desta rodada (sem rodadas grandes de IA).
 
 ## 1. Regras de negócio decididas (08/11/2026)
 
