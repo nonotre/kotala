@@ -258,7 +258,7 @@ export function ChatSimulado({ chat, item }: { chat: Chat; item: ItemChat | null
           </div>
           <p className={s.dica}>
             {chat.automatico
-              ? "Enter envia; Shift+Enter quebra a linha. A persona espera 5 minutos antes de responder sozinha: se você responder antes, ela pula esta etapa e volta a contar na próxima mensagem."
+              ? "Enter envia; Shift+Enter quebra a linha. A persona espera 2 minutos antes de responder sozinha: se você responder antes, ela pula esta etapa e volta a contar na próxima mensagem."
               : "Enter envia; Shift+Enter quebra a linha. A persona não responde enquanto você estiver no chat."}
           </p>
         </div>
