@@ -10,12 +10,12 @@ import { Tabela } from "@/components/Tabela";
 import type { DadosPedido, ItemDoPedido } from "@/lib/dados-pedido";
 import { brl, dataHora, hora } from "@/lib/formato";
 import { LinkExterno } from "@/components/LinkExterno";
-import { Fornecedor, IndiceItens, SecaoItem, textoDias } from "./Item";
+import { chatDoFornecedor, Fornecedor, IndiceItens, SecaoItem, textoDias } from "./Item";
 import { StatusCotacao } from "./Status";
 import { FORMATO_OFERTA, hrefAba } from "./textos";
 import s from "./pedido.module.scss";
 
-function Consultados({ i }: { i: ItemDoPedido }) {
+function Consultados({ d, i }: { d: DadosPedido; i: ItemDoPedido }) {
   const { item, cotacoes } = i;
   if (!cotacoes.length) return null;
   const respostas = cotacoes.filter((c) => c.cotacao.situacao === "respondeu").length;
@@ -30,7 +30,7 @@ function Consultados({ i }: { i: ItemDoPedido }) {
         vazio="Ninguém consultado nesta rodada."
         colunas={["Fornecedor", "Situação", "Enviada", "Respondeu", ""]}
         linhas={cotacoes.map(({ cotacao: ct, nome, origem }) => [
-          <Fornecedor key="f" nome={nome} simulado={origem === "simulado"} />,
+          <Fornecedor key="f" nome={nome} simulado={origem === "simulado"} chat={chatDoFornecedor(d, i, ct.fornecedorId)} />,
           <StatusCotacao key="s" situacao={ct.situacao} />,
           ct.enviadaEm ? dataHora(ct.enviadaEm) : "—",
           ct.respondeuEm ? dataHora(ct.respondeuEm) : "—",
@@ -48,7 +48,7 @@ function Consultados({ i }: { i: ItemDoPedido }) {
   );
 }
 
-function Propostas({ i }: { i: ItemDoPedido }) {
+function Propostas({ d, i }: { d: DadosPedido; i: ItemDoPedido }) {
   if (!i.ofertas.length) return null;
   const ofertas = [...i.ofertas].sort((a, b) => b.rodada - a.rodada);
   const variasRodadas = new Set(ofertas.map((o) => o.rodada)).size > 1;
@@ -60,7 +60,7 @@ function Propostas({ i }: { i: ItemDoPedido }) {
         colunas={[...(variasRodadas ? ["Rodada"] : []), "Fornecedor", "O que ofereceu", "Como chegou", "Preço unitário", "Produto", "Frete", "Entrega", "Pagamento", "Validade"]}
         linhas={ofertas.map((o) => [
           ...(variasRodadas ? [o.rodada] : []),
-          <Fornecedor key="f" nome={o.nome} simulado={o.origem === "simulado"} online={o.formato === "busca"} />,
+          <Fornecedor key="f" nome={o.nome} simulado={o.origem === "simulado"} online={o.formato === "busca"} chat={chatDoFornecedor(d, i, o.fornecedorId)} />,
           <span key="o">
             {o.itemOferecido}
             {!o.itemExato ? <span className={s.ajudaCelula}>Equivalente</span> : null}
@@ -134,8 +134,8 @@ export function AbaCotacoes({ d }: { d: DadosPedido }) {
               ) : null}
               {i.cotacoesTodas.length || i.ofertas.length ? (
                 <>
-                  <Consultados i={i} />
-                  <Propostas i={i} />
+                  <Consultados d={d} i={i} />
+                  <Propostas d={d} i={i} />
                   <RodadasAnteriores i={i} />
                 </>
               ) : (

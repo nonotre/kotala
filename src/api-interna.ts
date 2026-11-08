@@ -13,6 +13,7 @@ import type { Anexo } from "./nucleo/db/schema.ts";
 import { registrarCotacaoPorVoz, registrarFimDaLigacao } from "./agentes/voz/index.ts";
 import { TEXTO_FIM, type MotivoFim } from "./agentes/voz/sessao.ts";
 import { alterarFornecedor, type AcaoFornecedor } from "./agentes/fornecedores/index.ts";
+import { assumirChat } from "./simulador/index.ts";
 
 /** Teto do corpo: 20 kB para ações; o chat com anexos aceita até 3 arquivos de 10 MB (em base64). */
 async function corpo(req: IncomingMessage, limite = 20_000): Promise<Record<string, unknown>> {
@@ -63,6 +64,17 @@ async function compradorDoBotao(dado: string) {
     .innerJoin(contato, eq(contato.id, pedido.compradorId))
     .where(eq(pedido.id, pedidoId));
   return l?.contato ?? null;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Telegram simulado: só vale contato de fornecedor no canal "simulado". */
+async function contatoSimulado(id: unknown): Promise<{ contato: typeof contato.$inferSelect } | { status: number; erro: string }> {
+  if (typeof id !== "string" || !UUID.test(id)) return { status: 400, erro: "contato inválido" };
+  const [c] = await db.select().from(contato).where(eq(contato.id, id));
+  if (!c) return { status: 404, erro: "contato não encontrado" };
+  if (c.canal !== "simulado" || c.papel !== "fornecedor") return { status: 400, erro: "contato não é de fornecedor simulado" };
+  return { contato: c };
 }
 
 export function iniciarApiInterna(porta: number, token: string, host = "127.0.0.1") {
@@ -122,6 +134,34 @@ export function iniciarApiInterna(porta: number, token: string, host = "127.0.0.
         if (!/^[0-9a-f-]{36}$/.test(cotacaoId) || !(motivo in TEXTO_FIM)) return responder(400, { erro: "pedido inválido" });
         const duracao = Number(b.duracaoSeg);
         return responder(200, await registrarFimDaLigacao(cotacaoId, { motivo, transcricao: String(b.transcricao ?? ""), duracaoSeg: Number.isFinite(duracao) ? Math.round(duracao) : null }));
+      }
+      // T5/T6: Telegram simulado. O usuário escreve ou toca num botão como o fornecedor simulado;
+      // a mensagem entra pela mesma receber() da persona automática e o chat passa a ser dele.
+      if (req.url === "/simulado/mensagem") {
+        const r = await contatoSimulado(b.contatoId);
+        if ("erro" in r) return responder(r.status, { erro: r.erro });
+        const texto = typeof b.texto === "string" ? b.texto.trim().slice(0, 4_000) : "";
+        const botao = typeof b.botao === "string" && b.botao.trim() ? b.botao.trim().slice(0, 256) : undefined;
+        if (!texto && !botao) return responder(400, { erro: "mande texto ou botão" });
+        // Assume antes de receber: o que o fluxo mandar de volta já encontra a persona calada.
+        await assumirChat(r.contato.id, true);
+        const rec = await receber({
+          canal: "simulado",
+          endereco: r.contato.endereco,
+          idExterno: `simtela-${crypto.randomUUID()}`,
+          texto,
+          botao,
+          papel: "fornecedor",
+        });
+        return responder(200, { ok: true, tipo: rec.tipo });
+      }
+      // T6: "Devolver ao automático" (ligado: true) ou assumir sem escrever (ligado: false).
+      if (req.url === "/simulado/automatico") {
+        const r = await contatoSimulado(b.contatoId);
+        if ("erro" in r) return responder(r.status, { erro: r.erro });
+        if (typeof b.ligado !== "boolean") return responder(400, { erro: "ligado deve ser true ou false" });
+        await assumirChat(r.contato.id, !b.ligado);
+        return responder(200, { ok: true, automatico: b.ligado });
       }
       return responder(404, { erro: "rota desconhecida" });
     } catch (erro) {

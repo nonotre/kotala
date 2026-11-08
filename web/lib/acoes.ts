@@ -45,3 +45,30 @@ export async function alterarFornecedor(fornecedorId: string, acao: "bloquear" |
   revalidatePath("/conduta");
   return r;
 }
+
+// ---------- Telegram simulado do fornecedor ----------
+
+/** A API interna antiga não conhece as rotas do simulado: o erro cru ("rota desconhecida", "Erro 404") não diz nada a quem está na tela. */
+function erroDoSimulado(r: Resultado): Resultado {
+  if (r.ok || !r.erro || !/^(Erro \d+|rota desconhecida)$/i.test(r.erro)) return r;
+  return { ok: false, erro: "O processo dos bots ainda não conhece o Telegram simulado. Reinicie-o com a versão nova e tente de novo." };
+}
+
+function revalidarChat(contatoId: string) {
+  revalidatePath(`/telegram-simulado/${contatoId}`);
+  revalidatePath("/telegram-simulado");
+}
+
+/** Escreve ou toca num botão como o fornecedor simulado. O simulador para de responder sozinho neste chat. */
+export async function enviarComoFornecedor(contatoId: string, texto: string, botao?: string): Promise<Resultado> {
+  const r = erroDoSimulado(await chamar("/simulado/mensagem", { contatoId, texto: texto || undefined, botao }));
+  revalidarChat(contatoId);
+  return r;
+}
+
+/** `ligado` true devolve o chat à persona automática; false, o usuário assume. */
+export async function alterarAutomatico(contatoId: string, ligado: boolean): Promise<Resultado> {
+  const r = erroDoSimulado(await chamar("/simulado/automatico", { contatoId, ligado }));
+  revalidarChat(contatoId);
+  return r;
+}

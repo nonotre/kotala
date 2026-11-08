@@ -140,6 +140,9 @@ export function Casca({ children, avisos }: { children: ReactNode; avisos: numbe
 
   const titulo = <title>{`${tituloDaRota(rota)} · ${NOME_PRODUTO}`}</title>;
 
+  // Telegram simulado: tela de outro "aplicativo", sem nada do site em volta. O título da aba vem da própria rota.
+  if (/^\/telegram-simulado(\/|$)/.test(rota)) return <>{children}</>;
+
   // A entrada fica fora da casca: sem menu, sem sino.
   if (rota === "/login") {
     return (

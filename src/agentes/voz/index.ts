@@ -21,7 +21,6 @@ import {
   jaPediuDesconto,
   marcaDe,
   montarNegociacao,
-  preferenciaNaoAtendida,
   produtoDe,
   reservarPedidoDeDesconto,
   resultadoNegociacao,
@@ -300,9 +299,7 @@ export async function registrarCotacaoPorVoz(cotacaoId: string, args: ArgsRegist
   if (nova && !negociacao) {
     const decisao = deveNegociar({
       temPreco: depois.precoUnitario !== null || depois.totalProduto !== null,
-      faltam: faltam.length,
       aConfirmar: !!e.aConfirmar?.length,
-      pedidoContato: false,
       alertas: e.alertas.length,
       jaPedido: item.negociacao?.rodada === c.rodada || (await jaPediuDesconto(c.fornecedorId, item.id)),
       estadoItem: item.estado,
@@ -317,14 +314,13 @@ export async function registrarCotacaoPorVoz(cotacaoId: string, args: ArgsRegist
     if (decisao.ok && (await reservarPedidoDeDesconto(c.fornecedorId, item.id, ped.id))) {
       const [recompra, refs] = await Promise.all([compraramAntes(c.fornecedorId), referenciasDoItem(item.id)]);
       const referencia = citarReferencia(unitarioDe(depois, qtd), refs.mediana);
-      const pagamentoPreferido = preferenciaNaoAtendida(ped.pagamentoPreferido, e.pagamento);
       const montado = montarNegociacao({
-        alavancas: escolherAlavancas({ recompra, quantidade: qtd, prazoPagamentoDias: e.prazoPagamentoDias, frete: retirada ? null : e.frete, entregas: ped.entregas, pagamentoPreferido }),
+        // R13: com a forma do comprador, o padrão da empresa não é oferecido como alavanca.
+        alavancas: escolherAlavancas({ recompra, quantidade: qtd, pagamento: e.pagamento, pagamentoPreferido: ped.pagamentoPreferido, frete: retirada ? null : e.frete, entregas: ped.entregas }),
         quantidade: item.quantidade,
         unidade: item.unidade,
         frete: e.frete,
         referencia,
-        pagamentoPreferido,
         janelaAte: decisao.janelaAte,
         agora,
       });

@@ -16,6 +16,7 @@ const mod = urlTeste
       ...(await import("../src/nucleo/mensagens/index.ts")),
       ...(await import("../src/agentes/cotador/index.ts")),
       ...(await import("../src/agentes/busca/index.ts")),
+      ...(await import("../src/agentes/cotador/prazo.ts")),
     }
   : null;
 
@@ -178,16 +179,27 @@ test("candidatosNovos: fora quem já foi consultado (qualquer situação) e quem
   assert.deepEqual(novos.map((x) => x.fornecedorId), [d!]);
 });
 
-test("todos responderam antes do prazo, com menos de 3 válidas: amplia em vez de fechar", { skip: pular }, async () => {
+test("R14b: todos responderam antes do prazo, com menos de 3 válidas: pergunta ao comprador; estendendo, amplia", { skip: pular }, async () => {
   const [a, ...resto] = await fornecedores(3);
   const id = await itemCotando([a!]);
   // Prazo ainda aberto: é o fechamento antecipado, não o varredor.
-  await mod!.db.update(mod!.schema.itemPedido).set({ prazoRespostasEm: new Date(Date.now() + 600_000) }).where(eq(mod!.schema.itemPedido.id, id));
+  const prazo = new Date(Date.now() + 600_000);
+  await mod!.db.update(mod!.schema.itemPedido).set({ prazoRespostasEm: prazo }).where(eq(mod!.schema.itemPedido.id, id));
   await proposta(id, a!);
 
   await mod!.encerrarSeTodosResponderam(id);
-  const item = await itemDe(id);
+  let item = await itemDe(id);
   assert.equal(item.estado, "cotando");
+  // Não amplia sozinho (I3 antes de 08/11): espera o comprador, sem encurtar o prazo prometido.
+  assert.equal((await cotacoesDo(id)).length, 1);
+  assert.equal(item.prazoRespostasEm!.getTime(), prazo.getTime());
+  const eventos = await mod!.db.query.evento.findMany({ where: (t, { eq }) => eq(t.itemPedidoId, id) });
+  const pergunta = eventos.find((e) => (e.dados as { tipo?: string } | null)?.tipo === "prazo_pergunta");
+  assert.equal((pergunta!.dados as { origem: string }).origem, "todos_responderam");
+
+  // O comprador estende: a busca automática consulta os candidatos.
+  const p = await mod!.db.query.pedido.findFirst({ where: (t, { eq }) => eq(t.id, item.pedidoId) });
+  assert.ok(await mod!.aoBotaoDoPrazo({ id: p!.compradorId }, `item:${id}:prazo_estender`));
   const novas = (await cotacoesDo(id)).filter((c) => resto.includes(c.fornecedorId));
   assert.equal(novas.length, 2);
 
@@ -195,5 +207,6 @@ test("todos responderam antes do prazo, com menos de 3 válidas: amplia em vez d
   for (const f of resto) await proposta(id, f, { prazoDias: null });
   await mod!.db.update(mod!.schema.itemPedido).set({ prazoRespostasEm: new Date(Date.now() - 1000) }).where(eq(mod!.schema.itemPedido.id, id));
   await mod!.encerrarSeTodosResponderam(id);
-  assert.equal((await itemDe(id)).estado, "comparando");
+  item = await itemDe(id);
+  assert.equal(item.estado, "comparando");
 });

@@ -14,7 +14,14 @@ export const EMPRESA = {
   /** Endereço de entrega padrão, usado quando o comprador não diz o destino. */
   enderecoEntrega: process.env.EMPRESA_ENDERECO ?? "Rua de Exemplo, 100, Bela Vista, São Paulo/SP",
   cep: process.env.EMPRESA_CEP ?? "01310-100",
+  /** R11: janela de recebimento padrão, usada quando o pedido não diz outra. */
+  janelaRecebimento: process.env.EMPRESA_JANELA_RECEBIMENTO ?? "dias úteis, das 8h às 17h",
+  /** R11: quem recebe a mercadoria. Padrão neutro (setor, não pessoa) até a empresa dizer o nome. */
+  recebedor: process.env.EMPRESA_RECEBEDOR ?? "Equipe de recebimento",
 };
+
+/** R13: condição de pagamento padrão da empresa, dita ao fornecedor. "À vista" quer dizer no recebimento. */
+export const PAGAMENTO_PADRAO = "à vista, no recebimento da mercadoria (contra a nota fiscal)";
 
 /** Q4: quanto tempo os fornecedores têm para responder na demo (5 minutos: dá tempo de uma pessoa responder). */
 export const PRAZO_RESPOSTAS_SEG = () => num(process.env.PRAZO_RESPOSTAS_SEG, 300);
@@ -57,10 +64,13 @@ export const SIM_ATRASO_FATOR = () => {
 export const MAX_AMPLIACOES = () => num(process.env.MAX_AMPLIACOES, 2);
 /** I1: janela para responder ao pedido de desconto, em fração do prazo de respostas. */
 export const NEGOCIACAO_ESPERA_FRACAO = 0.25;
-/** I1: com menos que esta fração do prazo restante, não pede desconto (o comprador tem o botão). */
-export const NEGOCIACAO_RESTANTE_MIN = 0.1;
-/** Prazo de pagamento abaixo do qual vale perguntar por prazo maior, em dias. */
-export const PRAZO_PAGAMENTO_PADRAO = () => num(process.env.PRAZO_PAGAMENTO_PADRAO, 28);
+/**
+ * R14b: prazo vencido com menos de 3 propostas válidas. O comprador escolhe entre encerrar
+ * e estender; ele tem esta fração do prazo de respostas para responder. Sem resposta, encerra.
+ */
+export const ESPERA_RESPOSTA_PRAZO_FRACAO = 0.5;
+/** R14b: quantas vezes o comprador pode estender o prazo de um item na mesma rodada. */
+export const MAX_PRORROGACOES = () => num(process.env.MAX_PRORROGACOES, 2);
 /** U3: pergunta ao fornecedor sem resposta por mais que esta fração do prazo deixa de segurar a fila. */
 export const ESPERA_PERGUNTA_FRACAO = 0.25;
 /** G: nicho da empresa (ids de src/dominio/categorias.json); só escolhe exemplos e jargão, nunca limita pedidos. */

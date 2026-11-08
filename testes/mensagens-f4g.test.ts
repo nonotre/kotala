@@ -20,6 +20,8 @@ test("cotação em HTML tem título, blocos e checklist; o texto simples continu
   assert.match(h, /<b>Cotação 12<\/b>/);
   assert.match(h, /<b>Item<\/b>\n2 unidades de Extintor de incêndio\n• Tipo: Pó ABC\n• Capacidade: 6 kg/);
   assert.match(h, /<b>Entrega e pagamento<\/b>\nEntrega: Rua A, 10, CEP 01310-100\nPrazo desejado: até sexta/);
+  // R13: o padrão da empresa vai na cotação (à vista quer dizer no recebimento).
+  assert.match(h, /Pagamento: à vista, no recebimento da mercadoria \(contra a nota fiscal\)/);
   assert.match(h, /<b>Por favor, responda<\/b>\n• Preço unitário.*\n• Frete.*\n• Prazo de entrega\n• Condição de pagamento\n• Validade da proposta/);
   assert.match(h, /Loja &lt;X&gt;/); // texto de fora escapado
 

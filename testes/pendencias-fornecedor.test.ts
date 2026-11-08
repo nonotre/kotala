@@ -17,33 +17,21 @@ const dados = (pedido: Record<string, unknown> = {}) =>
   }) as never;
 
 test("U1: a cotação diz a forma de pagamento preferida, escapada, e só quando existe", () => {
-  assert.doesNotMatch(textoCotacao(dados(), "Loja"), /Pagamento preferido/);
-  assert.doesNotMatch(textoCotacao(dados({ pagamentoPreferido: "  " }), "Loja"), /Pagamento preferido/);
+  // R13: sem preferência, o padrão da empresa; com ela, a forma do comprador. U1: quem não puder diz a sua.
+  assert.match(textoCotacao(dados(), "Loja"), /Pagamento: à vista, no recebimento/);
+  assert.match(textoCotacao(dados({ pagamentoPreferido: "  " }), "Loja"), /Pagamento: à vista, no recebimento/);
   const t = textoCotacao(dados({ pagamentoPreferido: "pix" }), "Loja");
-  assert.match(t, /Entrega e pagamento\nEntrega: Rua A, 10\nPagamento preferido: pix \(se puder, cote nessa condição; se não, diga a sua\)/);
-  assert.match(htmlCotacao(dados({ pagamentoPreferido: "boleto <28>" }), "Loja").valor, /Pagamento preferido: boleto &lt;28&gt;/);
+  assert.match(t, /Entrega e pagamento\nEntrega: Rua A, 10\nPagamento: pix \(se não puder nessa condição, diga a sua\)/);
+  assert.match(htmlCotacao(dados({ pagamentoPreferido: "boleto <28>" }), "Loja").valor, /Pagamento: boleto &lt;28&gt;/);
 });
 
-test("U1: preferência só vira alavanca quando a proposta ainda não a oferece", () => {
-  assert.equal(n.preferenciaNaoAtendida(null, "boleto"), null);
-  assert.equal(n.preferenciaNaoAtendida("Pix", "PIX à vista"), null);
-  assert.equal(n.preferenciaNaoAtendida("boleto 28 dias", "Boleto, 28 dias"), null);
-  assert.equal(n.preferenciaNaoAtendida("pix", "boleto 28 dias"), "pix");
-  assert.equal(n.preferenciaNaoAtendida("pix", null), "pix");
-  // Com prazo de pagamento longo, só a preferência faz a alavanca "pagamento" aparecer.
-  const base = { recompra: false, quantidade: 1, prazoPagamentoDias: 60, frete: null, entregas: null };
-  assert.deepEqual(n.escolherAlavancas(base), []);
-  assert.deepEqual(n.escolherAlavancas({ ...base, pagamentoPreferido: "pix" }), ["pagamento"]);
-});
-
-test("U1: o pedido de desconto cita a preferência como pergunta e passa no validador", () => {
-  const r = n.montarNegociacao({ alavancas: ["pagamento"], quantidade: "40", unidade: "saco", frete: null, referencia: null, pagamentoPreferido: "pix", janelaAte: new Date("2026-11-08T14:00:00Z"), agora: new Date("2026-11-08T13:00:00Z") });
+test("R13: sem preferência, a alavanca de pagamento pede o padrão à vista no recebimento; com a forma do comprador, não entra", () => {
+  const base = { recompra: false, quantidade: 1, pagamento: "boleto 28 dias", frete: null, entregas: null };
+  assert.deepEqual(n.escolherAlavancas(base), ["pagamento"]);
+  assert.deepEqual(n.escolherAlavancas({ ...base, pagamentoPreferido: "pix" }), []);
+  const r = n.montarNegociacao({ alavancas: ["pagamento"], quantidade: "40", unidade: "saco", frete: null, referencia: null, janelaAte: new Date("2026-11-08T14:00:00Z"), agora: new Date("2026-11-08T13:00:00Z") });
   assert.ok(r.validado);
-  assert.match(r.texto, /Nossa forma de pagamento preferida é pix: há desconto nessa condição\?/);
-  assert.doesNotMatch(r.texto, /à vista, ou prazo maior/);
-  // Sem preferência, a frase de antes.
-  const s = n.montarNegociacao({ alavancas: ["pagamento"], quantidade: "40", unidade: "saco", frete: null, referencia: null, janelaAte: new Date("2026-11-08T14:00:00Z") });
-  assert.match(s.texto, /Há desconto para pagamento à vista, ou prazo maior no boleto\?/);
+  assert.match(r.texto, /Nosso padrão é pagamento à vista, no recebimento/);
 });
 
 const pedidoCompra = (p: Partial<Parameters<typeof textoPedidoDeCompra>[0]> = {}) =>

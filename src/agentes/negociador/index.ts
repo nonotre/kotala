@@ -5,7 +5,10 @@
 // - nunca cita valor de outro fornecedor (proposta é dado sensível, regra da área de compras);
 // - pode citar só a referência pública (preço publicado na internet), e só quando o preço
 //   do próprio fornecedor está acima dela; e os valores da própria proposta dele;
-// - nunca diz a posição no ranking, nunca promete compra nem forma de pagamento;
+// - nunca diz a posição no ranking, nunca promete compra nem pagamento antecipado;
+// - R13 (08/11): o padrão da empresa é à vista, no recebimento (PAGAMENTO_PADRAO), e pode
+//   ser dito; pagamento antecipado é condição a negociar: o agente pede o pagamento no
+//   recebimento. O agente pede desconto em qualquer ocasião (ver deveNegociar);
 // - a conta do desconto é do código, nunca da IA; para em MAX_RODADAS.
 // O comprador continua decidindo.
 
@@ -22,8 +25,8 @@ export const MAX_RODADAS = 3;
 /** Quantos fornecedores no máximo recebem a contraproposta do botão. */
 const MAX_ALVOS = 3;
 // Regras em src/config.ts; reexportadas para quem já importava daqui.
-import { NEGOCIACAO_ESPERA_FRACAO, NEGOCIACAO_RESTANTE_MIN, PRAZO_PAGAMENTO_PADRAO } from "../../config.ts";
-export { NEGOCIACAO_ESPERA_FRACAO, NEGOCIACAO_RESTANTE_MIN };
+import { NEGOCIACAO_ESPERA_FRACAO, PAGAMENTO_PADRAO } from "../../config.ts";
+export { NEGOCIACAO_ESPERA_FRACAO };
 /** Alavancas por mensagem, no máximo: mensagem curta. */
 export const MAX_ALAVANCAS = 2;
 /** Frase da Ester; é também o texto mínimo quando o validador barra o texto montado. */
@@ -44,7 +47,7 @@ export type Recusa = { motivo: string };
 
 // ---------- Registro antes e depois (oferta.extraido.negociacao) ----------
 
-export type Alavanca = "recompra" | "volume" | "pagamento" | "frete" | "entregas";
+export type Alavanca = "antecipado" | "recompra" | "volume" | "pagamento" | "frete" | "entregas";
 
 /** Condição da proposta num instante: o "antes" e o "depois" do pedido de desconto. */
 export type CondicaoProposta = {
@@ -172,12 +175,9 @@ export function resultadoNegociacao(
 
 export type SituacaoDesconto = {
   temPreco: boolean;
-  /** Campos que faltaram na proposta (prazo, frete, pagamento, validade). */
-  faltam: number;
-  /** Preço ou item a confirmar (Q1). */
+  /** Preço ou item a confirmar (Q1): não dá para negociar um preço que ainda não se sabe qual é. */
   aConfirmar: boolean;
-  pedidoContato: boolean;
-  /** Alertas do guardrail na mensagem (sem nota, comissão...): não é hora de negociar. */
+  /** Alertas do guardrail na mensagem (comissão, golpe, pagamento por fora...): não é hora de negociar. */
   alertas: number;
   /** Já houve pedido automático a este fornecedor neste item, em qualquer rodada. */
   jaPedido: boolean;
@@ -198,19 +198,27 @@ export function janelaDoDesconto(prazoRespostasEm: Date, inicio: Date, agora: Da
   return new Date(Math.min(prazoRespostasEm.getTime(), agora.getTime() + prazo * NEGOCIACAO_ESPERA_FRACAO));
 }
 
-/** Todas as condições em código (seção 2.1 do desenho). Loja online nunca chega aqui: não tem cotação. */
+/**
+ * Todas as condições em código (seção 2.1 do desenho). Loja online nunca chega aqui: não tem cotação.
+ * R13 (08/11): "o agente pede desconto em qualquer ocasião". Por isso pede também com proposta
+ * incompleta (junto da pergunta do que falta), quando o fornecedor pediu uma pessoa e com pouco
+ * prazo restante (a janela só não passa do prazo). Continua sem pedir, por bom senso: sem preço
+ * ou com preço a confirmar (não há o que negociar), mensagem com alerta (todos os alertas de hoje
+ * são de integridade: comissão, golpe, pagamento por fora, sem nota), cotação fechada, prazo
+ * vencido e proposta que o comparador vai cortar (item diferente sem aceite, entrega depois do
+ * prazo). Uma vez por fornecedor e item: as outras ocasiões (rodada do botão, nova rodada)
+ * já pedem preço melhor no próprio texto.
+ */
 export function deveNegociar(s: SituacaoDesconto): { ok: true; janelaAte: Date } | { ok: false; motivo: string } {
   if (!s.temPreco) return { ok: false, motivo: "sem preço" };
-  if (s.faltam > 0) return { ok: false, motivo: "proposta incompleta: o desconto espera a proposta completar" };
   if (s.aConfirmar) return { ok: false, motivo: "preço ou item a confirmar" };
-  if (s.pedidoContato) return { ok: false, motivo: "o fornecedor pediu para falar com uma pessoa" };
   if (s.alertas > 0) return { ok: false, motivo: "mensagem com alerta" };
   if (s.jaPedido) return { ok: false, motivo: "já pedi desconto a este fornecedor neste item" };
   if (s.estadoItem !== "cotando") return { ok: false, motivo: "cotação fechada" };
   if (!s.prazoRespostasEm || !s.inicio) return { ok: false, motivo: "sem prazo de respostas" };
   const prazo = s.prazoRespostasEm.getTime() - s.inicio.getTime();
   const resta = s.prazoRespostasEm.getTime() - s.agora.getTime();
-  if (prazo <= 0 || resta < prazo * NEGOCIACAO_RESTANTE_MIN) return { ok: false, motivo: "resta menos de 10% do prazo" };
+  if (prazo <= 0 || resta <= 0) return { ok: false, motivo: "prazo de respostas vencido" };
   // Portões do comparador (calculo.ts): proposta que será cortada não vale a negociação.
   if (!s.itemExato && !s.aceitaSimilar) return { ok: false, motivo: "item diferente sem aceite de equivalente" };
   if (s.prazoMaxDias !== null && s.prazoDias !== null && s.prazoDias > s.prazoMaxDias) return { ok: false, motivo: "entrega depois do prazo do pedido" };
@@ -219,20 +227,37 @@ export function deveNegociar(s: SituacaoDesconto): { ok: true; janelaAte: Date }
 
 // ---------- Texto do pedido de desconto ----------
 
-/** Alavancas verdadeiras, na ordem de prioridade, no máximo MAX_ALAVANCAS. */
+/**
+ * R13: o fornecedor pede pagamento antes da entrega (antecipado, sinal, entrada, no pedido).
+ * Lido em código no texto da condição de pagamento; "à vista" sozinho não é antecipado.
+ */
+export function pagamentoAntecipado(pagamento: string | null): boolean {
+  if (!pagamento) return false;
+  return /antecipad|adiantad|\bsinal\b|\bentrada\b|antes d[ae] (entrega|envio|despacho|faturamento|embarque)|no ato do pedido|no pedido|na confirma[cç][aã]o do pedido|no fechamento do pedido|pagamento pr[eé]vio/i.test(pagamento);
+}
+
+/**
+ * Alavancas verdadeiras, na ordem de prioridade, no máximo MAX_ALAVANCAS. R13: pagamento
+ * antecipado vem primeiro (pedimos o pagamento no recebimento); sem ele, a alavanca de
+ * pagamento pede desconto pelo padrão da empresa (à vista, no recebimento), a menos que o
+ * comprador tenha dito outra forma de pagamento no pedido.
+ */
 export function escolherAlavancas(f: {
   recompra: boolean;
   quantidade: number;
-  prazoPagamentoDias: number | null;
+  /** Condição de pagamento da proposta, como o fornecedor escreveu. */
+  pagamento: string | null;
   frete: number | null;
   entregas: string | null;
-  /** U1: forma que o comprador prefere e a proposta ainda não oferece (ver preferenciaNaoAtendida). */
+  /** U1: forma de pagamento que o comprador pediu; com ela, o padrão da empresa não é oferecido. */
   pagamentoPreferido?: string | null;
 }): Alavanca[] {
+  const antecipado = pagamentoAntecipado(f.pagamento);
   const todas: [Alavanca, boolean][] = [
+    ["antecipado", antecipado],
     ["recompra", f.recompra],
     ["volume", f.quantidade > 1],
-    ["pagamento", !!f.pagamentoPreferido || f.prazoPagamentoDias === null || f.prazoPagamentoDias < PRAZO_PAGAMENTO_PADRAO()],
+    ["pagamento", !antecipado && !f.pagamentoPreferido?.trim()],
     ["frete", f.frete !== null && f.frete > 0],
     ["entregas", !!f.entregas?.trim()],
   ];
@@ -266,8 +291,6 @@ export type ContextoDesconto = {
   frete: number | null;
   /** Já filtrada por citarReferencia. */
   referencia: number | null;
-  /** U1: preferência de pagamento ainda não atendida (preferenciaNaoAtendida); muda a frase da alavanca. */
-  pagamentoPreferido?: string | null;
   janelaAte: Date;
   agora?: Date;
 };
@@ -278,11 +301,10 @@ function fraseAlavanca(a: Alavanca, c: ContextoDesconto): string {
       return "Já compramos com vocês antes e queremos manter a parceria.";
     case "volume":
       return `Se a compra for fechada com vocês, a quantidade é de ${quantidade(c.quantidade, c.unidade)} de uma vez: há desconto por volume?`;
+    case "antecipado":
+      return `Nosso padrão é pagar ${PAGAMENTO_PADRAO}, e não antecipado. Conseguem atender com o pagamento no recebimento?`;
     case "pagamento":
-      // Pergunta, nunca promessa: "pagamos à vista" é palavra proibida no validador.
-      return c.pagamentoPreferido
-        ? `Nossa forma de pagamento preferida é ${c.pagamentoPreferido}: há desconto nessa condição?`
-        : "Há desconto para pagamento à vista, ou prazo maior no boleto?";
+      return `Nosso padrão é pagamento ${PAGAMENTO_PADRAO}: há desconto para essa condição?`;
     case "frete":
       return `O frete de ${formatarBRL(c.frete ?? 0)} pode ser reduzido ou incluído no preço?`;
     case "entregas":
@@ -316,7 +338,8 @@ export const PALAVRAS_PROIBIDAS: { padrao: RegExp; motivo: string }[] = [
   { padrao: /\bmelhor (oferta|proposta)\b/, motivo: "fala da melhor oferta" },
   { padrao: /\b(primeir|segund|terceir|ultim)[oa] (lugar|colocad)|\branking\b|\bposicao\b/, motivo: "diz a posição no ranking" },
   { padrao: /\b(vamos|iremos) (fechar|comprar)\b|\bfechamos com voce|\bcompra garantida|\bgarant\w* a compra/, motivo: "promete compra" },
-  { padrao: /\bpagamos (a vista|antecipad)|\bpagamento garantido/, motivo: "promete forma de pagamento" },
+  // R13: dizer o padrão da empresa ("nosso padrão é pagamento à vista, no recebimento") pode; prometer não.
+  { padrao: /\bpagamos (a vista|antecipad)|\bpagamento garantido|\bpagamos adiantad/, motivo: "promete forma de pagamento" },
 ];
 
 /** Todos os valores em R$ citados no texto ("R$ 1.234,56" vira 1234.56). */
@@ -529,11 +552,13 @@ export function textoNegociacao(
   item: { id: number; quantidade: string | number; unidade: string; descricao: string },
   plano: { referencia: number | null },
   respostaAte: string | null,
-  rodada: { ultima: boolean } = { ultima: false },
+  /** `pagamento`: forma que o comprador pediu; sem ela, o padrão da empresa (R13). */
+  rodada: { ultima: boolean; pagamento?: string | null } = { ultima: false },
 ): string {
   const linhas = [
     `Olá, ${nome}! Obrigado pela proposta para ${quantidade(item.quantidade, item.unidade)} de ${item.descricao} (cotação ${item.id}).`,
     `${rodada.ultima ? "Estamos fechando esta compra, numa última rodada" : "Estamos fechando esta compra e abrimos mais uma rodada"}: qual o melhor preço que consegue fazer? Pode ser no preço, no frete, no prazo de entrega ou na condição de pagamento.`,
+    rodada.pagamento?.trim() ? `Pagamento: ${rodada.pagamento.trim()}.` : `Nosso padrão de pagamento é ${PAGAMENTO_PADRAO}.`,
   ];
   if (plano.referencia !== null) {
     linhas.push(`Para referência, o preço publicado na internet para este item está em ${formatarBRL(plano.referencia)} por ${item.unidade}.`);

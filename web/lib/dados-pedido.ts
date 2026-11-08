@@ -13,6 +13,7 @@ import { db } from "../../src/nucleo/db/cliente.ts";
 import { cotacao, fornecedor, itemCatalogo, mapaCotacao, oferta } from "../../src/nucleo/db/schema.ts";
 import { colunaDoItem, FINAIS_ITEM } from "../../src/nucleo/orquestrador/estados.ts";
 import { detalhePedido, type Comparacao } from "./dados";
+import { contatosSimulados } from "./dados-simulado";
 
 export { colunaDoItem, FINAIS_ITEM };
 
@@ -115,6 +116,13 @@ export const pedidoCompleto = cache(async (id: number) => {
     : [];
   const fornecedores: Record<string, FornecedorCurto> = Object.fromEntries(nomes.map((f) => [f.id, { id: f.id, nome: f.nome, simulado: f.origem === "simulado" }]));
 
+  // T8: o chat simulado de cada fornecedor simulado do pedido, para o botão "Ser o fornecedor" nas abas.
+  const idsSimulados = new Set<string>();
+  for (const c of cotacoes) if (c.origem === "simulado") idsSimulados.add(c.cotacao.fornecedorId);
+  for (const o of ofertas) if (o.origem === "simulado") idsSimulados.add(o.fornecedorId);
+  for (const f of nomes) if (f.origem === "simulado") idsSimulados.add(f.id);
+  const chatsSimulados = await contatosSimulados([...idsSimulados]);
+
   const itens = d.itens.map((i) => {
     const id = i.item.id;
     const doItem = mapas.filter((m) => m.itemPedidoId === id).map((m) => ({ ...m, comparacao: m.dados as Comparacao }));
@@ -145,7 +153,17 @@ export const pedidoCompleto = cache(async (id: number) => {
   const confirmadoEm = ultima("em_andamento", "aguardando_confirmacao");
   const canceladoEm = d.pedido.estado === "cancelado" ? ultima("cancelado") : null;
 
-  return { pedido: d.pedido, dono: d.dono, itens, linhaDoTempo: d.linhaDoTempo, fornecedores, confirmadoEm, canceladoEm };
+  return {
+    pedido: d.pedido,
+    dono: d.dono,
+    itens,
+    linhaDoTempo: d.linhaDoTempo,
+    fornecedores,
+    confirmadoEm,
+    canceladoEm,
+    /** T8: por id do fornecedor simulado, o `contato.id` do chat dele em /telegram-simulado. */
+    chatsSimulados,
+  };
 });
 
 export type DadosPedido = NonNullable<Awaited<ReturnType<typeof pedidoCompleto>>>;

@@ -107,7 +107,7 @@ As quatro frentes de [frentes.md](frentes.md), o dashboard e a Base de Dados da 
 | Telas | Base de Dados (Fornecedores e Itens com abas), Alertas de conduta com bloqueio, responsável do pedido, dashboard com recorte por comprador, gestores e regras de compra em Configurações, textos sem "obra" |
 | Harness (F3) | Simulador geral por categoria, regressão dos erros do plano, os 69 casos de guardrail, casos de ampliação, métricas de desconto e de mensagens sem resposta; `npm run guardrails:avaliar`, `regressao:avaliar`, `assistente:avaliar` |
 
-**Para rodar depois de atualizar:** `npm run db:migrar` (já aplicado no banco principal em 08/11) e `docker compose up -d --build`. Variáveis novas, todas opcionais (ver `.env.exemplo`): `ASSISTENTE`, `IA_MODELOS_CONVERSA*`, `GESTOR_CONTATO_ID` (reserva: o gestor agora é marcado em Configurações), `GUARDRAIL_MODO_DEMO`, `EMPRESA_NICHO`, `MAX_AMPLIACOES`, `PRAZO_PAGAMENTO_PADRAO`. `src/dados/` fica fora do git: worktree nova copia da pasta principal.
+**Para rodar depois de atualizar:** `npm run db:migrar` (já aplicado no banco principal em 08/11) e `docker compose up -d --build`. Variáveis novas, todas opcionais (ver `.env.exemplo`): `ASSISTENTE`, `IA_MODELOS_CONVERSA*`, `GESTOR_CONTATO_ID` (reserva: o gestor agora é marcado em Configurações), `GUARDRAIL_MODO_DEMO`, `EMPRESA_NICHO`, `MAX_AMPLIACOES`, `MAX_PRORROGACOES`, `EMPRESA_RECEBEDOR`, `EMPRESA_JANELA_RECEBIMENTO`. `src/dados/` fica fora do git: worktree nova copia da pasta principal.
 
 **Decisões que ficaram para o dono, a Ester e o jurídico:**
 - Urgência `obra_parada` → `parada` (o banco não mudou; as telas e mensagens já dizem "operação parada" onde dava).

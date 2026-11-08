@@ -59,7 +59,7 @@ if (args.includes("--juiz")) {
   } as never;
   const agora = new Date();
   const negociacao = montarNegociacao({
-    alavancas: escolherAlavancas({ recompra: false, quantidade: 40, prazoPagamentoDias: 28, frete: 60, entregas: null }),
+    alavancas: escolherAlavancas({ recompra: false, quantidade: 40, pagamento: "boleto 28 dias", frete: 60, entregas: null }),
     quantidade: "40", unidade: "saco", frete: 60, referencia: 38.5, janelaAte: new Date(agora.getTime() + 15 * 60_000), agora,
   }).texto;
   const base = { classificacao: "proposta" as const, duvida: null, itemOferecido: null, aderencia: "exato" as const, divergencias: [], leituraPreco: "ambiguo" as const, trechoPreco: "fica R$ 300", alertas: [], descontoPercentual: null, descontoValor: null, precoUnitario: 300, quantidadeOfertada: null, unidadeOfertada: null, embalagem: null, totalProduto: null, frete: 0, impostosValor: null, impostosNaoInclusos: null, prazoDias: 2, validadeDias: null, pagamento: null, prazoPagamentoDias: null, entregaNoLocal: null, cnpj: null };

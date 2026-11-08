@@ -5,6 +5,8 @@
 import { randomBytes } from "node:crypto";
 import { and, desc, eq, gte, isNotNull, sql } from "drizzle-orm";
 import { cotacaoAbertaDo, encerrarSeTodosResponderam, reenviarCotacaoAberta, responderDuvida } from "../agentes/cotador/index.ts";
+import { respostaPedidoDeDados } from "../agentes/cotador/dados-empresa.ts";
+import { repassarMotivoAoComprador } from "../agentes/cotador/prazo.ts";
 import { despacharPerguntas, ETAPA_CATEGORIA_COTACAO } from "../agentes/cotador/cadencia.ts";
 import {
   aplicarDesconto,
@@ -19,7 +21,7 @@ import {
   mantemFirme,
   marcaDe,
   montarNegociacao,
-  preferenciaNaoAtendida,
+  produtoDe,
   resultadoNegociacao,
   TEXTO_MANTEVE,
   unitarioDe,
@@ -33,7 +35,7 @@ import { formatarBRL } from "../agentes/comparador/calculo.ts";
 import { avisarGestor, liberarSaida } from "../agentes/guardrail/rastro.ts";
 import { conferirSaida } from "../agentes/guardrail/index.ts";
 import { emailValido, FONTE_CONVITE_MANUAL, linkConvite, normalizarEmail } from "../canais/email.ts";
-import { EMPRESA } from "../config.ts";
+import { EMPRESA, PAGAMENTO_PADRAO } from "../config.ts";
 import { extrair, type AlertaFornecedor, type Extracao } from "../agentes/extrator/index.ts";
 import { db } from "../nucleo/db/cliente.ts";
 import { avancarItem, TransicaoConcorrente, TransicaoInvalida } from "../nucleo/orquestrador/index.ts";
@@ -502,6 +504,15 @@ async function processarResposta(
   if (ressalva === "bloqueada") return;
   // Classes que não têm resposta própria sobre o alerta: a ressalva vai sozinha.
   if (ressalva && !["proposta", "outro", "recusa"].includes(e.classificacao)) await enviar(contatoId, ressalva, { ...ctx, tipo: "resposta" });
+  // R11: proposta ou recado que também pede dados da empresa ("segue o preço; qual o CNPJ para faturar?").
+  // A dúvida pura vai ao Cotador (responderDuvida), que usa o mesmo template.
+  if (!ressalva && ["proposta", "outro", "recusa"].includes(e.classificacao)) {
+    const dados = respostaPedidoDeDados(l, entrada.texto);
+    if (dados && (await liberarSaida(dados, { compradorId: l.pedido.compradorId, ...ctx, oQue: "os dados da empresa" }))) {
+      await enviar(contatoId, dados, { ...ctx, tipo: "resposta" });
+      await registrar(db, { agente: "Cotador", acao: "Respondeu ao pedido de dados da empresa com o template.", motivo: "R11: só os dados básicos da empresa.", ...ctx, fornecedorIds: [c.fornecedorId], dados: { tipo: "dados_empresa" } });
+    }
+  }
 
   switch (e.classificacao) {
     case "proposta": {
@@ -576,6 +587,9 @@ async function processarResposta(
         dados: { aderencia: e.aderencia, divergencias: e.divergencias, leituraPreco: e.leituraPreco, trechoPreco: e.trechoPreco, alertas: e.alertas },
       });
       if (negociacao?.resultado) await registrarResultado(negociacao, c.fornecedorId, ctx);
+      // R3b: preço ou frete maior que na proposta anterior entra no mapa (vale a mais recente),
+      // mas o comprador fica sabendo agora; nada é aceito sem a aprovação dele no mapa.
+      if (anterior && temPropostaAnterior && !precoAConfirmar) await avisarAumento(anterior, depois, qtd, c.fornecedorId, l, ctx);
       if (e.pedidoContato) {
         await enviar(l.pedido.compradorId, `Pedido ${l.pedido.id}: a proposta chegou, e o fornecedor também pediu para falar com uma pessoa.`, { ...ctx, tipo: "aviso" });
       }
@@ -584,11 +598,10 @@ async function processarResposta(
       // A marca é gravada antes de tentar fechar a cotação, para o fechamento esperar a janela.
       let pedido: { marca: MarcaNegociacao; texto: string } | null = null;
       if (nova && !negociacao) {
+        // R13: pede desconto em qualquer ocasião, inclusive com proposta incompleta (vai junto da pergunta do que falta).
         const decisao = deveNegociar({
           temPreco: depois.precoUnitario !== null || depois.totalProduto !== null,
-          faltam: faltam.length,
           aConfirmar: !!perguntaPendente,
-          pedidoContato: !!e.pedidoContato,
           alertas: e.alertas.length,
           // A rodada do botão já pediu preço melhor: não repete o pedido na mesma rodada.
           jaPedido: l.item.negociacao?.rodada === c.rodada || (await jaPediuDesconto(c.fornecedorId, l.item.id)),
@@ -604,14 +617,19 @@ async function processarResposta(
         if (decisao.ok && (await reservarPedidoDeDesconto(c.fornecedorId, l.item.id, l.pedido.id))) {
           const [recompra, refs] = await Promise.all([compraramAntes(c.fornecedorId), referenciasDoItem(l.item.id)]);
           const referencia = citarReferencia(unitarioDe(depois, qtd), refs.mediana);
-          const pagamentoPreferido = preferenciaNaoAtendida(l.pedido.pagamentoPreferido, e.pagamento);
           const montado = montarNegociacao({
-            alavancas: escolherAlavancas({ recompra, quantidade: qtd, prazoPagamentoDias: e.prazoPagamentoDias, frete: l.pedido.modoEntrega === "retirada" ? null : e.frete, entregas: l.pedido.entregas, pagamentoPreferido }),
+            alavancas: escolherAlavancas({
+              recompra,
+              quantidade: qtd,
+              pagamento: e.pagamento,
+              pagamentoPreferido: l.pedido.pagamentoPreferido,
+              frete: l.pedido.modoEntrega === "retirada" ? null : e.frete,
+              entregas: l.pedido.entregas,
+            }),
             quantidade: l.item.quantidade,
             unidade: l.item.unidade,
             frete: e.frete,
             referencia,
-            pagamentoPreferido,
             janelaAte: decisao.janelaAte,
             agora,
           });
@@ -648,14 +666,16 @@ async function processarResposta(
         .filter(Boolean)
         .join(" ");
       // S: o pedido de desconto passa pela conferência de saída; se não passar, vai só o recebimento.
-      const textoDesconto = pedido && aberta ? `${recebi}\n${pedido.texto}` : null;
+      // R13: com proposta incompleta, a pergunta do que falta vai na mesma mensagem.
+      const textoDesconto = pedido && aberta ? [recebi, faltam.length ? `Para completar, me diga também: ${faltam.join("; ")}.` : "", pedido.texto].filter(Boolean).join("\n") : null;
       const comDesconto =
         !!textoDesconto &&
         (await liberarSaida(textoDesconto, { compradorId: l.pedido.compradorId, ...ctx, oQue: "o pedido de desconto" }));
       const completar = (faltam.length > 0 || !!perguntaPendente) && aberta;
       const r = await enviar(contatoId, comDesconto ? textoDesconto! : textoComum, {
         ...ctx,
-        tipo: comDesconto ? "negociacao" : completar ? "completar_proposta" : "proposta_recebida",
+        // Com proposta incompleta, o que falta vem primeiro (o simulador completa a proposta por este tipo).
+        tipo: completar ? "completar_proposta" : comDesconto ? "negociacao" : "proposta_recebida",
       });
       if (pedido && nova) {
         if (comDesconto && r.situacao === "enviada") {
@@ -674,12 +694,16 @@ async function processarResposta(
         }
       }
       // U3: a cobrança do que falta é pergunta aberta até a próxima mensagem do fornecedor.
-      if (completar && nova && r.situacao === "enviada") await gravarExtraido(nova.id, { ...(nova.extraido as Record<string, unknown>), pergunta: { tipo: "completar", em: new Date().toISOString() } });
+      // A marca do desconto, se saiu na mesma mensagem, continua junto.
+      if (completar && nova && r.situacao === "enviada") {
+        const comMarca = comDesconto && pedido ? { negociacao: pedido.marca } : {};
+        await gravarExtraido(nova.id, { ...(nova.extraido as Record<string, unknown>), ...comMarca, pergunta: { tipo: "completar", em: new Date().toISOString() } });
+      }
       await despacharPerguntas(contatoId);
       return;
     }
     case "duvida":
-      await responderDuvida(c.id, contatoId, e.duvida ?? entrada.texto);
+      await responderDuvida(c.id, contatoId, e.duvida ?? entrada.texto, entrada.texto);
       return;
     case "parar":
       await marcarParouContato(contatoId);
@@ -699,6 +723,8 @@ async function processarResposta(
       await db.update(cotacao).set({ situacao: "encerrada", respondeuEm: new Date() }).where(eq(cotacao.id, c.id));
       await registrar(db, { agente: "Extrator", acao: "O fornecedor não atende este pedido.", motivo: entrada.texto.slice(0, 200), ...ctx, fornecedorIds: [c.fornecedorId] });
       await enviar(contatoId, "Obrigado por avisar!", ctx);
+      // R14b: cotação com prioridade: o motivo vai ao comprador.
+      await repassarMotivoAoComprador(c, entrada.texto);
       await encerrarSeTodosResponderam(l.item.id);
       await despacharPerguntas(contatoId);
       return;
@@ -731,9 +757,48 @@ async function processarResposta(
         await despacharPerguntas(contatoId);
         return;
       }
+      // R14b: na cotação com prioridade, a explicação de quem ainda não cotou vai ao comprador.
+      if (!ressalva && c.situacao === "aguardando" && (await repassarMotivoAoComprador(c, entrada.texto))) {
+        const ate = l.item.prazoRespostasEm ? ` até ${quando(l.item.prazoRespostasEm).replace(/^(às|em) /, "")}` : "";
+        await enviar(contatoId, `Obrigado por explicar, repassei ao comprador. Se conseguir mandar uma proposta (preço, frete e prazo), ainda dá tempo${ate}.`, { ...ctx, tipo: "resposta" });
+        return;
+      }
       await enviar(contatoId, ressalva ?? "Não encontrei preço na sua mensagem. Pode mandar o preço unitário, o frete e o prazo de entrega?", ctx);
     }
   }
+}
+
+/**
+ * R3b: o fornecedor mandou proposta nova com produto ou frete mais caros que a anterior.
+ * A proposta nova vale (é a mais recente) e entra no mapa; o comprador é avisado, e a
+ * mudança só vale se ele aprovar essa proposta no mapa. O agente nunca aceita sozinho.
+ */
+async function avisarAumento(
+  anterior: typeof oferta.$inferSelect,
+  depois: CondicaoProposta,
+  qtd: number,
+  fornecedorId: string,
+  l: { item: typeof itemPedido.$inferSelect; pedido: typeof pedido.$inferSelect },
+  ctx: { pedidoId: number; itemPedidoId: number },
+) {
+  const antes = condicaoDaOferta(anterior);
+  const pa = produtoDe(antes, qtd);
+  const pd = produtoDe(depois, qtd);
+  const mudancas: string[] = [];
+  if (pa !== null && pd !== null && pd - pa >= 0.01) mudancas.push(`produto de ${formatarBRL(pa)} para ${formatarBRL(pd)}`);
+  if (antes.frete !== null && depois.frete !== null && depois.frete - antes.frete >= 0.01) mudancas.push(`frete de ${formatarBRL(antes.frete)} para ${formatarBRL(depois.frete)}`);
+  if (!mudancas.length) return;
+  const [f] = await db.select({ nome: fornecedor.nome }).from(fornecedor).where(eq(fornecedor.id, fornecedorId));
+  const nome = f?.nome ?? "Um fornecedor";
+  await enviar(l.pedido.compradorId, `Pedido ${l.pedido.id}: ${nome} mudou a proposta de ${l.item.descricao}: ${mudancas.join(" e ")}. O valor novo vai para o mapa; só vale se você aprovar essa proposta.`, { ...ctx, tipo: "aviso" });
+  await registrar(db, {
+    agente: "Cotador",
+    acao: `${nome} aumentou a proposta: ${mudancas.join(" e ")}.`,
+    motivo: "R3b: alteração de valor vai para o mapa e é confirmada pelo comprador; o agente não aceita sozinho.",
+    ...ctx,
+    fornecedorIds: [fornecedorId],
+    dados: { tipo: "alteracao_valor", antes, depois },
+  });
 }
 
 /** Troca o `extraido` da oferta (a marca do desconto ou da pergunta mora nele). */
@@ -784,7 +849,8 @@ export const RESSALVA: Record<AlertaFornecedor, string> = {
   item_irregular: "Só compramos produto original, com nota e procedência.",
   propina: "Não aceitamos comissão nem vantagem. A escolha segue o mapa de cotação.",
   combinacao_preco: "Não passo valores de outros fornecedores. Mande sua melhor proposta.",
-  pagamento_por_fora: "O pagamento é feito só para a empresa do CNPJ da proposta, depois do pedido.",
+  // R13: o padrão é à vista, no recebimento; nada é pago antes nem fora do CNPJ da proposta.
+  pagamento_por_fora: `O pagamento é feito só para a empresa do CNPJ da proposta, ${PAGAMENTO_PADRAO}.`,
   pede_dados: `Não passo dados pessoais, senhas nem códigos. Os dados da empresa são ${EMPRESA.nome} (CNPJ ${EMPRESA.cnpj}).`,
   produto_controlado: "Por aqui eu só trato da cotação pedida. Se tiver proposta ou dúvida sobre ela, é só mandar.",
   link_suspeito: "Não abro links nem arquivos desconhecidos. Pode mandar a proposta em texto ou PDF?",
