@@ -37,8 +37,11 @@ function Escolha({ i }: { i: ItemDoPedido }) {
               </span>
             ) : null}
           </span>,
-          <span key="c" className={s.numero}>
-            {brl(l.custo)}
+          <span key="c" className={s.celulaPilha}>
+            <span className={s.numero}>{brl(l.custo)}</span>
+            {/* Q8: o total da loja online leva uma estimativa de frete, não o frete real. */}
+            {l.origemFrete === "a_calcular" ? <span className={s.ajudaCelula}>Estimado: frete a calcular no site</span> : null}
+            <span className={s.ajudaCelula}>Pagamento: {l.oferta.pagamento ?? "não informado"}</span>
           </span>,
           textoDias(l.oferta.prazoDias),
           <span key="n" className={s.numero}>
@@ -52,7 +55,7 @@ function Escolha({ i }: { i: ItemDoPedido }) {
             size="sm"
             confirmar={{
               titulo: "Confirmar a compra?",
-              texto: `${quantidade(item.quantidade, item.unidade)} de ${item.descricao} com ${l.oferta.fornecedorNome}${l.oferta.simulado ? " (simulado)" : ""} por ${brl(l.custo)}, entrega em ${l.oferta.prazoDias !== null ? dias(l.oferta.prazoDias) : "prazo não informado"}. O pedido de compra vai para o fornecedor.`,
+              texto: `${quantidade(item.quantidade, item.unidade)} de ${item.descricao} com ${l.oferta.fornecedorNome}${l.oferta.simulado ? " (simulado)" : ""} por ${brl(l.custo)}${l.origemFrete === "a_calcular" ? " (estimado: o frete sai no site)" : ""}, entrega em ${l.oferta.prazoDias !== null ? dias(l.oferta.prazoDias) : "prazo não informado"}, pagamento ${l.oferta.pagamento ?? "não informado"}. O pedido de compra vai para o fornecedor.`,
               botao: "Sim, aprovar",
             }}
           />,
