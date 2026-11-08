@@ -28,7 +28,7 @@ import {
 } from "../agentes/negociador/index.ts";
 import { referenciasDoItem } from "../agentes/busca/internet.ts";
 import { formatarBRL } from "../agentes/comparador/calculo.ts";
-import { liberarSaida } from "../agentes/guardrail/rastro.ts";
+import { avisarGestor, liberarSaida } from "../agentes/guardrail/rastro.ts";
 import { emailValido, FONTE_CONVITE_MANUAL, linkConvite, normalizarEmail } from "../canais/email.ts";
 import { EMPRESA } from "../config.ts";
 import { extrair, type AlertaFornecedor, type Extracao } from "../agentes/extrator/index.ts";
@@ -778,7 +778,8 @@ const AVISO_COMPRADOR: Record<AlertaFornecedor, string | null> = {
 const AVISO_GESTOR: AlertaFornecedor[] = ["propina", "combinacao_preco", "produto_controlado"];
 
 /**
- * Guardrails do fornecedor: registra e avisa o comprador (e o gestor, se `GESTOR_CONTATO_ID` existir).
+ * Guardrails do fornecedor: registra e avisa o comprador; nos alertas graves, avisa o gestor
+ * por `avisarGestor` (gestores pelo papel, modo demo e um aviso por 24 h ficam lá).
  * Devolve "bloqueada" quando a resposta já foi dada e a proposta não pode entrar, ou a ressalva
  * para ir junto da resposta normal (undefined se não há alerta).
  */
@@ -793,7 +794,6 @@ async function tratarAlertas(
   if (!alertas.length) return undefined;
   const [f] = await db.select({ nome: fornecedor.nome }).from(fornecedor).where(eq(fornecedor.id, c.fornecedorId));
   const nome = f?.nome ?? "O fornecedor";
-  const gestor = process.env.GESTOR_CONTATO_ID;
   for (const a of alertas) {
     await registrar(db, {
       agente: "Extrator",
@@ -805,8 +805,13 @@ async function tratarAlertas(
     });
     const aviso = AVISO_COMPRADOR[a];
     if (aviso) await enviar(l.pedido.compradorId, `Pedido ${l.pedido.id}: ${nome} ${aviso}`, { ...ctx, tipo: "aviso" });
-    if (gestor && gestor !== l.pedido.compradorId && AVISO_GESTOR.includes(a)) {
-      await enviar(gestor, `Pedido ${l.pedido.id}: ${nome} — alerta ${a}. Mensagem: "${texto.slice(0, 200)}"`, { ...ctx, tipo: "aviso" });
+    if (AVISO_GESTOR.includes(a)) {
+      await avisarGestor({
+        chave: `fornecedor:${a}:${c.fornecedorId}:${ctx.itemPedidoId}`,
+        texto: `Pedido ${l.pedido.id}: ${nome} — alerta ${a}. Mensagem: "${texto.slice(0, 200)}"`,
+        contatoId: l.pedido.compradorId,
+        ...ctx,
+      });
     }
   }
   const bloqueante = alertas.find((a) => ALERTAS_BLOQUEANTES.includes(a));
