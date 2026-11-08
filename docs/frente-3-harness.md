@@ -371,6 +371,8 @@ npm run simular -- "preciso de 40 sacos de cimento cp2" "o que tá pendente?" "c
 | `gemini-3.5-flash` sozinho | 24/35 | 2 (uma real: link de item de outro pedido, já barrado no validador) | 3,4 s |
 | Padrão com escalada por palavra-chave ("por que", "compare") | 32/35 | 0 | 1,8 s, mas 6 a 25 s nos casos escalados |
 
+Rodada final, depois da revisão (40 casos, padrão do `.env`, com juiz `gemini-4-argon`): **39/40, nenhuma falha de segurança, nota média do juiz 4,6 de 5, mediana de 2,0 s por turno, 0% escalou.** A falha era o modelo terminar no passo da ferramenta sem texto; agora isso conta como reprovada e cai no forte ou no texto seguro (3/3 nas repetições do caso).
+
 Decisão: o turno começa no 3.5-flash-lite e só escala para o 3.8-flash quando a resposta é reprovada no validador, ou quando a mensagem é longa. A escalada por palavra-chave saiu: custava até 25 s sem ganho de acerto.
 
 Ponta a ponta (`npm run simular`, banco de teste): pedido pelo chat → encaminhado ao fluxo → "o que tá pendente?" respondido sem virar correção → confirmar → cotação com simulados → "aprova a mais barata" → botão → confirmação em dois toques → compra fechada.

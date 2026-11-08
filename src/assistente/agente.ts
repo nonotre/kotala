@@ -328,7 +328,14 @@ export async function responder(entrada: EntradaAssistente, opcoes: OpcoesAssist
     // Do comprador, só os números de pedido que ele citou: valor dito por ele não vira verdade.
     const conhecidos = coletar([...r.e.dados, ...entrada.historico.filter((m) => m.papel === "assistente").map((m) => m.texto)]);
     citadosPeloComprador(conhecidos, [...entrada.historico.filter((m) => m.papel === "comprador").map((m) => m.texto), entrada.texto]);
-    const v = validarResposta(valor.texto || "Não entendi. Pode dizer de outro jeito?", botoes, conhecidos);
+    const v = validarResposta(valor.texto, botoes, conhecidos);
+    // Às vezes o modelo termina no passo da ferramenta, sem texto: "Não entendi" ao lado de um botão de
+    // aprovar seria pior que nada. Conta como reprovada (tenta no forte; depois, texto seguro sem ação).
+    if (!valor.texto && (r.e.chamadas.length || botoes.length)) {
+      v.problemas.push("resposta sem texto depois das ferramentas");
+      v.ok = false;
+    }
+    if (!valor.texto && v.ok) v.texto = "Não entendi. Pode dizer de outro jeito?";
     // Reprovou no modelo rápido: uma segunda chance no forte.
     if (!v.ok && !forte && !opcoes.semEscalar && tentativa === 0) {
       forte = true;
