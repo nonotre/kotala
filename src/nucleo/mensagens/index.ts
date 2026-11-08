@@ -7,6 +7,7 @@ import { db } from "../db/cliente.ts";
 import { contato, fornecedor, mensagem, type Anexo, type Canal } from "../db/schema.ts";
 import { registrar } from "../registro.ts";
 import { arquivoGuardado, salvarArquivo } from "../arquivos.ts";
+import { htmlParaTexto } from "../../texto.ts";
 import { ehPedidoDeParar } from "./parar.ts";
 
 export { ehPedidoDeParar } from "./parar.ts";
@@ -28,9 +29,13 @@ export type MensagemEntrada = {
   papel?: "comprador" | "fornecedor";
   /** Deep link de cadastro do fornecedor (R5): token do /start. */
   convite?: string;
+  /** Id, no canal, da mensagem em que o botão foi clicado (para editá-la em vez de mandar outra). */
+  mensagemRef?: string;
 };
 
-export type Botao = { rotulo: string; dado: string };
+/** Cor sugerida do botão; canais que não entendem ignoram. */
+export type EstiloBotao = "sucesso" | "perigo" | "primario";
+export type Botao = { rotulo: string; dado: string; estilo?: EstiloBotao };
 /** Para que serve a mensagem de saída; o simulador de fornecedor reage por aqui. */
 export type TipoEnvio = "cotacao" | "lembrete" | "resposta" | "pedido_compra" | "nao_venceu" | "encerrada" | "aviso" | "convite" | "negociacao" | "confirmar_preco" | "proposta_recebida" | "completar_proposta";
 export type OpcoesEnvio = {
@@ -39,11 +44,17 @@ export type OpcoesEnvio = {
   pedidoId?: number;
   itemPedidoId?: number;
   tipo?: TipoEnvio;
+  /** "html": o texto foi montado com os helpers de src/texto.ts. Canais sem HTML recebem texto simples. */
+  formato?: "html";
+  /** idExterno de uma mensagem anterior a editar no lugar de mandar outra (se o canal souber). */
+  substitui?: string;
 };
 
 /** Cada canal implementa isto (Telegram, WhatsApp simulado, e-mail, web...). */
 export interface AdaptadorCanal {
   canal: Canal;
+  /** Entende `formato: "html"`; sem isto o texto chega simples. */
+  suportaHtml?: boolean;
   enviar(endereco: string, texto: string, opcoes: OpcoesEnvio): Promise<{ idExterno?: string }>;
   /** Baixa um anexo recebido (PDF, foto, áudio) pelo id do canal. */
   baixar?(ref: string): Promise<{ dados: Uint8Array; mediaType?: string }>;
@@ -188,11 +199,13 @@ export async function enviar(contatoId: string, texto: string, opcoes: OpcoesEnv
   const [c] = await db.select().from(contato).where(eq(contato.id, contatoId));
   if (!c) throw new Error(`Contato ${contatoId} não existe.`);
 
+  // O registro guarda sempre texto simples (a tela web e o rastro não leem HTML).
+  const simples = opcoes.formato === "html" ? htmlParaTexto(texto) : texto;
   const base = {
     canal: c.canal,
     direcao: "saida" as const,
     contatoId,
-    texto,
+    texto: simples,
     anexos: opcoes.anexos ?? [],
     botoes: opcoes.botoes,
     pedidoId: opcoes.pedidoId,
@@ -212,7 +225,8 @@ export async function enviar(contatoId: string, texto: string, opcoes: OpcoesEnv
   }
 
   try {
-    const { idExterno } = await adaptador.enviar(c.endereco, texto, opcoes);
+    const html = opcoes.formato === "html" && adaptador.suportaHtml;
+    const { idExterno } = await adaptador.enviar(c.endereco, html ? texto : simples, html ? opcoes : { ...opcoes, formato: undefined });
     const [m] = await db
       .insert(mensagem)
       .values({ ...base, situacao: "enviada", idExterno })

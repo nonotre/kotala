@@ -54,3 +54,45 @@ export function nomePedido(p: { id: number; setor?: string | null }, itens: read
   if (p.setor) partes.push(`setor ${p.setor}`);
   return partes.join(" · ");
 }
+
+// ---------- HTML do Telegram (U6) ----------
+// Todo texto do sistema é texto simples. Só vira HTML o que for montado com os
+// helpers abaixo e enviado com `formato: "html"`; todo texto de fora passa por
+// escaparHtml, então `<`, `>` e `&` nunca são lidos como marcação.
+
+/** Trecho de HTML já seguro (montado pelos helpers); distingue de texto simples. */
+export class Html {
+  readonly valor: string;
+  constructor(valor: string) {
+    this.valor = valor;
+  }
+  toString() {
+    return this.valor;
+  }
+}
+
+export const escaparHtml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+const paraHtml = (p: string | number | Html) => (p instanceof Html ? p.valor : escaparHtml(String(p)));
+
+/** Template que escapa o que for texto simples e deixa passar o que já é Html. */
+export function html(partes: TemplateStringsArray, ...valores: (string | number | Html)[]): Html {
+  return new Html(partes.reduce((acc, p, i) => acc + p + (i < valores.length ? paraHtml(valores[i]!) : ""), ""));
+}
+
+export const negrito = (t: string | number | Html) => new Html(`<b>${paraHtml(t)}</b>`);
+export const italico = (t: string | number | Html) => new Html(`<i>${paraHtml(t)}</i>`);
+export const codigo = (t: string | number | Html) => new Html(`<code>${paraHtml(t)}</code>`);
+/** Detalhes que aparecem em 3 linhas, com "ver mais" (não aninha com outra citação). */
+export const citacaoExpansivel = (t: string | number | Html) => new Html(`<blockquote expandable>${paraHtml(t)}</blockquote>`);
+
+/** Texto simples equivalente a um HTML dos helpers, para canais sem HTML e para o registro. */
+export function htmlParaTexto(h: string): string {
+  return h
+    .replace(/<\/?blockquote[^>]*>/g, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&");
+}
