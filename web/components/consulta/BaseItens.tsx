@@ -1,11 +1,11 @@
 "use client";
-// Itens: o que já foi pedido, comprado ou cadastrado, com o preço pago e a referência da internet.
+// Base de Dados, aba Itens: o que já foi pedido, comprado ou cadastrado, com o preço pago e a referência da internet.
+// A busca e a categoria vêm da casca comum.
 
 import {
   Column,
   DataTable,
   Link as CarbonLink,
-  Search,
   Table,
   TableBody,
   TableCell,
@@ -17,24 +17,29 @@ import {
   preview__IconIndicator as IconIndicator,
 } from "@carbon/react";
 import NextLink from "next/link";
-import { useMemo, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { Bloco } from "@/components/Bloco";
 import { EstadoVazio } from "@/components/EstadoVazio";
 import { LinkExterno } from "@/components/LinkExterno";
-import { CabecalhoPagina, CorpoPagina, GradePagina, Pagina } from "@/components/Pagina";
+import { CorpoPagina, GradePagina, Pagina } from "@/components/Pagina";
 import { SeloSimulado } from "@/components/SeloSimulado";
 import type { ItemDaBase } from "@/lib/dados-consulta";
 import { brl, dataHora, quantidade } from "@/lib/formato";
+import { CabecalhoBaseDados, ControlesBaseDados, enderecoDaBase, mesmaCategoria, normalizar, type FiltrosBase } from "./CascaBaseDados";
 import type { Kind } from "./marcas";
 import s from "./consulta.module.scss";
 
 const COLUNAS = [
   { key: "descricao", header: "Item" },
+  { key: "categoria", header: "Categoria" },
   { key: "unidade", header: "Unidade" },
-  { key: "pedidos", header: "Pedidos" },
+  { key: "propostas", header: "Propostas" },
   { key: "compra", header: "Última compra" },
   { key: "referencia", header: "Referência pública" },
 ];
+
+/** Quantas propostas o item recebeu, somando todos os fornecedores. */
+const totalPropostas = (i: ItemDaBase) => i.propostas.reduce((n, p) => n + p.quantas, 0);
 
 const ESTADO: Record<string, { kind: Kind; rotulo: string }> = {
   na_fila: { kind: "not-started", rotulo: "Na fila" },
@@ -49,13 +54,6 @@ const ESTADO: Record<string, { kind: Kind; rotulo: string }> = {
   sem_proposta: { kind: "caution-minor", rotulo: "Sem proposta válida" },
   cancelado: { kind: "normal", rotulo: "Cancelado" },
 };
-
-const normalizar = (t: string) =>
-  t
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase()
-    .trim();
 
 const data = (d: string) => new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "America/Sao_Paulo" });
 
@@ -209,19 +207,26 @@ function QuemCotou({ i }: { i: ItemDaBase }) {
   );
 }
 
-export function BaseItens({ itens, itemInicial }: { itens: ItemDaBase[]; itemInicial: string | null }) {
-  const [busca, setBusca] = useState("");
+type Props = { itens: ItemDaBase[]; categorias: string[]; itemInicial: string | null; filtrosIniciais: FiltrosBase };
+
+export function BaseItens({ itens, categorias, itemInicial, filtrosIniciais }: Props) {
+  const [filtros, setFiltros] = useState<FiltrosBase>(filtrosIniciais);
   const [selecionado, setSelecionado] = useState<string | null>(itemInicial);
   const painel = useRef<HTMLDivElement>(null);
 
+  // Busca, categoria e item marcado ficam no endereço.
+  useEffect(() => {
+    window.history.replaceState(null, "", enderecoDaBase("itens", filtros, { item: selecionado }));
+  }, [filtros, selecionado]);
+
   const buscaveis = useMemo(() => itens.map((i) => ({ i, texto: normalizar([i.descricao, i.codigo ?? "", i.chave, i.categoria ?? "", especificacaoEmTexto(i.especificacao)].join(" ")) })), [itens]);
-  const termo = normalizar(busca);
-  const lista = buscaveis.filter((x) => !termo || x.texto.includes(termo)).map((x) => x.i);
+  const termo = normalizar(filtros.busca);
+  const lista = buscaveis.filter((x) => (!termo || x.texto.includes(termo)) && (!filtros.categoria || mesmaCategoria(x.i.categoria, filtros.categoria))).map((x) => x.i);
   const atual = lista.find((i) => i.chave === selecionado) ?? null;
+  const limpar = () => setFiltros({ busca: "", categoria: "" });
 
   function escolher(chave: string) {
     setSelecionado(chave);
-    window.history.replaceState(null, "", `/itens?item=${encodeURIComponent(chave)}`);
   }
 
   /** Abaixo de xlg, o painel fica depois da lista: tocar na linha leva até ele. */
@@ -237,8 +242,10 @@ export function BaseItens({ itens, itemInicial }: { itens: ItemDaBase[]; itemIni
   const linhas = lista.map((i) => ({
     id: i.chave,
     descricao: i.descricao,
+    // Sem categoria vai para o fim, em ordem crescente.
+    categoria: i.categoria ?? "\uffff",
     unidade: i.unidade,
-    pedidos: i.pedidos.length,
+    propostas: totalPropostas(i),
     compra: i.compras[0]?.precoUnitario ?? -1,
     referencia: i.referencia.mediana ?? -1,
   }));
@@ -246,16 +253,18 @@ export function BaseItens({ itens, itemInicial }: { itens: ItemDaBase[]; itemIni
 
   return (
     <Pagina>
-      <CabecalhoPagina titulo="Itens" contexto="Os materiais que já foram pedidos, com o que foi pago e o preço de referência da internet. Itens que não estavam na base são cadastrados pelo assistente." />
+      <CabecalhoBaseDados ativa="itens" filtros={filtros} />
       <CorpoPagina>
         <GradePagina className={s.grade}>
+          <Column sm={4} md={8} lg={16}>
+            <ControlesBaseDados aba="itens" filtros={filtros} categorias={categorias} aoMudar={setFiltros} />
+          </Column>
           <Column sm={4} md={8} lg={16} xlg={10}>
             <section className={s.achar} aria-label="Encontre o material">
-              <Search size="lg" labelText="Buscar item" placeholder="Buscar por nome, código ou especificação" closeButtonLabelText="Limpar busca" value={busca} onChange={(e) => setBusca(e.target.value)} onClear={() => setBusca("")} />
               {itens.length === 0 ? (
                 <EstadoVazio titulo="Nenhum item ainda." proximoPasso="Os itens aparecem aqui depois do primeiro pedido." acao={{ texto: "Pedir na conversa", href: "/chat", tipo: "tertiary" }} />
               ) : lista.length === 0 ? (
-                <EstadoVazio tamanho="sm" titulo="Nenhum item com esse nome." proximoPasso="Confira a escrita, ou tente outro nome." acao={{ texto: "Limpar busca", aoClicar: () => setBusca(""), tipo: "tertiary" }} />
+                <EstadoVazio tamanho="sm" titulo="Nenhum item com essa busca ou categoria." proximoPasso="Confira a escrita, ou troque a categoria." acao={{ texto: "Limpar busca e categoria", aoClicar: limpar, tipo: "tertiary" }} />
               ) : (
                 <DataTable rows={linhas} headers={COLUNAS} locale="pt-BR" isSortable size="lg">
                   {({ rows, headers, getHeaderProps, getTableProps, getRowProps }) => (
@@ -283,21 +292,26 @@ export function BaseItens({ itens, itemInicial }: { itens: ItemDaBase[]; itemIni
                             const { key, ...props } = getRowProps({ row });
                             const marcado = atual?.chave === i.chave;
                             const compra = i.compras[0];
+                            const propostas = totalPropostas(i);
+                            // O nome traz as especificações técnicas logo abaixo, para distinguir itens parecidos.
+                            const espec = Object.values(i.especificacao).filter(Boolean).join(" · ");
                             return (
                               <TableRow key={key} {...props} className={marcado ? `${s.linha} ${s.linhaMarcada}` : s.linha} onClick={(e: MouseEvent) => clicarNaLinha(e, i.chave)}>
                                 <TableSelectRow radio id={`item-${i.chave}`} name="item-da-base" checked={marcado} onSelect={() => escolher(i.chave)} aria-label={`Escolher ${i.descricao}`} />
                                 <TableCell>
                                   <span className={s.duasLinhas}>
                                     <span className={s.nomeForte}>{i.descricao}</span>
+                                    {espec ? <span className={s.apoio}>{espec}</span> : null}
                                     {i.codigo ? <span className={s.apoio}>{i.codigo}</span> : null}
                                     <span className={s.apoioCelular}>
-                                      {i.unidade} · {i.pedidos.length} {i.pedidos.length === 1 ? "pedido" : "pedidos"}
+                                      {[i.categoria, i.unidade, `${propostas} ${propostas === 1 ? "proposta" : "propostas"}`].filter(Boolean).join(" · ")}
                                     </span>
                                   </span>
                                 </TableCell>
+                                <TableCell className={s.soMaior}>{i.categoria ?? <span className={s.semValor}>—</span>}</TableCell>
                                 <TableCell className={s.soMaior}>{i.unidade || "—"}</TableCell>
                                 <TableCell className={s.soMaior}>
-                                  <span className={s.numero}>{i.pedidos.length}</span>
+                                  <span className={propostas ? s.numero : `${s.numero} ${s.semValor}`}>{propostas}</span>
                                 </TableCell>
                                 <TableCell className={s.soMaior}>
                                   {compra ? (

@@ -122,6 +122,19 @@
   }
 }
 
+// Base de Dados: dez colunas. A tabela cresce e rola, em vez de espremer o texto dos critérios.
+.rolagemLarga table {
+  min-inline-size: calc(#{spacing.$spacing-13} * 10);
+}
+
+.colCriterios {
+  min-inline-size: 18rem;
+}
+
+.colAcao {
+  min-inline-size: 10rem;
+}
+
 .filtros {
   display: flex;
   flex: 1 1 auto;
@@ -506,4 +519,25 @@
   inline-size: 1px;
   block-size: 1px;
   white-space: nowrap;
+}
+
+// Base de Dados: busca e categoria comuns às abas Fornecedores e Itens.
+.controlesBase {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+  margin-block-end: spacing.$spacing-05;
+
+  @include breakpoint.breakpoint(md) {
+    flex-direction: row;
+    align-items: flex-end;
+  }
+}
+
+.seletorCategoria {
+  min-inline-size: 0;
+
+  @include breakpoint.breakpoint(md) {
+    flex: 0 0 16rem;
+  }
 }

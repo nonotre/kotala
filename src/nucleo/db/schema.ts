@@ -59,6 +59,8 @@ export const situacaoEnvioEnum = pgEnum("situacao_envio", ["recebida", "enviada"
 
 export const fornecedor = pgTable("fornecedor", {
   id: uuid("id").primaryKey().defaultRandom(),
+  /** Número curto para as telas (#1, #42): sequencial, na ordem de cadastro. */
+  numero: serial("numero").notNull().unique(),
   /** Chave estável dos simulados ("sim-perto"), para o seed não duplicar. */
   chave: text("chave").unique(),
   nome: text("nome").notNull(),
