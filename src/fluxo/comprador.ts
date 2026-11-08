@@ -134,10 +134,56 @@ export function especificacoesVisiveis(espec: Record<string, string> | null | un
     const x = semAcentoMinusculo(v).replace(/[^a-z0-9/"]+/g, " ").trim();
     return x.length >= 2 && nome.includes(` ${x} `);
   };
+  // Mesmo atributo com dois nomes ("Peso: 50 kg" e "peso_kg: 50") aparece uma vez só, com o rótulo legível.
+  const vistos = new Set<string>();
   return Object.entries(espec ?? {})
     .filter(([k, v]) => v?.trim() && !(servico && /escopo/i.test(k)) && !noNome(v))
-    .map(([k, v]) => `${k.trim()}: ${v.trim()}`)
+    .map(([k, v]) => rotuloEspecificacao(k, v))
+    .filter(({ rotulo }) => {
+      const chave = semAcentoMinusculo(rotulo);
+      if (vistos.has(chave)) return false;
+      vistos.add(chave);
+      return true;
+    })
+    .map(({ rotulo, valor }) => `${rotulo}: ${valor}`)
     .join(" · ");
+}
+
+const ROTULOS_ESPEC: Record<string, string> = {
+  apresentacao: "Apresentação",
+  granulometria: "Granulometria",
+  umidade: "Umidade",
+  origem: "Origem",
+  norma: "Norma",
+  peso: "Peso",
+  cor: "Cor",
+  classe: "Classe",
+  bitola: "Bitola",
+  comprimento: "Comprimento",
+  espessura: "Espessura",
+  tensao: "Tensão",
+  potencia: "Potência",
+  capacidade: "Capacidade",
+};
+const SUFIXOS_UNIDADE = new Set(["kg", "g", "mm", "cm", "m", "m2", "m3", "l", "ml", "v", "w", "pol"]);
+const UNIDADE_TEXTO: Record<string, string> = { m2: "m²", m3: "m³", l: "L", ml: "mL", v: "V", w: "W", pol: "pol" };
+
+/** "peso_kg" + "50" → Peso: 50 kg; "granulometria_mm" → Granulometria (mm no valor); "apresentacao" → Apresentação. */
+export function rotuloEspecificacao(chave: string, valor: string): { rotulo: string; valor: string } {
+  let v = valor.trim();
+  const k = chave.trim();
+  if (!/_/.test(k) && /[A-ZÀ-Ú]/.test(k[0] ?? "")) return { rotulo: k, valor: v };
+  const partes = k.split(/[_\s]+/).filter(Boolean);
+  const ultima = semAcentoMinusculo(partes.at(-1) ?? "");
+  if (partes.length > 1 && SUFIXOS_UNIDADE.has(ultima)) {
+    partes.pop();
+    const u = UNIDADE_TEXTO[ultima] ?? ultima;
+    if (!new RegExp(`\\d\\s*${u.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(v) && /\d\s*$/.test(v)) v = `${v} ${u}`;
+  }
+  const base = partes.join(" ");
+  const conhecido = ROTULOS_ESPEC[semAcentoMinusculo(base)];
+  const rotulo = conhecido ?? (base ? base.charAt(0).toUpperCase() + base.slice(1) : k);
+  return { rotulo, valor: v };
 }
 
 export function textoConfirmacao(p: {
@@ -411,7 +457,7 @@ export async function interpretarEResponder(pedidoId: number, opcoes: { lida?: L
     i.itens.map((it) => {
       const espec = Object.fromEntries(it.especificacao.map((e) => [e.nome, e.valor]));
       const c = casarComBase(it.descricao, espec);
-      if (c.tipo === "unico") daBase.push(`${c.item.id} ${c.item.descricao}`);
+      if (c.tipo === "unico") daBase.push(c.item.descricao);
       return {
         descricao: c.tipo === "unico" ? c.item.descricao : it.descricao,
         quantidade: it.quantidade,
@@ -423,7 +469,7 @@ export async function interpretarEResponder(pedidoId: number, opcoes: { lida?: L
       };
     }),
   );
-  if (daBase.length) i.suposicoes = [...i.suposicoes, `Da base de itens: ${daBase.join("; ")}`];
+  if (daBase.length) i.suposicoes = [...i.suposicoes, `Achei na base de itens: ${daBase.join(", ")}`];
 
   // Serviço: o fornecedor precisa do escopo e do prazo para dar preço (o local já tem o padrão acima).
   if (p.perguntasFeitas === 0) {

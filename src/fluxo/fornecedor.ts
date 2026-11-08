@@ -14,6 +14,7 @@ import {
   compraramAntes,
   condicaoDaOferta,
   condicaoDoDesconto,
+  condicaoJaCumprida,
   descontoPorUnidade,
   descontoSobreTotal,
   deveNegociar,
@@ -52,6 +53,7 @@ import {
   type ResultadoEnvio,
 } from "../nucleo/mensagens/index.ts";
 import { registrar } from "../nucleo/registro.ts";
+import { avisoJaEnviado } from "../nucleo/mensagens/aviso-unico.ts";
 import { aoRespostaDoVencedor, pedidoEnviadoPara } from "./decisao.ts";
 import { respostaAoPedidoDeCompra } from "./pos-pedido.ts";
 import { aoFornecedorPedirPessoa, aoMensagemDoFornecedorNoTransbordo } from "./transbordo.ts";
@@ -535,8 +537,10 @@ async function processarResposta(
   // junta com a anterior em vez de trocar por uma proposta sem preço. I1: desconto condicionado
   // ("3% à vista") não muda o preço; o incondicional é aplicado em código.
   const qtd = Number(l.item.quantidade);
-  // Desconto condicionado: o campo do Extrator manda; a regex é a reserva.
-  const condicao = condicaoDoDesconto(e, entrada.texto);
+  // Desconto condicionado: o campo do Extrator manda; a regex é a reserva. Condição de pagamento que a
+  // proposta já cumpre ("4% no Pix" de quem já cobra Pix à vista) não segura o desconto: entra no custo.
+  const condicaoLida = condicaoDoDesconto(e, entrada.texto);
+  const condicao = condicaoJaCumprida(condicaoLida, anterior?.pagamento ?? e.pagamento) ? null : condicaoLida;
   let marcaCarregada: MarcaNegociacao | null = marcaDe(anterior?.extraido);
   if (anterior && (e.classificacao === "proposta" || e.classificacao === "outro")) {
     const completa = completarComAnterior(e, anterior, { quantidade: qtd, condicional: !!condicao, porUnidade: descontoPorUnidade(entrada.texto), sobreTotal: descontoSobreTotal(entrada.texto) });
@@ -974,7 +978,9 @@ async function tratarAlertas(
       dados: { alerta: a, texto: texto.slice(0, 300) },
     });
     const aviso = AVISO_COMPRADOR[a];
-    if (aviso) await enviar(l.pedido.compradorId, `Pedido ${l.pedido.id}: ${nome} ${aviso}`, { ...ctx, tipo: "aviso" });
+    // O mesmo alerta do mesmo fornecedor vai ao comprador uma vez por pedido (o registro acima fica a cada vez).
+    const textoAviso = aviso && `Pedido ${l.pedido.id}: ${nome} ${aviso}`;
+    if (textoAviso && !(await avisoJaEnviado(l.pedido.compradorId, l.pedido.id, textoAviso))) await enviar(l.pedido.compradorId, textoAviso, { ...ctx, tipo: "aviso" });
     if (AVISO_GESTOR.includes(a)) {
       await avisarGestor({
         chave: `fornecedor:${a}:${c.fornecedorId}:${ctx.itemPedidoId}`,
@@ -1186,7 +1192,8 @@ export async function aplicarDescontoTardio(
     return true;
   }
 
-  const condicao = condicaoDoDesconto(e, texto);
+  const condicaoLida = condicaoDoDesconto(e, texto);
+  const condicao = condicaoJaCumprida(condicaoLida, p.oferta.pagamento ?? e.pagamento) ? null : condicaoLida;
   const completa = completarComAnterior(e, p.oferta, { quantidade: qtd, condicional: !!condicao, porUnidade: descontoPorUnidade(texto), sobreTotal: descontoSobreTotal(texto) });
   // "Vou ver com o gerente": nada a registrar ainda.
   if (!completa && vaiResponderDepois(texto)) {

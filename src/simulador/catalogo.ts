@@ -56,6 +56,8 @@ export function dadosDaCategoria(id: string): DadosCategoria {
 export function fatorDeUnidade(categoria: string, unidadePreco: string, unidadePedida: string): number {
   for (const c of dadosDaCategoria(categoria).conversoes ?? []) {
     if (c.de === unidadePreco && new RegExp(c.unidade, "i").test(unidadePedida)) return c.fator;
+    // O inverso: preço do milheiro (ou da carrada) e pedido em unidades (ou m³).
+    if (new RegExp(c.unidade, "i").test(unidadePreco) && unidadePedida.toLowerCase().startsWith(c.de.toLowerCase())) return 1 / c.fator;
   }
   return 1;
 }

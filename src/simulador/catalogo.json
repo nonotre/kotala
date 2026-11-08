@@ -9,6 +9,7 @@
     { "categoria": "alvenaria", "palavras": ["tijolo"], "unidade": "milheiro", "preco": 980, "equivalente": "Tijolo cerâmico 8 furos de outra olaria" },
     { "categoria": "alvenaria", "palavras": ["bloco"], "unidade": "unidade", "preco": 3.9, "equivalente": "Bloco de concreto vedação, outro fabricante" },
     { "categoria": "cimenticios", "palavras": ["argamassa", "ac-i", "ac-ii", "ac-iii", "ac1", "ac2", "ac3"], "unidade": "saco", "preco": 28.5, "equivalente": "Argamassa AC-II de outra marca, saco 20 kg" },
+    { "categoria": "hidraulica", "palavras": ["joelho", "cotovelo", "luva", "conexao", "te pvc"], "unidade": "unidade", "preco": 3.4, "equivalente": "Joelho PVC 90° soldável 25 mm de outra marca" },
     { "categoria": "hidraulica", "palavras": ["tubo", "cano", "pvc"], "unidade": "barra", "preco": 62, "equivalente": "Tubo PVC esgoto 100 mm de outra marca" },
 
     { "categoria": "escritorio", "palavras": ["papel a4", "sulfite", "resma"], "unidade": "resma", "preco": 27.9, "equivalente": "Papel A4 75 g/m² de outra marca, resma 500 folhas" },

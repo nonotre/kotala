@@ -9,7 +9,7 @@ import { dias, MOTIVOS_CANCELAMENTO, quantidade, type MotivoCancelamento } from 
 import { and, eq, ne } from "drizzle-orm";
 import { formatarBRL, ultimoMapa, type Linha } from "../agentes/comparador/index.ts";
 import { contatoAtivo } from "../agentes/cotador/index.ts";
-import { EMPRESA } from "../config.ts";
+import { EMPRESA, LIMITE_COMPRA_MAIOR } from "../config.ts";
 import { db } from "../nucleo/db/cliente.ts";
 import { registrar } from "../nucleo/registro.ts";
 import { contato, cotacao, fornecedor, historicoCompra, itemPedido, oferta, pedido, usuario } from "../nucleo/db/schema.ts";
@@ -148,9 +148,14 @@ export async function aoBotaoDoComprador(contato: Contato, dado: string): Promis
         { rotulo: "Sim, aprovar", dado: `item:${itemPedidoId}:confirmar:${l.oferta.id}`, estilo: "sucesso" },
         { rotulo: "Voltar", dado: `item:${itemPedidoId}:voltar` },
       ];
+      // Compra grande: mostra o unitário para o comprador pegar unidade trocada (ex.: preço do milheiro por tijolo).
+      const conferir =
+        l.custo! > LIMITE_COMPRA_MAIOR() && l.precoUnitarioEfetivo !== null
+          ? `\nAtenção: compra acima de ${formatarBRL(LIMITE_COMPRA_MAIOR())}. Confira o preço por ${d.item.unidade}: ${formatarBRL(l.precoUnitarioEfetivo)}.`
+          : "";
       await enviar(
         contato.id,
-        `Confirma a compra de ${quantidade(d.item.quantidade, d.item.unidade)} de ${d.item.descricao} com ${nomeComSelo(l)} por ${formatarBRL(l.custo!)}, entrega em ${dias(l.oferta.prazoDias!)}?`,
+        `Confirma a compra de ${quantidade(d.item.quantidade, d.item.unidade)} de ${d.item.descricao} com ${nomeComSelo(l)} por ${formatarBRL(l.custo!)}, entrega em ${dias(l.oferta.prazoDias!)}?${conferir}`,
         { ...ctx, botoes },
       );
       break;

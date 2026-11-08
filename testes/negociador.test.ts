@@ -74,8 +74,8 @@ const situacao = (s: Partial<Situacao> = {}): Situacao => ({
 test("pede desconto em proposta completa, com janela de 25% do prazo e no mínimo 5 min, sem passar do prazo", () => {
   const r = n.deveNegociar(situacao());
   assert.ok(r.ok);
-  // Demo de 15 min: 25% seriam 3 min 45 s; a Ester pediu pelo menos 5 min, mais 2 de folga para o simulado.
-  assert.equal(r.ok && r.janelaAte.getTime() - min(2).getTime(), 420_000);
+  // Demo de 15 min: 25% seriam 3 min 45 s; a Ester pediu pelo menos 5 min, mais 8 de folga para o simulado (13 min, até o prazo).
+  assert.equal(r.ok && r.janelaAte.getTime() - min(2).getTime(), 780_000);
   const fim = n.deveNegociar(situacao({ agora: min(13) }));
   assert.ok(fim.ok && fim.janelaAte.getTime() === min(15).getTime());
 });
@@ -296,4 +296,17 @@ test("desconto condicionado não muda o preço; preço novo vale mais que o perc
   assert.equal(c.precoUnitario, 40);
   const p = completarComAnterior({ ...vazia, classificacao: "proposta", precoUnitario: 37, descontoPercentual: 5 }, anterior, { quantidade: 40 })!;
   assert.equal(p.precoUnitario, 37);
+});
+
+test("desconto condicionado ao pagamento que a proposta já cumpre entra no custo", async () => {
+  const n = await import("../src/agentes/negociador/index.ts");
+  assert.equal(n.condicaoJaCumprida("4% Pix à vista", "PIX à vista"), true);
+  assert.equal(n.condicaoJaCumprida("3% se for à vista", "à vista no recebimento"), true);
+  assert.equal(n.condicaoJaCumprida("3% à vista", "Pix"), true);
+  // Ainda condicionado: forma diferente, volume, prazo para fechar ou sem pagamento informado.
+  assert.equal(n.condicaoJaCumprida("4% no Pix", "boleto 28 dias"), false);
+  assert.equal(n.condicaoJaCumprida("5% se fechar hoje", "PIX à vista"), false);
+  assert.equal(n.condicaoJaCumprida("5% à vista acima de 100 sacos", "à vista"), false);
+  assert.equal(n.condicaoJaCumprida("4% Pix à vista", null), false);
+  assert.equal(n.condicaoJaCumprida("4% Pix", "depósito antecipado via Pix"), false);
 });

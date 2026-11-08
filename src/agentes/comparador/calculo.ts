@@ -22,6 +22,8 @@ export const MINIMO_PROPOSTAS_VALIDAS = 3;
 export const FRETE_ESTIMADO_FRACAO = 0.05;
 /** Q7: diferença para a referência online que vira alerta (nunca corte). */
 export const LIMITE_ALERTA_ONLINE = 0.3;
+/** Preço unitário este tanto acima da mediana dos fornecedores físicos vira alerta (nunca corte). */
+export const LIMITE_ALERTA_ACIMA = 0.3;
 
 /**
  * S: alertas do guardrail do fornecedor (`oferta.extraido.alertas`). Os de corte
@@ -375,6 +377,8 @@ export function comparar(item: ItemComparado, ofertas: OfertaComparavel[], refer
     if (o.aConfirmar?.includes("item")) alertas.push("Item a confirmar com o fornecedor");
     if (o.divergencias?.length) alertas.push(`Difere do pedido: ${o.divergencias.join("; ")}`);
     if (abaixo >= 0.15 && portoes.naoRetida) alertas.push(`Preço ${Math.round(abaixo * 100)}% abaixo da referência`);
+    // Preço bem acima dos outros costuma ser unidade trocada (milheiro como unidade, caixa como peça): só alerta.
+    if (-abaixo >= LIMITE_ALERTA_ACIMA) alertas.push(`Preço ${Math.round(-abaixo * 100)}% acima da referência: confira a unidade`);
     if (referenciaOnline && unit !== null && !o.online) {
       const diferenca = (unit - referenciaOnline) / referenciaOnline;
       if (diferenca <= -LIMITE_ALERTA_ONLINE) alertas.push(`Preço ${Math.round(-diferenca * 100)}% abaixo da referência online`);

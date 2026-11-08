@@ -26,7 +26,7 @@ export const MAX_RODADAS = 3;
 /** Quantos fornecedores no máximo recebem a contraproposta do botão. */
 const MAX_ALVOS = 3;
 // Regras em src/config.ts; reexportadas para quem já importava daqui.
-import { ESPERA_MIN_DESCONTO_MS, NEGOCIACAO_ESPERA_FRACAO, PAGAMENTO_PADRAO } from "../../config.ts";
+import { ESPERA_MIN_DESCONTO_MS, NEGOCIACAO_ESPERA_FRACAO, PAGAMENTO_PADRAO, SIM_ESPERA_HUMANO_SEG } from "../../config.ts";
 export { NEGOCIACAO_ESPERA_FRACAO };
 /** Alavancas por mensagem, no máximo: mensagem curta. */
 export const MAX_ALAVANCAS = 2;
@@ -196,9 +196,9 @@ export type SituacaoDesconto = {
 /** Até quando o fornecedor tem para responder ao desconto: 25% do prazo, sem passar do prazo. */
 export function janelaDoDesconto(prazoRespostasEm: Date, inicio: Date, agora: Date): Date {
   const prazo = Math.max(0, prazoRespostasEm.getTime() - inicio.getTime());
-  // Ester: pelo menos 5 min para a negativa ou a proposta revisada (mais 2 de folga: o fornecedor simulado
-  // espera 2 min antes de responder sozinho), sem passar do prazo.
-  const espera = Math.max(prazo * NEGOCIACAO_ESPERA_FRACAO, ESPERA_MIN_DESCONTO_MS() + 120_000);
+  // Ester: pelo menos 5 min para a negativa ou a proposta revisada (mais a folga do fornecedor simulado,
+  // que espera SIM_ESPERA_HUMANO_SEG antes de responder sozinho), sem passar do prazo.
+  const espera = Math.max(prazo * NEGOCIACAO_ESPERA_FRACAO, ESPERA_MIN_DESCONTO_MS() + SIM_ESPERA_HUMANO_SEG() * 1000);
   return new Date(Math.min(prazoRespostasEm.getTime(), agora.getTime() + espera));
 }
 
@@ -428,6 +428,24 @@ export function condicaoDoDesconto(
   if (!campo || !ehCondicaoDeVerdade(campo)) return descontoCondicional(texto);
   const valor = e.descontoPercentual !== null ? `${String(e.descontoPercentual).replace(".", ",")}%` : formatarBRL(e.descontoValor!);
   return `${valor} ${campo}`.slice(0, 120);
+}
+
+/**
+ * Condição só de forma de pagamento que a proposta já cumpre ("4% no Pix à vista" de quem já cobra
+ * Pix à vista): não há nada a aceitar, então o desconto vale e entra no custo. Volume, prazo para
+ * fechar ("se fechar hoje") ou qualquer outra exigência continuam condicionados.
+ */
+export function condicaoJaCumprida(condicao: string | null, pagamento: string | null | undefined): boolean {
+  if (!condicao || !pagamento) return false;
+  const c = condicao.toLowerCase();
+  if (/\b(fech(ar|ando|ado)|hoje|amanh[ãa]|at[ée]|semana|acima|a partir|m[ií]nim[oa]|quantidade|volume|lote|unidades|sacos|retirada|retirar|fob|antecipad[oa]|boleto|cart[aã]o)\b/i.test(c)) return false;
+  const pedePix = /\bpix\b/i.test(c);
+  const pedeVista = /(^|[^\p{L}])(à|a) vista\b|\bdinheiro\b/iu.test(c);
+  if (!pedePix && !pedeVista) return false;
+  const p = pagamento.replace(/;?\s*desconto condicionado:.*$/i, "").toLowerCase();
+  if (/\bantecipad[oa]\b|\bdep[oó]sito antecipado\b/i.test(p)) return false;
+  if (pedePix) return /\bpix\b/i.test(p);
+  return /\bpix\b|(^|[^\p{L}])(à|a) vista\b|\bdinheiro\b/iu.test(p);
 }
 
 /** "Vou ver com o gerente e já te falo": não fecha a janela nem gera resposta. */

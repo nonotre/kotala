@@ -21,6 +21,7 @@ import { db } from "../../nucleo/db/cliente.ts";
 import { contato, cotacao, evento, fornecedor, itemPedido, mensagem, oferta, pedido } from "../../nucleo/db/schema.ts";
 import { gerarObjeto } from "../../nucleo/ia/index.ts";
 import { contatoAtivoDoFornecedor, enviar } from "../../nucleo/mensagens/index.ts";
+import { avisoJaEnviado } from "../../nucleo/mensagens/aviso-unico.ts";
 import {
   aoEntrarItem,
   aoVarrer,
@@ -848,7 +849,9 @@ export async function responderDuvida(cotacaoId: string, contatoId: string, duvi
       .update(itemPedido)
       .set({ duvidaPendente: { cotacaoId: c.id, fornecedorId: c.fornecedorId, contatoId, fornecedor: nome, pergunta: duvida.slice(0, 500), em: new Date().toISOString() } })
       .where(eq(itemPedido.id, d.item.id));
-    await avisarComprador(d, `${nome} perguntou: "${duvida}". Responda aqui que eu repasso a ele.`);
+    // A mesma pergunta do mesmo fornecedor vai ao comprador uma vez por pedido (a dúvida pendente fica em cada item).
+    const aviso = `Pedido ${d.pedido.id}: ${nome} perguntou: "${duvida}". Responda aqui que eu repasso a ele.`;
+    if (!(await avisoJaEnviado(d.pedido.compradorId, d.pedido.id, aviso))) await avisarComprador(d, `${nome} perguntou: "${duvida}". Responda aqui que eu repasso a ele.`);
   }
   await registrar(db, {
     agente: "Cotador",
