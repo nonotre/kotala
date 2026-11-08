@@ -40,29 +40,31 @@ Fontes:
 
 ## O que cada relato pede e onde está
 
-Legenda: **feito** = já resolvido na rodada de 07/11 ([status.md](status.md)); **aberto** = continua valendo; **parcial** = resolvido só em parte.
+Legenda: **feito** = resolvido no `main` (rodada de 07/11 ou junção da rodada 2 de 08/11, ver [status.md](status.md)); **aberto** = continua valendo; **parcial** = resolvido só em parte. Situação revista na junção de 08/11/2026.
 
 | Relato | Quem | Situação | Item do plano |
 |---|---|---|---|
-| Item comparado por texto: unidade, nome incompleto e marca cortaram proposta (A1) | Ester | aberto | Q2 |
-| R$ 300 por unidade lido como total (A2) | Ester | aberto | Q1 |
-| Cotação saiu sem o peso do extintor (B1) | Ester | aberto | Q4 |
-| Preço de internet desclassifica fornecedor físico (C1) e exclusão só por preço | Ester | aberto | Q7 |
-| Frete de site assumido em vez de calculado | Ester, Liria | parcial: frete real só nas lojas VTEX | Q8 |
-| Foto com marca: perguntar se segue a marca ou aceita similar | Ester | aberto | Q5 |
-| Dois resultados diferentes em seguida | Ester | aberto, sem causa achada | Q6 |
-| Novo pedido não reconhecido, só volta a mensagem de boas-vindas | Liria | aberto, causa confirmada | Q3 |
+| Item comparado por texto: unidade, nome incompleto e marca cortaram proposta (A1) | Ester | feito (aderência técnica; a IA ainda corta "o kg" para pedido em unidades às vezes) | Q2 |
+| R$ 300 por unidade lido como total (A2) | Ester | feito no código (leitura unitário/total e pergunta); a IA às vezes não marca ambíguo | Q1 |
+| Cotação saiu sem o peso do extintor (B1) | Ester | feito | Q4 |
+| Preço de internet desclassifica fornecedor físico (C1) e exclusão só por preço | Ester | feito (referência só de físicos; online vira alerta) | Q7 |
+| Frete de site assumido em vez de calculado | Ester, Liria | parcial: frete real só nas lojas VTEX; fora delas, "a calcular no site" com total estimado | Q8 |
+| Foto com marca: perguntar se segue a marca ou aceita similar | Ester | feito | Q5 |
+| Dois resultados diferentes em seguida | Ester | sem causa achada; teste garante um mapa por item e rodada | Q6 |
+| Novo pedido não reconhecido, só volta a mensagem de boas-vindas | Liria | feito | Q3 |
 | Tempo do solicitante: 10 min | Ester | a esclarecer (hoje são 60 min, com lembrete aos 30) | U2 |
-| Tempo de cotação do fornecedor: 15 min | Ester | aberto (hoje 5 min) | U2 |
-| Forma de pagamento: perguntar antes, repassar as opções do fornecedor, pôr no pedido de compra | Ester | aberto | U1 |
-| Mensagens ao fornecedor mais organizadas | Ester | aberto | U4 |
-| Esperar a resposta do fornecedor antes de mandar outra mensagem | Ester | aberto | U3 |
-| Perguntar a categoria do fornecedor no primeiro contato | Ester | parcial: só no cadastro pelo bot | U5 |
-| Negociar mesmo com a proposta de menor valor | Ester | aberto | I1 |
-| Guardrails: crime, +18, ambíguo, pedido errado | dono | aberto | S |
-| Funcionar para qualquer compra, não só construção | dono | aberto | G, Q3 |
+| Tempo de cotação do fornecedor: 15 min | Ester | feito (padrão 15 min na demo) | U2 |
+| Forma de pagamento: perguntar antes, repassar as opções do fornecedor, pôr no pedido de compra | Ester | feito (botões na confirmação; forma de cada proposta no mapa; pedido de compra) | U1 |
+| Mensagens ao fornecedor mais organizadas | Ester | feito | U4 |
+| Esperar a resposta do fornecedor antes de mandar outra mensagem | Ester | feito (cadência; desconto em mensagem separada, ver revisão do chat abaixo) | U3 |
+| Perguntar a categoria do fornecedor no primeiro contato | Ester | feito | U5 |
+| Negociar mesmo com a proposta de menor valor | Ester | feito (com a R13 do dono) | I1 |
+| Guardrails: crime, +18, ambíguo, pedido errado | dono | feito | S |
+| Funcionar para qualquer compra, não só construção | dono | feito (serviços ainda não) | G, Q3 |
 | "Obrigado! Aviso se for escolhida." fechava a negociação; validade não pedida; 1 minuto para responder; lojas online fora; "Pedido 11" sem nome; frase exagerada | Liria | feito | — |
 | 3ª correção cancelava o pedido com 0 unidades | Liria | feito | — |
+| PARAR do fornecedor deve valer só para a cotação; sair de vez com "Encerrar contato" (`erros_chat.md`) | Liria | feito | — |
+| Revisão do chat (`revisaodochat.md`): mapa com unitário e total, negociar e cotar com mais quando o comprador pedir, dados da proposta e histórico nas respostas, desconto em mensagem separada com 5 min de espera | Ester | em andamento | — |
 
 ## G · Generalista: funcionar para qualquer compra
 

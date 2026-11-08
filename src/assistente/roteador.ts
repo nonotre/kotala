@@ -22,7 +22,7 @@ import { PREFIXO_LINK, type MensagemHistorico } from "./tipos.ts";
 /** Os mesmos "sim" que o fluxo do comprador aceita como confirmação (fluxo/comprador.ts). */
 const CONFIRMACAO = /^(sim|ok|okay|confirm[oa]|confirmado|pode( seguir| cotar)?|isso|certo|fechado|beleza|blz|manda)[!.\s]*$/i;
 
-/** Canais em que o Assistente atende. O Telegram fica para depois da junção com a Frente 4. */
+/** Canais em que o Assistente atende tudo. No Telegram, ele responde só as consultas que o Interpretador classifica (responderConsulta). */
 const CANAIS_DO_ASSISTENTE = new Set(["web"]);
 
 /** Vai direto ao fluxo, sem gastar IA: botão, anexo, comando, ou "sim" com pedido em "confirma?". */

@@ -60,7 +60,7 @@ Recomendado: juntar o dashboard ao `main` antes de abrir as worktrees, para as q
 
 | Arquivo | Regra |
 |---|---|
-| `src/nucleo/db/schema.ts` e `drizzle/` | **Só a Frente 2 gera migração** (a última é a `0014`). Quem precisar de coluna ou tabela anota em "Pedidos entre frentes". Tabela nova de negócio entra nos gatilhos da auditoria (ver migração `0007`) |
+| `src/nucleo/db/schema.ts` e `drizzle/` | **Só a Frente 2 gera migração** (depois da junção, a última é a `0017`). Quem precisar de coluna ou tabela anota em "Pedidos entre frentes". Tabela nova de negócio entra nos gatilhos da auditoria (ver migração `0007`) |
 | `src/nucleo/**` | Ninguém muda comportamento; acréscimo pequeno vale, anotado. Exceção: `src/nucleo/ia/config.ts` é da Frente 3 |
 | `src/bots.ts`, `src/api-interna.ts` | Só acréscimos (rota ou registro novo), sem reescrever |
 | `web/components/Casca.tsx`, `MenuLateral.tsx` | Da Frente 1; a Frente 2 só acrescenta empresa e Sair |
@@ -165,6 +165,8 @@ Branch `f4-ia-conversa`, a partir de `368d7fc`. Plano e desenhos: [plano-ia.md](
 
 ### O que a Frente 4 não fez (fica para outras frentes ou para depois)
 
+Registro de quando a F4 fechou. Boa parte foi feita na junção (comparador, migrações, gestor, desconto tardio, cadência da confirmação de preço, retentativa de envio, conferência de saída no convite); o que continua aberto está em [status.md](status.md#junção-da-rodada-2-08112026).
+
 **Frente 1 (comparador e regras):**
 - Ler `oferta.extraido`:
   - `alertas` (não ranquear sem nota ou item irregular; mostrar propina e pagamento por fora);
@@ -179,7 +181,7 @@ Branch `f4-ia-conversa`, a partir de `368d7fc`. Plano e desenhos: [plano-ia.md](
 - Exportar `contarPropostasValidas` sem a verificação de CNPJ (o Cotador duplica a montagem das ofertas).
 - Q7: referência de preço só de fornecedores físicos; preço online vira alerta, não corte.
 - Frete "a calcular no site"; forma de pagamento aceita no mapa; "Mapa atualizado" quando refeito; PDF do mapa (o Telegram e o e-mail já enviam anexos); "comprador de obra" no prompt do comparador.
-- Regras em `src/config.ts`: `MAX_AMPLIACOES` (hoje constante no cotador), `NEGOCIACAO_ESPERA_FRACAO`, `NEGOCIACAO_RESTANTE_MIN` e `PRAZO_PAGAMENTO_PADRAO` (hoje no negociador), `ESPERA_PERGUNTA_FRACAO` (hoje em `cadencia.ts`), `EMPRESA_NICHO`, política da empresa (bebida, tabaco, uso pessoal, serviços), empresa e endereço padrão neutros.
+- Regras em `src/config.ts`: feito na junção (`MAX_AMPLIACOES`, `NEGOCIACAO_ESPERA_FRACAO`, `ESPERA_PERGUNTA_FRACAO`, `EMPRESA_NICHO`, empresa neutra). `NEGOCIACAO_RESTANTE_MIN` e `PRAZO_PAGAMENTO_PADRAO` deixaram de existir com a R13. Falta a política da empresa (bebida, tabaco, uso pessoal, serviços).
 - Telas: textos com "obra"; tela de alertas de conduta com o botão de bloquear o fornecedor.
 
 **Frente 2 (migrações e contas):**

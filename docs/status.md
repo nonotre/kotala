@@ -2,7 +2,7 @@
 
 Retrato em 08/11/2026, depois da junção da rodada 2 (as quatro frentes, o dashboard e a Base de Dados; ver [Junção da rodada 2](#junção-da-rodada-2-08112026)). Como cada parte funciona: [arquitetura.md](arquitetura.md). Decisões: [decisoes.md](decisoes.md). Pitch: [pitch.md](pitch.md).
 
-**Resumo:** dos 42 módulos do escopo V1, 35 prontos, 2 parciais e 5 não feitos (todos das fases de complemento e "só se sobrar"). Fases 0 a 2, pitch e todos os diferenciais (Raro, Épico e Lendário) completos. O assistente agora é generalista (compras de uma empresa; construção é só o nicho de exemplo), com guardrails dos dois lados. 316 testes automáticos passando.
+**Resumo:** dos 42 módulos do escopo V1, 35 prontos, 2 parciais e 5 não feitos (todos das fases de complemento e "só se sobrar"). Fases 0 a 2, pitch e todos os diferenciais (Raro, Épico e Lendário) completos. O assistente agora é generalista (compras de uma empresa; construção é só o nicho de exemplo), com guardrails dos dois lados. 365 testes automáticos passando.
 
 ## Módulos
 
@@ -92,7 +92,7 @@ O dashboard que a Ester especificou (`docs/workspaces/ester-workspace/interface-
 
 ## Perfil e login (Frente 2, rodada 2, 08/11/2026)
 
-Cada pessoa entra com usuário e senha e tem o seu chat no navegador; quem não tem conta cria na tela de entrada. Os cards mostram o dono (quem pediu), e todos veem todos. As contas `ester` e `liria` já existem, ligadas ao Telegram delas, e a primeira entrada define a senha. Em Conversar, quem tem Telegram ligado vê o espelho dele, só para ler, com o botão "Continuar no Telegram". Ainda não: empresa e endereços no banco. Ver [perfil-login.md](perfil-login.md).
+Cada pessoa entra com usuário e senha e tem o seu chat no navegador; quem não tem conta cria na tela de entrada. Os cards mostram o dono (quem pediu), e todos veem todos. As contas `ester` e `liria` já existem, ligadas ao Telegram delas, e a primeira entrada define a senha. Na lista de Conversas (lateral do Início), quem tem Telegram ligado vê "Seu Telegram", só para ler, com o botão que abre o bot. Ainda não: empresa e endereços no banco. Ver [perfil-login.md](perfil-login.md).
 
 ## Junção da rodada 2 (08/11/2026)
 
@@ -106,6 +106,9 @@ As quatro frentes de [frentes.md](frentes.md), o dashboard e a Base de Dados da 
 | Mapa e comparador | Alertas de conduta (sem nota e item irregular saem do ranking), "a confirmar", negociação no mapa, busca automática contada, referência de preço só de fornecedores físicos (online vira alerta), frete "a calcular no site", forma de pagamento, mapa atualizado e mapa anterior marcado como substituído |
 | Telas | Base de Dados (Fornecedores e Itens com abas), Alertas de conduta com bloqueio, responsável do pedido, dashboard com recorte por comprador, gestores e regras de compra em Configurações, textos sem "obra" |
 | Harness (F3) | Simulador geral por categoria, regressão dos erros do plano, os 69 casos de guardrail, casos de ampliação, métricas de desconto e de mensagens sem resposta; `npm run guardrails:avaliar`, `regressao:avaliar`, `assistente:avaliar` |
+| Frente 1 (UI), juntada depois | Início com quadro e chat juntos, lista de Conversas (com "Seu Telegram" como espelho), área da cotação refeita (Detalhes, etapas, recompra) e vocabulário "cotação" nas telas |
+| Regras do dono (`sim-fornecedor`) | R14b (prazo vencido com menos de 3 pergunta ao comprador; estender busca mais), R11 (dados da empresa por template), R13 (à vista no recebimento; com a forma do comprador, o padrão não vira argumento), R3b (aviso de valor maior), Telegram simulado na tela |
+| Anotações da Liria e da Ester | PARAR do fornecedor só na cotação e "Encerrar contato" para sair de vez; forma de pagamento perguntada com botões; 15 min de cotação |
 
 **Para rodar depois de atualizar:** `npm run db:migrar` (já aplicado no banco principal em 08/11) e `docker compose up -d --build`. Variáveis novas, todas opcionais (ver `.env.exemplo`): `ASSISTENTE`, `IA_MODELOS_CONVERSA*`, `GESTOR_CONTATO_ID` (reserva: o gestor agora é marcado em Configurações), `GUARDRAIL_MODO_DEMO`, `EMPRESA_NICHO`, `MAX_AMPLIACOES`, `MAX_PRORROGACOES`, `EMPRESA_RECEBEDOR`, `EMPRESA_JANELA_RECEBIMENTO`. `src/dados/` fica fora do git: worktree nova copia da pasta principal.
 

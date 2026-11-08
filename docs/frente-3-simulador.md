@@ -22,11 +22,11 @@ Leia junto com [frente-3-harness.md](frente-3-harness.md) (Assistente do chat e 
 
 | Arquivo | O quê |
 |---|---|
-| `testes/simulador-personas.test.ts` | Catálogo por categoria, áreas, preço sintético, estilos de desconto lidos pelo negociador, personas difíceis e o PDF. "Se fechar hoje" como condicionado fica `todo` (ver abaixo). |
+| `testes/simulador-personas.test.ts` | Catálogo por categoria, áreas, preço sintético, estilos de desconto lidos pelo negociador, personas difíceis e o PDF. "Se fechar hoje" como condicionado. |
 | `testes/simulador-metricas.test.ts` | As contas das métricas. |
 | `testes/regressao-plano.test.ts` | Clips de papel, "R$ 300" para 5 unidades, kg e marca não exigida, extintor sem kg, botões do mapa, só Pix. |
 | `testes/guardrails-casos.test.ts` | O piso sem IA: nenhum legítimo bloqueado pelo código; lista dura e controlados seguram mesmo com a IA dizendo "pedido" (só o caso 39, conteúdo sexual, depende da IA). Falso positivo e falso negativo por classe. |
-| `testes/ampliacao-casos.integracao.test.ts` | I3: dois varredores, fornecedor com dois contatos, teto pela coluna `item_pedido.ampliacoes`, fornecedor antigo na leva 2. Q6: um mapa por item e rodada com fechamento concorrente. O varredor com a lista velha fica `todo` (bug, ver abaixo). |
+| `testes/ampliacao-casos.integracao.test.ts` | I3: dois varredores, fornecedor com dois contatos, teto pela coluna `item_pedido.ampliacoes`, fornecedor antigo na leva 2. Q6: um mapa por item e rodada com fechamento concorrente. O varredor com a lista velha (corrigido na junção). |
 | `testes/dono-pedido.integracao.test.ts` | Pedido do chat web aparece com o nome do usuário no Quadro, na Lista e no detalhe (`web/lib/dados.ts`). |
 
 ### Como rodar
@@ -52,6 +52,8 @@ npm run assistente:avaliar -- --casos pedido-escritorio,so-o-nome-escritorio,cot
 `npm run simular` usa `DATABASE_URL_TESTE` e aplica as migrações. Sem `SERPER_API_KEY=` vazio e `BUSCA_MODO=snapshot`, a busca pode gastar crédito do Serper (a trava de rede da seção 3.1 ainda não existe).
 
 ### O que os testes e as rodadas acharam (para a Frente 4 e o dono)
+
+Os quatro primeiros foram corrigidos na junção (commit `6fd68e5`): varredor com lista velha, desconto pedido duas vezes (reserva atômica), "vou ver com o gerente" e "se fechar hoje". A confirmação de preço também passou pela cadência. Ficam os achados do Extrator e do Assistente com IA.
 
 - **Varredor com a lista velha amplia de novo (I3).** `ampliarSeFaltarPropostas` não confere se o prazo ainda está vencido. Dois processos com varredor (bots e `npm run simular` no mesmo banco), ou um varredor lento: o segundo lê a lista de vencidos, o primeiro amplia e prorroga, e o segundo amplia de novo na hora, gastando a segunda leva. Reprodução: teste `todo` em `testes/ampliacao-casos.integracao.test.ts`.
 - **Pedido de desconto duplicado com proposta em duas mensagens (I1).** Duas mensagens do mesmo fornecedor quase juntas, que completam a proposta, são lidas em paralelo e as duas pedem desconto (dois "Pediu desconto" e duas mensagens). Visto com `SIM_PERSONAS=todas npm run simular -- persona:escritorio` antes de o simulador deixar de mandar o complemento junto com a segunda parte.

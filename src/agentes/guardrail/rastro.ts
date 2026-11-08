@@ -1,8 +1,8 @@
 // S: o lado do guardrail que mexe no banco e manda mensagem. Rastro dos casos
 // (agente "Guardrail", sem pedido quando não há), contador de insistência em
-// evento.dados (sem migração) e aviso ao gestor. Ainda não existe papel de
-// gestor: o aviso vai a GESTOR_CONTATO_ID, se houver; GUARDRAIL_MODO_DEMO=1
-// desliga o aviso. O evento é registrado sempre.
+// evento.dados (sem migração) e aviso ao gestor: aos usuários com papel de
+// gestor (Configurações), ou a GESTOR_CONTATO_ID como reserva;
+// GUARDRAIL_MODO_DEMO=1 desliga o aviso. O evento é registrado sempre.
 
 import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import { db } from "../../nucleo/db/cliente.ts";
