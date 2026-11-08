@@ -40,7 +40,7 @@ export const Interpretacao = z.object({
   janelaRecebimento: z.string().nullable().describe("Dias e horários em que o local recebe"),
   prazoTexto: z.string().nullable().describe("Prazo como o comprador falou"),
   prazoDias: z.number().int().nullable().describe("Dias corridos a partir de hoje até o prazo"),
-  urgencia: z.enum(["normal", "urgente", "obra_parada"]),
+  urgencia: z.enum(["normal", "urgente", "parada"]),
   setor: z.string().nullable().describe("Setor ou área que pede (ex.: estrutura, elétrica, manutenção, escritório); null se não disse"),
   pagamento: z
     .string()
@@ -70,7 +70,7 @@ Regras:
 - Se houver <entendimento_atual>, ele é o pedido como já foi confirmado na conversa, antes da última correção. Parta dele e aplique só o que a última correção muda: não volte a nomes, quantidades ou campos mais antigos.
 - "entregas": se o comprador pedir entrega em data marcada ou em partes (ex.: "metade em 20 dias e o resto em 30"), resuma aqui; senão null.
 - "prazoDias": dias corridos de hoje até a data pedida ("até sexta", "semana que vem", "amanhã"). null se não houver prazo.
-- "urgencia": "obra_parada" se disser que a obra, a operação, a máquina ou a loja está parada, ou equivalente; "urgente" se disser urgente, hoje, o quanto antes; senão "normal".
+- "urgencia": "parada" se disser que a obra, a operação, a máquina ou a loja está parada, ou equivalente; "urgente" se disser urgente, hoje, o quanto antes; senão "normal".
 - "faltando": no máximo 3 perguntas, só sobre o que impede a cotação: quantidade ausente ou item ambíguo demais. Não pergunte o que já foi dito.
 - Se o comprador não disser o destino, deixe destino e cep null e não pergunte: o sistema usa o endereço padrão da empresa.
 - "cep": só se o comprador escrever o CEP. Nunca invente CEP.

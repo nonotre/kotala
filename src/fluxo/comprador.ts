@@ -119,7 +119,7 @@ export function textoConfirmacao(p: {
   cep?: string | null;
   prazoTexto: string | null;
   prazoMaxDias: number | null;
-  urgencia: "normal" | "urgente" | "obra_parada";
+  urgencia: "normal" | "urgente" | "parada";
   modoEntrega: "entrega" | "retirada" | null;
   janelaRecebimento: string | null;
   suposicoes: string[];
@@ -143,7 +143,7 @@ export function textoConfirmacao(p: {
   linhas.push(`Prazo: ${prazo}`);
   if (p.entregas) linhas.push(`Entregas: ${p.entregas}`);
   if (p.pagamento) linhas.push(`Pagamento preferido: ${p.pagamento}`);
-  if (p.urgencia === "obra_parada") linhas.push("Operação parada: o prazo pesa mais que o preço.");
+  if (p.urgencia === "parada") linhas.push("Operação parada: o prazo pesa mais que o preço.");
   else if (p.urgencia === "urgente") linhas.push("Urgente.");
   if (p.suposicoes.length) {
     linhas.push("", "Considerei:");

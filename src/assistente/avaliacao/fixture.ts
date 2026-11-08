@@ -247,7 +247,7 @@ function montarPedidos(op: OpcoesCenario): DetalhePedido[] {
       titulo: "Vergalhão CA-50 10 mm",
       setor: "obra Beta",
       estado: "em_andamento",
-      urgencia: "obra_parada",
+      urgencia: "parada",
       daConversa: false, // de outro comprador
       criadoEm: "2026-11-03T07:30:00-03:00",
       atualizadoEm: "2026-11-04T10:00:00-03:00",
@@ -475,7 +475,7 @@ function resumo(p: DetalhePedido): ResumoPedido {
 
 function montarPendencias(op: OpcoesCenario): Pendencia[] {
   const lista: Pendencia[] = [
-    { tipo: "decidir", pedidoId: 13, itemId: 36, titulo: "Decidir: Vergalhão CA-50 10 mm", texto: "Mapa pronto com 3 propostas. Obra parada.", urgencia: "obra_parada", em: "2026-11-04T10:00:00-03:00", daConversa: false, href: "/pedidos/13/decisao#item-36" },
+    { tipo: "decidir", pedidoId: 13, itemId: 36, titulo: "Decidir: Vergalhão CA-50 10 mm", texto: "Mapa pronto com 3 propostas. Obra parada.", urgencia: "parada", em: "2026-11-04T10:00:00-03:00", daConversa: false, href: "/pedidos/13/decisao#item-36" },
     { tipo: "sem_proposta", pedidoId: 14, itemId: 37, titulo: "Sem proposta: Tijolo cerâmico 8 furos", texto: "Ninguém respondeu à cotação. Dá para buscar mais fornecedores.", urgencia: "urgente", em: "2026-11-07T09:00:00-03:00", daConversa: true, href: "/pedidos/14/cotacoes#item-37" },
     { tipo: "decidir", pedidoId: 12, itemId: 34, titulo: "Decidir: Cimento CP II 50 kg", texto: "Mapa pronto com 3 propostas válidas.", urgencia: "normal", em: "2026-11-07T17:40:00-03:00", daConversa: true, href: "/pedidos/12/decisao#item-34" },
   ];

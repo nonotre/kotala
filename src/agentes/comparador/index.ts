@@ -272,7 +272,7 @@ function valoresPermitidos(c: Comparacao): Set<string> {
 async function justificar(c: Comparacao, urgencia: string, ctx: { pedidoId: number; itemPedidoId: number }) {
   const ehAMaisBarata = !c.maisBarata || c.maisBarata.oferta.id === c.vencedora!.oferta.id;
   const resumo = {
-    urgencia: { normal: "sem urgência", urgente: "pedido urgente", obra_parada: "atividade parada, prazo pesa o dobro" }[urgencia] ?? urgencia,
+    urgencia: { normal: "sem urgência", urgente: "pedido urgente", parada: "atividade parada, prazo pesa o dobro" }[urgencia] ?? urgencia,
     pesos: c.pesos,
     podeDizerMelhor: c.podeDizerMelhor,
     vencedoraEhAMaisBarata: ehAMaisBarata,

@@ -49,7 +49,7 @@ export function Situacao({ lista, sem = [] }: { lista: Etiqueta[]; sem?: string[
   );
 }
 
-const TEXTO_URGENCIA: Record<string, string> = { obra_parada: "Obra parada", urgente: "Urgente" };
+const TEXTO_URGENCIA: Record<string, string> = { parada: "Operação parada", urgente: "Urgente" };
 
 /** Urgência alta, em vermelho e por escrito. Normal não mostra nada. */
 export function Urgencia({ urgencia }: { urgencia: string }) {
@@ -57,7 +57,7 @@ export function Urgencia({ urgencia }: { urgencia: string }) {
   return texto ? <span className={c.obraParada}>{texto}</span> : null;
 }
 
-/** Urgência a partir das etiquetas do quadro, que já trazem "Obra parada" ou "Urgente". */
+/** Urgência a partir das etiquetas do quadro, que já trazem "Operação parada" ou "Urgente". */
 export function UrgenciaDasEtiquetas({ lista }: { lista: Etiqueta[] }) {
   const e = lista.find((x) => x.tipo === "urgente");
   return e ? <span className={c.obraParada}>{e.texto}</span> : null;

@@ -76,7 +76,7 @@ test("urgência dobra o peso do prazo e o mais rápido pode ganhar sendo mais ca
   const barata = oferta({ precoUnitario: 38, prazoDias: 5 });
   const rapida = oferta({ precoUnitario: 41, prazoDias: 1 });
   const normal = comparar(item, [barata, rapida, oferta({ precoUnitario: 40, prazoDias: 3 })]);
-  const urgente = comparar({ ...item, urgencia: "obra_parada" }, [barata, rapida, oferta({ precoUnitario: 40, prazoDias: 3 })]);
+  const urgente = comparar({ ...item, urgencia: "parada" }, [barata, rapida, oferta({ precoUnitario: 40, prazoDias: 3 })]);
   assert.equal(urgente.pesos.prazo, 50);
   assert.equal(urgente.vencedora!.oferta.id, rapida.id);
   assert.ok(urgente.aMaisQueAMaisBarata > 0);

@@ -12,7 +12,7 @@ import s from "./pedido.module.scss";
 
 /** Urgência alta é a única cor dos detalhes. */
 export function Urgencia({ urgencia }: { urgencia: string }) {
-  if (urgencia === "obra_parada") return <span className={s.urgencia}>Obra parada</span>;
+  if (urgencia === "parada") return <span className={s.urgencia}>Operação parada</span>;
   if (urgencia === "urgente") return <span className={s.urgencia}>Urgente</span>;
   return null;
 }

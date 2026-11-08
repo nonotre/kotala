@@ -102,7 +102,7 @@ export type ItemComparado = {
   aceitaSimilar: boolean;
   prazoMaxDias: number | null;
   modoEntrega: "entrega" | "retirada" | null;
-  urgencia: "normal" | "urgente" | "obra_parada";
+  urgencia: "normal" | "urgente" | "parada";
 };
 
 /** "a_calcular": loja online sem frete para o CEP; a estimativa só serve para comparar (Q8). */

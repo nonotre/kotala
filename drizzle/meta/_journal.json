@@ -127,6 +127,13 @@
       "when": 1794147877284,
       "tag": "0017_fornecedor_numero",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1794156247464,
+      "tag": "0018_bloco4",
+      "breakpoints": true
     }
   ]
 }

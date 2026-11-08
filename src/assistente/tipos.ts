@@ -20,7 +20,7 @@ export type ContextoAssistente = {
 /** Estados do item, em linguagem do comprador, para filtro de busca. */
 export type FiltroEstado = "aberto" | "aguardando_voce" | "cotando" | "concluido" | "cancelado" | "todos";
 
-export type Urgencia = "normal" | "urgente" | "obra_parada";
+export type Urgencia = "normal" | "urgente" | "parada";
 
 /** Tudo que tem tela leva o link relativo dela (ver ROTAS_PERMITIDAS). */
 export type ComLink = { href: string };

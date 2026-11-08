@@ -106,11 +106,11 @@ async function montarCena(): Promise<Cena> {
   await itemDe(confirmaB, "na_fila", "Cal hidratada 20 kg", "10", "saco", 40);
 
   // Bruno: obra parada com mapa pronto para decidir
-  const decisaoB = await pedidoDe(b.id, "em_andamento", 20, { urgencia: "obra_parada", setor: "Obra Beta", textoOriginal: "areia urgente, a obra parou" });
+  const decisaoB = await pedidoDe(b.id, "em_andamento", 20, { urgencia: "parada", setor: "Obra Beta", textoOriginal: "areia urgente, a obra parou" });
   const itemDecisaoB = await itemDe(decisaoB, "aguardando_decisao", "Areia média", "20", "m³", 20);
   const fornecedoresMapa = [await novoFornecedor("Areal Perto"), await novoFornecedor("Areal Longe"), await novoFornecedor("Depósito Central")];
   const mapa = comparar(
-    { quantidade: 20, aceitaSimilar: false, prazoMaxDias: null, modoEntrega: "entrega", urgencia: "obra_parada" },
+    { quantidade: 20, aceitaSimilar: false, prazoMaxDias: null, modoEntrega: "entrega", urgencia: "parada" },
     [ofertaDe(fornecedoresMapa[0]!, 100, 2), ofertaDe(fornecedoresMapa[1]!, 120, 1), ofertaDe(fornecedoresMapa[2]!, 90, 5)],
   );
   await db.insert(s.mapaCotacao).values({ itemPedidoId: itemDecisaoB, rodada: 1, dados: mapa, recomendacao: "Areal Perto ficou na frente pelo prazo.", ofertaRecomendadaId: mapa.vencedora!.oferta.id });
@@ -232,7 +232,7 @@ test("pendências: obra parada, depois urgente, depois o mais novo; daConversa m
   );
   // Sem proposta de mais de 7 dias não avisa mais; o item antigo (Brita) fica de fora.
   assert.equal(lista.filter((x) => x.tipo === "sem_proposta").length, 1);
-  assert.equal(lista[0]!.urgencia, "obra_parada");
+  assert.equal(lista[0]!.urgencia, "parada");
   assert.equal(lista[0]!.href, `/pedidos/${p.decisaoB}/decisao#item-${itens.decisaoB}`);
   assert.equal(lista[1]!.href, `/pedidos/${p.semPropostaB}/cotacoes#item-${itens.semPropostaB}`);
   assert.equal(lista[0]!.itemId, itens.decisaoB);
@@ -281,7 +281,7 @@ test("buscarPedidos: sem filtro, mais recentes primeiro, com daConversa e itens"
   const dele = todos.find((x) => x.pedidoId === p.decisaoB)!;
   assert.equal(meu.daConversa, true);
   assert.equal(dele.daConversa, false);
-  assert.equal(dele.urgencia, "obra_parada");
+  assert.equal(dele.urgencia, "parada");
   assert.equal(dele.href, `/pedidos/${p.decisaoB}`);
   assert.match(dele.nome, new RegExp(`^Pedido ${p.decisaoB} · Areia média · setor Obra Beta$`));
   assert.equal(dele.itens[0]!.quantidade, 20);

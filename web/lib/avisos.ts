@@ -58,7 +58,7 @@ export async function listarAvisos(): Promise<Aviso[]> {
     else
       lista.push({ ...base, chave: `sem-${item.id}`, tipo: "sem_proposta", titulo: `Sem proposta válida para ${item.descricao}`, texto: "Nenhum fornecedor mandou proposta que passasse nas regras.", href: `/pedidos/${item.pedidoId}/cotacoes#item-${item.id}` });
   }
-  const peso = (u: string) => (u === "obra_parada" ? 0 : u === "urgente" ? 1 : 2);
+  const peso = (u: string) => (u === "parada" ? 0 : u === "urgente" ? 1 : 2);
   return lista.sort((a, b) => peso(a.urgencia) - peso(b.urgencia) || b.em.getTime() - a.em.getTime());
 }
 

@@ -38,7 +38,8 @@ export const papelContatoEnum = pgEnum("papel_contato", ["comprador", "fornecedo
 export const origemFornecedorEnum = pgEnum("origem_fornecedor", ["real", "simulado"]);
 export const estadoPedidoEnum = pgEnum("estado_pedido", ESTADOS_PEDIDO);
 export const estadoItemEnum = pgEnum("estado_item", ESTADOS_ITEM);
-export const urgenciaEnum = pgEnum("urgencia", ["normal", "urgente", "obra_parada"]);
+// "parada": a operação, a máquina, a loja ou a obra está parada (antes "obra_parada"; migração 0018).
+export const urgenciaEnum = pgEnum("urgencia", ["normal", "urgente", "parada"]);
 export const papelUsuarioEnum = pgEnum("papel_usuario", ["comprador", "gestor"]);
 export const modoEntregaEnum = pgEnum("modo_entrega", ["entrega", "retirada"]);
 export const situacaoCotacaoEnum = pgEnum("situacao_cotacao", [
@@ -103,6 +104,8 @@ export const usuario = pgTable("usuario", {
   senhaHash: text("senha_hash"),
   /** Gestor recebe os avisos de conduta dos guardrails (S), no lugar de GESTOR_CONTATO_ID. */
   papel: papelUsuarioEnum("papel").notNull().default("comprador"),
+  /** Empresa em que a pessoa trabalha agora (E4, seletor no cabeçalho). Tipo uuid sem referência: a tabela vem depois neste arquivo. */
+  empresaId: uuid("empresa_id"),
   criadoEm: criadoEm(),
 });
 
@@ -546,5 +549,64 @@ export const itemCatalogo = pgTable("item_catalogo", {
   categoria: text("categoria"),
   /** Pedido em que o item apareceu pela primeira vez. */
   pedidoId: integer("pedido_id").references(() => pedido.id),
+  criadoEm: criadoEm(),
+});
+
+// ---------- Bloco 4 (08/11/2026): sessão no servidor, empresas, locais de entrega e contrato anual ----------
+
+/** Sessão de quem entrou nas telas: o id vai num cookie httpOnly; a tela confere aqui (Frente 2, rodada seguinte). */
+export const sessao = pgTable("sessao", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  usuarioId: uuid("usuario_id")
+    .notNull()
+    .references(() => usuario.id),
+  expiraEm: timestamp("expira_em", { withTimezone: true }).notNull(),
+  criadoEm: criadoEm(),
+});
+
+/** Empresa compradora (E4): dados de faturamento. O usuário trabalha numa empresa ativa (usuario.empresa_id). */
+export const empresa = pgTable("empresa", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  nome: text("nome").notNull(),
+  cnpj: text("cnpj"),
+  razaoSocial: text("razao_social"),
+  enderecoFaturamento: text("endereco_faturamento"),
+  cepFaturamento: text("cep_faturamento"),
+  criadoEm: criadoEm(),
+});
+
+/** Local de entrega de uma empresa (E8): o padrão vale quando o comprador não diz o destino. */
+export const localEntrega = pgTable("local_entrega", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  empresaId: uuid("empresa_id")
+    .notNull()
+    .references(() => empresa.id),
+  apelido: text("apelido").notNull(),
+  endereco: text("endereco").notNull(),
+  cep: text("cep"),
+  janelaRecebimento: text("janela_recebimento"),
+  restricao: text("restricao"),
+  padrao: boolean("padrao").notNull().default(false),
+  criadoEm: criadoEm(),
+});
+
+/**
+ * Contrato anual (X2, Ester): o preço de um item é fechado com um fornecedor por um período; enquanto vale,
+ * o pedido daquele item vai direto a ele, sem cotação.
+ */
+export const contrato = pgTable("contrato", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  itemChave: text("item_chave").notNull(),
+  descricao: text("descricao").notNull(),
+  fornecedorId: uuid("fornecedor_id")
+    .notNull()
+    .references(() => fornecedor.id),
+  precoUnitario: numeric("preco_unitario", { precision: 14, scale: 2 }).notNull(),
+  unidade: text("unidade").notNull(),
+  inicio: timestamp("inicio", { withTimezone: true }).notNull(),
+  fim: timestamp("fim", { withTimezone: true }).notNull(),
+  ativo: boolean("ativo").notNull().default(true),
+  observacao: text("observacao"),
+  criadoPor: uuid("criado_por").references(() => usuario.id),
   criadoEm: criadoEm(),
 });

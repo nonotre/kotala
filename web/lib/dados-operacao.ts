@@ -13,7 +13,7 @@ import { VERBO_DO_AVISO } from "../components/operacao/textos";
 
 // ---------- Tipos que vão para as telas ----------
 
-export type Urgencia = "normal" | "urgente" | "obra_parada";
+export type Urgencia = "normal" | "urgente" | "parada";
 
 /** Proposta que a tela pode mostrar como real: a escolhida pelo comprador ou a recomendada do mapa. */
 export type PropostaDaVez = {

@@ -58,7 +58,7 @@ function etiquetasDo(
   extra: { respostas: number; consultados: number; alertas: number; escolhido: string | null; negociando: boolean },
 ): Etiqueta[] {
   const e: Etiqueta[] = [];
-  if (p.urgencia === "obra_parada") e.push({ texto: "Obra parada", tipo: "urgente" });
+  if (p.urgencia === "parada") e.push({ texto: "Operação parada", tipo: "urgente" });
   else if (p.urgencia === "urgente") e.push({ texto: "Urgente", tipo: "urgente" });
   if (p.estado === "interpretando") e.push({ texto: "Lendo a cotação", tipo: "info" });
   else if (p.estado === "aguardando_confirmacao") e.push({ texto: "Aguardando você confirmar", tipo: "atencao" });

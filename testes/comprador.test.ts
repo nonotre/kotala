@@ -30,7 +30,7 @@ test("confirmação mostra itens, prazo, suposições e perguntas", () => {
     destino: null,
     prazoTexto: "até sexta",
     prazoMaxDias: 6,
-    urgencia: "obra_parada",
+    urgencia: "parada",
     modoEntrega: null,
     janelaRecebimento: null,
     suposicoes: ["Saco de 50 kg"],

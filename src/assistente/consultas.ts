@@ -72,7 +72,7 @@ const centavos = (v: number) => Math.round(v * 100) / 100;
 const idValido = (n: number) => Number.isSafeInteger(n) && n > 0 && n <= ID_MAXIMO;
 const limitar = (n: number | undefined, padrao: number, maximo: number) =>
   n === undefined || !Number.isFinite(n) ? padrao : Math.min(maximo, Math.max(1, Math.trunc(n)));
-const PESO_URGENCIA: Record<Urgencia, number> = { obra_parada: 0, urgente: 1, normal: 2 };
+const PESO_URGENCIA: Record<Urgencia, number> = { parada: 0, urgente: 1, normal: 2 };
 const porUrgencia = (a: Urgencia, b: Urgencia) => PESO_URGENCIA[a] - PESO_URGENCIA[b];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -289,7 +289,7 @@ async function pedidosAbertos(ctx: ContextoAssistente, limite: number, maxItens:
     .select()
     .from(pedido)
     .where(notInArray(pedido.estado, [...FINAIS_PEDIDO]))
-    .orderBy(sql`case ${pedido.urgencia} when 'obra_parada' then 0 when 'urgente' then 1 else 2 end`, desc(pedido.atualizadoEm), desc(pedido.id))
+    .orderBy(sql`case ${pedido.urgencia} when 'parada' then 0 when 'urgente' then 1 else 2 end`, desc(pedido.atualizadoEm), desc(pedido.id))
     .limit(limite);
   return resumos(ctx, linhas, maxItens);
 }
