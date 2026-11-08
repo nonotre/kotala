@@ -20,6 +20,7 @@ import {
   type MudancaItem,
 } from "../../nucleo/orquestrador/index.ts";
 import { registrar } from "../../nucleo/registro.ts";
+import { liberarSaida } from "../guardrail/rastro.ts";
 
 export const TEXTO_ENCERRADO = "Este pedido de cotação foi encerrado. Obrigado.";
 
@@ -150,6 +151,14 @@ async function enviarCotacoes(m: MudancaItem) {
     .innerJoin(fornecedor, eq(fornecedor.id, cotacao.fornecedorId))
     .where(and(eq(cotacao.itemPedidoId, m.itemPedidoId), eq(cotacao.rodada, d.item.rodada), isNull(cotacao.enviadaEm)));
 
+  // S: o texto da cotação leva campos livres do comprador; confere antes de mandar a qualquer fornecedor.
+  if (pendentes.length && !(await liberarSaida(textoCotacao(d, pendentes[0]!.nome), { compradorId: d.pedido.compradorId, pedidoId: d.pedido.id, itemPedidoId: d.item.id, oQue: "o pedido de cotação" }))) {
+    await avancarItem(d.item.id, "cancelar", { agente: "Guardrail", acao: "Não mandou a cotação.", motivo: "O texto da cotação não passou na conferência de saída." }).catch((e) => {
+      if (!(e instanceof TransicaoInvalida || e instanceof TransicaoConcorrente)) throw e;
+    });
+    return;
+  }
+
   let enviadas = 0;
   const falhas: string[] = [];
   for (const { cotacao: c, nome } of pendentes) {
@@ -223,7 +232,9 @@ export async function reenviarCotacaoAberta(fornecedorId: string, contatoId: str
   const d = await dadosDoItem(c.itemPedidoId);
   if (!d) return false;
   const [f] = await db.select({ nome: fornecedor.nome }).from(fornecedor).where(eq(fornecedor.id, fornecedorId));
-  const r = await enviar(contatoId, textoCotacao(d, f?.nome ?? ""), { pedidoId: d.pedido.id, itemPedidoId: d.item.id, tipo: "cotacao" });
+  const texto = textoCotacao(d, f?.nome ?? "");
+  if (!(await liberarSaida(texto, { compradorId: d.pedido.compradorId, pedidoId: d.pedido.id, itemPedidoId: d.item.id, oQue: "o pedido de cotação" }))) return false;
+  const r = await enviar(contatoId, texto, { pedidoId: d.pedido.id, itemPedidoId: d.item.id, tipo: "cotacao" });
   if (r.situacao !== "enviada") return false;
   await db.update(cotacao).set({ contatoId, enviadaEm: c.enviadaEm ?? new Date() }).where(eq(cotacao.id, c.id));
   return true;
@@ -423,6 +434,18 @@ export async function repassarRespostaDoComprador(compradorId: string, texto: st
   await db.update(itemPedido).set({ duvidaPendente: null }).where(eq(itemPedido.id, l.item.id));
   if (Date.now() - new Date(pend.em).getTime() > VALIDADE_DUVIDA_MS) return false;
   const ctx = { pedidoId: l.pedidoId, itemPedidoId: l.item.id };
+  // S: o texto do comprador vai direto ao fornecedor; confere antes (dado pessoal, "sem nota", "por fora", link suspeito).
+  const liberada = await liberarSaida(texto, {
+    compradorId,
+    ...ctx,
+    oQue: "a resposta do comprador",
+    avisoComprador: (motivos) => `Não repassei sua resposta a ${pend.fornecedor}: ela tinha ${motivos}. Só cotamos com nota fiscal, sem dado pessoal e sem pagamento por fora. Pode responder de novo?`,
+  });
+  if (!liberada) {
+    // A dúvida continua pendente: a próxima mensagem do comprador ainda é a resposta.
+    await db.update(itemPedido).set({ duvidaPendente: pend }).where(eq(itemPedido.id, l.item.id));
+    return true;
+  }
   await enviar(pend.contatoId, `Resposta do comprador sobre a cotação ${l.item.id}: ${texto}`, { ...ctx, tipo: "resposta" });
   await enviar(compradorId, `Repassei a ${pend.fornecedor}. Se era um pedido novo, mande de novo.`, { ...ctx, tipo: "aviso" });
   await registrar(db, {
