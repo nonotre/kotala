@@ -7,7 +7,7 @@ import { and, desc, eq, gte, isNotNull } from "drizzle-orm";
 import { cotacaoAbertaDo, encerrarSeTodosResponderam, reenviarCotacaoAberta, responderDuvida } from "../agentes/cotador/index.ts";
 import { emailValido, FONTE_CONVITE_MANUAL, linkConvite, normalizarEmail } from "../canais/email.ts";
 import { EMPRESA } from "../config.ts";
-import { extrair, type Extracao } from "../agentes/extrator/index.ts";
+import { extrair, type AlertaFornecedor, type Extracao } from "../agentes/extrator/index.ts";
 import { db } from "../nucleo/db/cliente.ts";
 import { avancarItem, TransicaoConcorrente, TransicaoInvalida } from "../nucleo/orquestrador/index.ts";
 import { contato as tContato, cotacao, fornecedor, itemPedido, oferta, pedido } from "../nucleo/db/schema.ts";
@@ -29,7 +29,7 @@ import { palavrasEmComum } from "../agentes/interpretador/index.ts";
 import { quando } from "../texto.ts";
 
 export const AVISO_PRIVACIDADE_FORNECEDOR =
-  "Olá! Sou o assistente automatizado de cotações de material de construção. Ao se cadastrar, você recebe pedidos de cotação por aqui, " +
+  "Olá! Sou o assistente automatizado de cotações de compras da empresa. Ao se cadastrar, você recebe pedidos de cotação por aqui, " +
   "sem compromisso de compra. Guardo o nome da empresa e as mensagens desta conversa só para as cotações. Para sair, escreva PARAR.";
 
 const PERGUNTA_NOME = "Qual o nome da sua empresa?";
@@ -278,7 +278,7 @@ export function textoConvite(nome: string, link: string): string {
   return [
     `Olá, ${nome}!`,
     "",
-    `Sou o assistente automatizado de compras da ${EMPRESA.nome} (CNPJ ${EMPRESA.cnpj}). Queremos convidar vocês a receber nossos pedidos de cotação de material de construção, sem compromisso de compra.`,
+    `Sou o assistente automatizado de compras da ${EMPRESA.nome} (CNPJ ${EMPRESA.cnpj}). Queremos convidar vocês a receber nossos pedidos de cotação de compras da empresa, sem compromisso de compra.`,
     "",
     "As cotações chegam e são respondidas pelo Telegram, do seu jeito: texto, PDF ou foto. Para começar, abra o link abaixo e toque em Iniciar:",
     "",
@@ -383,6 +383,10 @@ async function processarResposta(
     return;
   }
 
+  // Q1/Q2: se a proposta anterior ficou "a confirmar", esta mensagem é a resposta à pergunta.
+  const [anterior] = await db.select().from(oferta).where(and(eq(oferta.cotacaoId, c.id), eq(oferta.rodada, c.rodada))).limit(1);
+  const pendente = (anterior?.extraido ?? null) as { aConfirmar?: ("preco" | "item")[]; perguntaPendente?: string } | null;
+
   let e: Extracao;
   let modelo = "";
   try {
@@ -397,6 +401,7 @@ async function processarResposta(
       },
       { texto: entrada.texto, anexos },
       ctx,
+      pendente?.aConfirmar?.length ? pendente.perguntaPendente : null,
     );
     e = r.valor;
     modelo = r.modelo;
@@ -417,14 +422,25 @@ async function processarResposta(
 
   // Mensagem que completa a proposta já mandada ("validade 10 dias", "frete grátis"):
   // junta com a anterior em vez de trocar por uma proposta sem preço.
-  const [anterior] = await db.select().from(oferta).where(and(eq(oferta.cotacaoId, c.id), eq(oferta.rodada, c.rodada))).limit(1);
   if (anterior && (e.classificacao === "proposta" || e.classificacao === "outro")) {
     const completa = completarComAnterior(e, anterior);
     if (completa) e = completa;
   }
+  const temPropostaAnterior = !!anterior && (anterior.precoUnitario !== null || anterior.totalProduto !== null);
+  const anteriorAConfirmar = !!pendente?.aConfirmar?.length;
+  // Perguntei o preço ou o item e a resposta não trouxe preço: a pendência continua.
+  if (anteriorAConfirmar && e.classificacao === "proposta" && !e.aConfirmar && e.precoUnitario === null && e.totalProduto === null) e = { ...e, aConfirmar: pendente!.aConfirmar };
+
+  const ressalva = await tratarAlertas(e.alertas, c, contatoId, l, ctx, entrada.texto);
+  if (ressalva === "bloqueada") return;
+  // Classes que não têm resposta própria sobre o alerta: a ressalva vai sozinha.
+  if (ressalva && !["proposta", "outro", "recusa"].includes(e.classificacao)) await enviar(contatoId, ressalva, { ...ctx, tipo: "resposta" });
 
   switch (e.classificacao) {
     case "proposta": {
+      // Q1: preço ambíguo não vira número em silêncio: as colunas de preço ficam vazias (o número lido fica em `extraido`) até o fornecedor responder.
+      const precoAConfirmar = !!e.aConfirmar?.includes("preco");
+      const perguntaPendente = e.aConfirmar?.length ? perguntaDeConfirmacao(e, l.item) : undefined;
       await db.transaction(async (tx) => {
         await tx.delete(oferta).where(and(eq(oferta.cotacaoId, c.id), eq(oferta.rodada, c.rodada)));
         await tx.insert(oferta).values({
@@ -437,8 +453,8 @@ async function processarResposta(
           embalagem: e.embalagem,
           quantidadeOfertada: e.quantidadeOfertada?.toString(),
           unidadeOfertada: e.unidadeOfertada,
-          precoUnitario: e.precoUnitario?.toString(),
-          totalProduto: e.totalProduto?.toString(),
+          precoUnitario: precoAConfirmar ? undefined : e.precoUnitario?.toString(),
+          totalProduto: precoAConfirmar ? undefined : e.totalProduto?.toString(),
           frete: e.frete?.toString(),
           origemFrete: e.frete !== null ? "informado" : null,
           prazoDias: e.prazoDias,
@@ -450,7 +466,7 @@ async function processarResposta(
           entregaNoLocal: e.entregaNoLocal,
           formato: anexos.length ? ({ pdf: "pdf", foto: "foto", audio: "voz" } as const)[arquivos[0]!.tipo as "pdf" | "foto" | "audio"] : "texto",
           mensagemId,
-          extraido: { ...e, modelo },
+          extraido: { ...e, modelo, ...(perguntaPendente ? { perguntaPendente } : {}) },
         });
         await tx.update(cotacao).set({ situacao: "respondeu", respondeuEm: new Date() }).where(eq(cotacao.id, c.id));
       });
@@ -461,10 +477,13 @@ async function processarResposta(
       if (e.validadeDias === null) faltam.push("validade da proposta (até quando vale o preço)");
       await registrar(db, {
         agente: "Extrator",
-        acao: `Leu a proposta: ${e.precoUnitario !== null ? `R$ ${e.precoUnitario} por ${l.item.unidade}` : `total R$ ${e.totalProduto}`}${e.itemExato ? "" : " (item equivalente)"}.`,
-        motivo: faltam.length ? `Faltou: ${faltam.join(", ")}.` : "Proposta completa.",
+        acao: precoAConfirmar
+          ? "Leu a proposta, mas o preço ficou a confirmar (unitário ou total)."
+          : `Leu a proposta: ${e.precoUnitario !== null ? `R$ ${e.precoUnitario} por ${l.item.unidade}` : `total R$ ${e.totalProduto}`}${e.itemExato ? "" : " (item equivalente)"}.`,
+        motivo: [faltam.length ? `Faltou: ${faltam.join(", ")}.` : "Proposta completa.", perguntaPendente ? "Perguntei ao fornecedor o que ficou a confirmar." : ""].filter(Boolean).join(" "),
         ...ctx,
         fornecedorIds: [c.fornecedorId],
+        dados: { aderencia: e.aderencia, divergencias: e.divergencias, leituraPreco: e.leituraPreco, trechoPreco: e.trechoPreco, alertas: e.alertas },
       });
       if (e.pedidoContato) {
         await enviar(l.pedido.compradorId, `Pedido ${l.pedido.id}: a proposta chegou, e o fornecedor também pediu para falar com uma pessoa.`, { ...ctx, tipo: "aviso" });
@@ -477,14 +496,16 @@ async function processarResposta(
         contatoId,
         [
           `Recebi sua proposta para a cotação ${l.item.id}. Obrigado!`,
+          perguntaPendente ?? "",
           faltam.length ? `Para completar, me diga também: ${faltam.join("; ")}.` : "",
+          ressalva ?? "",
           aberta
             ? `Vou comparar com as outras propostas e aviso o resultado. Se quiser melhorar alguma condição (preço, frete, prazo ou pagamento), pode mandar por aqui${ate}.`
             : "Vou comparar com as outras propostas e aviso o resultado. Se o comprador quiser negociar alguma condição, volto a falar com você por aqui.",
         ]
           .filter(Boolean)
           .join(" "),
-        { ...ctx, tipo: faltam.length && aberta ? "completar_proposta" : "proposta_recebida" },
+        { ...ctx, tipo: (faltam.length || perguntaPendente) && aberta ? "completar_proposta" : "proposta_recebida" },
       );
       return;
     }
@@ -497,6 +518,12 @@ async function processarResposta(
       await encerrarSeTodosResponderam(l.item.id);
       return;
     case "recusa":
+      // Quem já mandou proposta e agora diz que não faz desconto ou que o preço é esse não está recusando o pedido.
+      if (temPropostaAnterior) {
+        await registrar(db, { agente: "Extrator", acao: "Fornecedor manteve a proposta anterior.", motivo: entrada.texto.slice(0, 200), ...ctx, fornecedorIds: [c.fornecedorId] });
+        await enviar(contatoId, ["Certo, mantenho a sua proposta anterior.", ressalva ?? ""].filter(Boolean).join(" "), { ...ctx, tipo: "resposta" });
+        return;
+      }
       await db.update(cotacao).set({ situacao: "encerrada", respondeuEm: new Date() }).where(eq(cotacao.id, c.id));
       await registrar(db, { agente: "Extrator", acao: "O fornecedor não atende este pedido.", motivo: entrada.texto.slice(0, 200), ...ctx, fornecedorIds: [c.fornecedorId] });
       await enviar(contatoId, "Obrigado por avisar!", ctx);
@@ -509,8 +536,94 @@ async function processarResposta(
       await situacaoDelicada(e.classificacao, c.fornecedorId, contatoId, entrada.texto, l, ctx);
       return;
     default:
-      await enviar(contatoId, "Não encontrei preço na sua mensagem. Pode mandar o preço unitário, o frete e o prazo de entrega?", ctx);
+      // Resposta sem preço de quem já tem proposta ("não consigo desconto"): a proposta segue valendo.
+      if (temPropostaAnterior) {
+        await enviar(contatoId, ["Certo, mantenho a sua proposta anterior.", ressalva ?? ""].filter(Boolean).join(" "), { ...ctx, tipo: "resposta" });
+        return;
+      }
+      await enviar(contatoId, ressalva ?? "Não encontrei preço na sua mensagem. Pode mandar o preço unitário, o frete e o prazo de entrega?", ctx);
   }
+}
+
+const RESSALVA: Record<AlertaFornecedor, string> = {
+  sem_nota: "Só compramos com nota fiscal. Pode mandar o preço com nota?",
+  item_irregular: "Só compramos produto original, com nota e procedência.",
+  propina: "Não aceitamos comissão nem vantagem. A escolha segue o mapa de cotação.",
+  combinacao_preco: "Não passo valores de outros fornecedores. Mande sua melhor proposta.",
+  pagamento_por_fora: "O pagamento é feito só para a empresa do CNPJ da proposta, depois do pedido.",
+  pede_dados: `Não passo dados pessoais, senhas nem códigos. Os dados da empresa são ${EMPRESA.nome} (CNPJ ${EMPRESA.cnpj}).`,
+  produto_controlado: "Por aqui eu só trato da cotação pedida. Se tiver proposta ou dúvida sobre ela, é só mandar.",
+  link_suspeito: "Não abro links nem arquivos desconhecidos. Pode mandar a proposta em texto ou PDF?",
+};
+/** Alertas que impedem a proposta de entrar: o preço não vira proposta limpa. */
+const ALERTAS_BLOQUEANTES: AlertaFornecedor[] = ["sem_nota", "item_irregular", "produto_controlado"];
+const AVISO_COMPRADOR: Record<AlertaFornecedor, string | null> = {
+  sem_nota: "ofereceu preço sem nota fiscal. Não registrei como proposta; pedi o preço com nota.",
+  item_irregular: "ofereceu produto irregular (réplica, paralelo ou sem procedência). A oferta não entra no mapa.",
+  propina: "ofereceu comissão ou vantagem. A proposta fica, marcada; não aceitei nada.",
+  combinacao_preco: "tentou saber o preço de concorrentes ou combinar preço. Não passei nada.",
+  pagamento_por_fora: "pediu pagamento fora do padrão (conta pessoal, link ou cripto). Respondi que o pagamento é só para o CNPJ da proposta.",
+  pede_dados: "pediu dados pessoais ou sigilosos. Não passei nada; pode ser golpe.",
+  produto_controlado: null,
+  link_suspeito: null,
+};
+const AVISO_GESTOR: AlertaFornecedor[] = ["propina", "combinacao_preco", "produto_controlado"];
+
+/**
+ * Guardrails do fornecedor: registra e avisa o comprador (e o gestor, se `GESTOR_CONTATO_ID` existir).
+ * Devolve "bloqueada" quando a resposta já foi dada e a proposta não pode entrar, ou a ressalva
+ * para ir junto da resposta normal (undefined se não há alerta).
+ */
+async function tratarAlertas(
+  alertas: AlertaFornecedor[],
+  c: typeof cotacao.$inferSelect,
+  contatoId: string,
+  l: { item: typeof itemPedido.$inferSelect; pedido: typeof pedido.$inferSelect },
+  ctx: { pedidoId: number; itemPedidoId: number },
+  texto: string,
+): Promise<string | undefined | "bloqueada"> {
+  if (!alertas.length) return undefined;
+  const [f] = await db.select({ nome: fornecedor.nome }).from(fornecedor).where(eq(fornecedor.id, c.fornecedorId));
+  const nome = f?.nome ?? "O fornecedor";
+  const gestor = process.env.GESTOR_CONTATO_ID;
+  for (const a of alertas) {
+    await registrar(db, {
+      agente: "Extrator",
+      acao: `Alerta na resposta do fornecedor: ${a}.`,
+      motivo: "Sinal de risco na mensagem; ver a ação tomada na resposta.",
+      ...ctx,
+      fornecedorIds: [c.fornecedorId],
+      dados: { alerta: a, texto: texto.slice(0, 300) },
+    });
+    const aviso = AVISO_COMPRADOR[a];
+    if (aviso) await enviar(l.pedido.compradorId, `Pedido ${l.pedido.id}: ${nome} ${aviso}`, { ...ctx, tipo: "aviso" });
+    if (gestor && gestor !== l.pedido.compradorId && AVISO_GESTOR.includes(a)) {
+      await enviar(gestor, `Pedido ${l.pedido.id}: ${nome} — alerta ${a}. Mensagem: "${texto.slice(0, 200)}"`, { ...ctx, tipo: "aviso" });
+    }
+  }
+  const bloqueante = alertas.find((a) => ALERTAS_BLOQUEANTES.includes(a));
+  if (bloqueante) {
+    await enviar(contatoId, RESSALVA[bloqueante], { ...ctx, tipo: "resposta" });
+    return "bloqueada";
+  }
+  return alertas.map((a) => RESSALVA[a]).join(" ");
+}
+
+/** Pergunta única ao fornecedor sobre o que ficou a confirmar (preço unitário ou total; item que diverge). */
+export function perguntaDeConfirmacao(e: Extracao, item: { id: number; descricao: string; unidade: string; quantidade: string | number }): string {
+  const partes: string[] = [];
+  if (e.aConfirmar?.includes("preco")) {
+    const valor = e.precoUnitario ?? e.totalProduto;
+    partes.push(`o valor de R$ ${String(valor).replace(".", ",")} é o preço por ${item.unidade} ou o total das ${Number(item.quantidade)} ${item.unidade}?`);
+  }
+  if (e.aConfirmar?.includes("item")) {
+    partes.push(
+      `o item oferecido${e.itemOferecido ? ` (${e.itemOferecido})` : ""} atende ao pedido de ${item.descricao}?${e.divergencias.length ? ` Pontos a conferir: ${e.divergencias.join("; ")}.` : ""}`,
+    );
+  }
+  const [primeira, ...resto] = partes;
+  const texto = [primeira ? primeira[0]!.toUpperCase() + primeira.slice(1) : "", ...resto.map((r) => `Também: ${r}`)].join(" ");
+  return `Para fechar a leitura da cotação ${item.id}: ${texto}`;
 }
 
 const numOuNull = (v: string | null) => (v === null ? null : Number(v));
