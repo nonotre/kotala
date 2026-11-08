@@ -380,3 +380,9 @@
   color: theme.$text-primary;
   font-variant-numeric: tabular-nums; /* stylelint-disable-line carbon/type-use */
 }
+
+// T8: link "Ser o fornecedor" ao lado do selo do fornecedor simulado.
+.serFornecedor {
+  gap: spacing.$spacing-02;
+  white-space: nowrap;
+}

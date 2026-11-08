@@ -11,7 +11,7 @@ import { Tabela } from "@/components/Tabela";
 import type { Linha } from "@/lib/dados";
 import type { DadosPedido, ItemDoPedido } from "@/lib/dados-pedido";
 import { brl } from "@/lib/formato";
-import { Campos, Fornecedor, IndiceItens, SecaoItem } from "./Item";
+import { Campos, chatDoFornecedor, Fornecedor, IndiceItens, SecaoItem } from "./Item";
 import { hrefAba, MAX_RODADAS } from "./textos";
 import s from "./pedido.module.scss";
 
@@ -30,7 +30,7 @@ function RodadaAtual({ d, i }: { d: DadosPedido; i: ItemDoPedido }) {
             alvos.length ? (
               <span className={s.marcas}>
                 {alvos.map((f) => (
-                  <Fornecedor key={f.id} nome={f.nome} simulado={f.simulado} />
+                  <Fornecedor key={f.id} nome={f.nome} simulado={f.simulado} chat={chatDoFornecedor(d, i, f.id)} />
                 ))}
               </span>
             ) : (
@@ -48,7 +48,7 @@ function RodadaAtual({ d, i }: { d: DadosPedido; i: ItemDoPedido }) {
 }
 
 /** Custo de cada fornecedor em cada rodada, a partir do último mapa de cada rodada. */
-function ComoOPrecoMudou({ i }: { i: ItemDoPedido }) {
+function ComoOPrecoMudou({ d, i }: { d: DadosPedido; i: ItemDoPedido }) {
   const mapas = i.mapasPorRodada;
   if (!mapas.length) return null;
   const fornecedores = new Map<string, { nome: string; simulado: boolean }>();
@@ -68,7 +68,7 @@ function ComoOPrecoMudou({ i }: { i: ItemDoPedido }) {
         vazio="Nenhum mapa ainda."
         colunas={["Fornecedor", ...mapas.map((m) => `Rodada ${m.rodada}`)]}
         linhas={[...fornecedores.entries()].map(([id, f]) => [
-          <Fornecedor key="f" nome={f.nome} simulado={f.simulado} />,
+          <Fornecedor key="f" nome={f.nome} simulado={f.simulado} chat={chatDoFornecedor(d, i, id)} />,
           ...mapas.map((m) => {
             const l = custo.get(`${m.rodada}:${id}`);
             return (
@@ -118,7 +118,7 @@ export function AbaNegociacao({ d }: { d: DadosPedido }) {
             {temNegociacao(i) ? (
               <>
                 <RodadaAtual d={d} i={i} />
-                <ComoOPrecoMudou i={i} />
+                <ComoOPrecoMudou d={d} i={i} />
                 {i.item.rodada >= MAX_RODADAS ? <p className={s.ajuda}>Já foram {MAX_RODADAS} rodadas: é o limite de negociação para não cansar os fornecedores.</p> : null}
               </>
             ) : (

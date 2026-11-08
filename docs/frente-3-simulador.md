@@ -1,6 +1,6 @@
 # Plano: agente do fornecedor robusto e simulador geral
 
-Plano de 08/11/2026, para depois da integração das frentes. Nada daqui foi implementado. O objetivo é que a conversa com fornecedores aguente situações e fornecedores diversos, e que um simulador geral prove isso de forma repetível, sem gastar busca real.
+Plano de 08/11/2026, para depois da integração das frentes. Do plano, só as respostas do §7 (R14b, R11, R13 e a regra de R3b) entraram no código, na branch `sim-fornecedor`; o resto continua por fazer. O objetivo é que a conversa com fornecedores aguente situações e fornecedores diversos, e que um simulador geral prove isso de forma repetível, sem gastar busca real.
 
 Leia junto com [frente-3-harness.md](frente-3-harness.md) (Assistente do chat e avaliação), [arquitetura.md](arquitetura.md) e [decisoes.md](decisoes.md).
 
@@ -23,10 +23,10 @@ Respostas do dono do projeto. Na integração, levar este bloco para `decisoes.m
 | R8 | Impostos | O preço informado é o total, com impostos. Não perguntar | Alerta "não disse se há impostos ou taxas fora do preço" |
 | R9 | Proposta depois do prazo de respostas | Entra no mapa (que é refeito) enquanto o comprador não escolheu | A cotação encerrada responde com aviso e não entra |
 | R10 | Fornecedor muda o preço depois de receber o pedido de compra | Infração: o fornecedor vai para a lista de bloqueio (memória do fornecedor) | Só existe "Não consigo atender", que tira o fornecedor |
-| R11 | Fornecedor pede dados da empresa | Passa só o básico (ver §7, pergunta 2) | Responde só com os dados do pedido |
+| R11 | Fornecedor pede dados da empresa | Passa só o básico (ver §7, pergunta 2) | Template com os cinco dados (08/11) |
 | R12 | Validade da proposta vence antes da decisão | Pergunta ao fornecedor se dá para estender a validade | Não tratado |
-| R13 | Condição de pagamento | O padrão da empresa é à vista. Se o fornecedor quiser outra condição, o agente negocia; se ele não aceitar, a decisão volta ao comprador | Pagamento só pesa 5% na nota; antecipado com fornecedor novo gera alerta |
-| R14 | Pendências e a regra dos 3 | Se houver pendência de qualquer tipo, o fluxo segue até o fim ignorando as propostas pendentes **se, e somente se, houver 3 fornecedores sem pendência nenhuma**. Com exatamente 3 e um deles pendente, não segue: espera | Mapa sai quando todos respondem ou o prazo vence; com menos de 3 válidas, nunca diz "melhor" |
+| R13 | Condição de pagamento | O padrão da empresa é à vista. Se o fornecedor quiser outra condição, o agente negocia; se ele não aceitar, a decisão volta ao comprador | À vista no recebimento na cotação; antecipado entra no pedido de desconto (08/11). Pagamento só pesa 5% na nota |
+| R14 | Pendências e a regra dos 3 | Se houver pendência de qualquer tipo, o fluxo segue até o fim ignorando as propostas pendentes **se, e somente se, houver 3 fornecedores sem pendência nenhuma**. Com exatamente 3 e um deles pendente, não segue: espera | Mapa sai quando todos respondem ou o prazo vence; com menos de 3 válidas, pergunta ao comprador se encerra ou estende (R14b, 08/11) e nunca diz "melhor" |
 
 ### O que conta como pendência (para R14)
 
@@ -199,8 +199,14 @@ Cada etapa fecha com `npm run checar` e com os cenários dela passando no simula
 
 ## 7. Perguntas que ainda ficaram
 
+As perguntas 1 a 4 foram respondidas pelo dono em 08/11/2026. Regras completas e escolhas feitas na implementação: [decisoes.md](decisoes.md) (08/11/2026).
+
 1. **Regra dos 3 e o prazo:** se o prazo de respostas vencer com menos de 3 propostas sem pendência, o item espera para sempre, espera até um limite (qual?), ou sai o mapa com o que tem, com o aviso de "menos de 3" (Q2 de hoje)?
+   - **Respondida:** verificar com o solicitante. Encerrar manda as opções que houver; estender dá prioridade à cotação, pergunta o motivo a quem não respondeu e tenta resolver (busca mais fornecedores). Implementado em `src/agentes/cotador/prazo.ts` (botões no fluxo do comprador). Ainda conta só propostas válidas, sem as pendências de R14, que não existem no código.
 2. **Dados básicos da empresa (R11):** sugiro razão social, CNPJ, endereço de entrega, janela de recebimento e nome de quem recebe (se o pedido tiver). Nunca: dados bancários, telefone ou e-mail pessoal, orçamento, valores de outros fornecedores. Está certo?
+   - **Respondida:** sim, exatamente esses cinco, e nunca dados bancários, contatos pessoais, orçamento ou valores de outros fornecedores. Template em `src/agentes/cotador/dados-empresa.ts`, usado pelo Cotador (`responderDuvida`) e pelo fluxo do fornecedor; quem recebe e a janela padrão em `EMPRESA` (`src/config.ts`).
 3. **Pagamento à vista (R13):** "à vista" quer dizer pagar na entrega (contra a nota), certo? Pagamento antecipado (antes da entrega) também conta como "outra condição" a negociar? E o agente deve pedir desconto pelo pagamento à vista?
+   - **Respondida:** à vista é no recebimento; antecipado se negocia (o agente pede o pagamento no recebimento); o agente pede desconto em qualquer ocasião. Implementado no Negociador (`src/agentes/negociador/`), na cotação (`htmlCotacao`) e no fluxo do fornecedor.
 4. **Negociação de prazo (R3b):** até quanto de frete a mais o agente pode aceitar sem perguntar ao comprador? Ou ele só traz a proposta nova e o comprador decide no mapa?
+   - **Respondida:** nenhum valor a mais sem o comprador: qualquer alteração de valor vai para o mapa e é confirmada com o solicitante. A negociação de prazo ainda não existe; a regra está em `decisoes.md`. Hoje o comprador é avisado quando um fornecedor sobe o preço ou o frete antes do mapa (`src/fluxo/fornecedor.ts`).
 5. **Ainda sem resposta da lista anterior** (seguem as sugestões até você dizer o contrário): pedido com vários itens continua cotado um por vez (14); sem segunda aprovação por valor (15); com login, cada comprador vê os seus pedidos (16); os perfis de fornecedor e comprador de §3.2 e §3.3 (17 e 18).

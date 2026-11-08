@@ -7,6 +7,7 @@
 
 import { cadastrarItensNovos } from "../agentes/interpretador/catalogo.ts";
 import { repassarRespostaDoComprador } from "../agentes/cotador/index.ts";
+import { aoBotaoDoPrazo } from "../agentes/cotador/prazo.ts";
 import { casarComBase, especificacaoEmTexto, itemDaBase, rotuloOpcao } from "../agentes/interpretador/base-itens.ts";
 import { and, asc, desc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
 import { lerAnexoDoComprador, textoDoPedidoComAnexo, type LeituraAnexo } from "../agentes/interpretador/anexos.ts";
@@ -945,6 +946,8 @@ export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: Me
     }
     const ref = /^(pedido|item):(\d+):/.exec(entrada.botao);
     if (ref) await vincularMensagem(mensagemId, ref[1] === "pedido" ? { pedidoId: Number(ref[2]) } : { itemPedidoId: Number(ref[2]) });
+    // R14b: prazo vencido com menos de 3 propostas (encerrar ou estender).
+    if (await aoBotaoDoPrazo(contato, entrada.botao)) return;
     if (await aoBotaoDoComprador(contato, entrada.botao)) return;
     const b = lerBotao(entrada.botao);
     if (!b) return;

@@ -12,12 +12,12 @@ import { SeloIA } from "@/components/SeloIA";
 import { Tabela } from "@/components/Tabela";
 import type { DadosPedido, ItemDoPedido } from "@/lib/dados-pedido";
 import { brl, dias, nota, quantidade } from "@/lib/formato";
-import { Campos, Fornecedor, IndiceItens, SecaoItem, textoDias } from "./Item";
+import { Campos, chatDoFornecedor, Fornecedor, IndiceItens, SecaoItem, textoDias } from "./Item";
 import { Status, StatusItem } from "./Status";
 import { DECIDIDOS, hrefAba, MAX_RODADAS, MOTIVOS_CANCELAMENTO } from "./textos";
 import s from "./pedido.module.scss";
 
-function Escolha({ i }: { i: ItemDoPedido }) {
+function Escolha({ d, i }: { d: DadosPedido; i: ItemDoPedido }) {
   const { item, mapa } = i;
   const c = mapa!.comparacao;
   return (
@@ -29,7 +29,7 @@ function Escolha({ i }: { i: ItemDoPedido }) {
         colunas={["Fornecedor", "Custo total", "Entrega", "Nota", ""]}
         linhas={c.validas.map((l, n) => [
           <span key="f" className={s.celulaPilha}>
-            <Fornecedor nome={l.oferta.fornecedorNome} simulado={l.oferta.simulado} />
+            <Fornecedor nome={l.oferta.fornecedorNome} simulado={l.oferta.simulado} chat={chatDoFornecedor(d, i, l.oferta.fornecedorId)} />
             {!l.oferta.itemExato ? <span className={s.ajudaCelula}>Equivalente: {l.oferta.itemOferecido}</span> : null}
             {l.alertas.length ? (
               <span className={s.alerta}>
@@ -113,7 +113,7 @@ function PorQue({ d, i }: { d: DadosPedido; i: ItemDoPedido }) {
   );
 }
 
-function Aprovado({ i }: { i: ItemDoPedido }) {
+function Aprovado({ d, i }: { d: DadosPedido; i: ItemDoPedido }) {
   const { item, escolhida, escolhido } = i;
   const nome = escolhida?.oferta.fornecedorNome ?? escolhido?.nome;
   const simulado = escolhida?.oferta.simulado ?? escolhido?.simulado ?? false;
@@ -121,7 +121,7 @@ function Aprovado({ i }: { i: ItemDoPedido }) {
     <Bloco titulo="O que você aprovou" acao={<StatusItem estado={item.estado} />}>
       <Campos
         linhas={[
-          ["Fornecedor", nome ? <Fornecedor nome={nome} simulado={simulado} /> : null],
+          ["Fornecedor", nome ? <Fornecedor nome={nome} simulado={simulado} chat={chatDoFornecedor(d, i, escolhida?.oferta.fornecedorId ?? item.fornecedorEscolhidoId)} /> : null],
           ["Custo total", escolhida ? brl(escolhida.custo) : null],
           ["Entrega", escolhida && escolhida.oferta.prazoDias !== null ? dias(escolhida.oferta.prazoDias) : null],
           ["Pagamento", escolhida?.oferta.pagamento],
@@ -158,14 +158,14 @@ export function AbaDecisao({ d }: { d: DadosPedido }) {
             <SecaoItem i={i}>
               {aguardando ? (
                 <div className={s.divisao}>
-                  <Escolha i={i} />
+                  <Escolha d={d} i={i} />
                   <div className={`${s.painelPreso} ${s.pilha}`}>
                     <PorQue d={d} i={i} />
                     <Reprovar i={i} />
                   </div>
                 </div>
               ) : DECIDIDOS.includes(i.item.estado) ? (
-                <Aprovado i={i} />
+                <Aprovado d={d} i={i} />
               ) : (
                 <SemDecisao d={d} i={i} />
               )}

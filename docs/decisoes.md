@@ -2,6 +2,49 @@
 
 Registro curto das decisões que mudam o escopo ou o desenho. A mais nova fica no topo.
 
+## 08/11/2026 · Prazo sem 3 propostas, dados da empresa, pagamento e alteração de valor
+
+**Situação:** R14b, R11 e R13 implementados na branch `sim-fornecedor`; R3b anotada (a negociação de prazo ainda não existe). Respostas do dono às perguntas 1 a 4 de [frente-3-simulador.md](frente-3-simulador.md#7-perguntas-que-ainda-ficaram).
+
+**R14b · Prazo vencido com menos de 3 propostas válidas.** Regra do dono: "Deve ser verificado com o solicitante. Caso ele peça para encerrar por conta de prazo, são enviadas as opções que tem até o momento para ele escolher. Caso ele peça para estender, dar prioridade à cotação, verificar o motivo da falta de proposta e tentar solucionar."
+
+- O Cotador pergunta ao comprador, uma vez por prazo, com os botões "Encerrar e ver as opções" e "Estender o prazo" (`item:<id>:prazo_encerrar` e `item:<id>:prazo_estender`). Valem no Telegram, no chat web e nas telas, que entram pela mesma `receber()`.
+- A busca automática de mais fornecedores (I3) não roda mais sozinha no fim do prazo: só depois que o comprador pede para estender.
+- **Encerrar:** o fechamento de sempre. O mapa sai com o que houver, com o aviso de "menos de 3"; sem proposta válida, o item fica sem proposta.
+- **Estender:** um prazo de respostas novo, prioridade à cotação, pergunta curta e neutra a quem não respondeu ("aconteceu algum impedimento?") e busca de mais fornecedores (I3).
+- **Prioridade**, no código: a busca automática volta a rodar sozinha a cada vencimento enquanto houver levas e fornecedores novos, sem perguntar de novo, com o teto normal mesmo em pedido urgente; o que os fornecedores sem proposta respondem (recusa, explicação) vai ao comprador; o evento da resposta leva `prioridade: true`.
+- **Decidido na implementação, a confirmar:**
+  - sem resposta do comprador em metade do prazo de respostas (`ESPERA_RESPOSTA_PRAZO_FRACAO`), encerra com o que houver, porque estender é pedido dele;
+  - a pergunta vale também quando todos responderam antes do prazo com menos de 3 válidas (ninguém mais vai responder; a escolha é a mesma);
+  - até 2 prorrogações por rodada (`MAX_PRORROGACOES`); depois, encerra com aviso;
+  - sem fornecedor devendo resposta e sem fornecedor novo para consultar, encerra sem perguntar, porque estender não mudaria nada;
+  - a rodada de negociação do botão continua fechando no prazo, sem perguntar;
+  - a pergunta do motivo vai direto, como o lembrete (é sobre a mesma cotação), e conta como o lembrete daquele fornecedor.
+- Estado sem migração: eventos com `dados.tipo` `prazo_pergunta` e `prazo_resposta`. Enquanto espera o comprador, o prazo do item fica no fim da espera, e os fornecedores ainda podem mandar proposta. Código: `src/agentes/cotador/prazo.ts`.
+
+**R11 · Dados da empresa.** Quando o fornecedor pede, passa só razão social, CNPJ, endereço de entrega, janela de recebimento e nome de quem recebe. Nunca dados bancários, contatos pessoais, orçamento ou valores de outros fornecedores.
+
+- A resposta é um template montado em código (`src/agentes/cotador/dados-empresa.ts`): a IA não decide o que revelar. Pedido de dado proibido recebe uma recusa fixa e não vai ao comprador.
+- Vale na dúvida do fornecedor e também quando o pedido vem junto de uma proposta ("segue o preço; qual o CNPJ?").
+- A resposta por IA às outras dúvidas só recebe os dados do pedido e esses cinco: o que não está lá ela não tem como passar.
+- O pedido não tem campo de quem recebe, e a janela é opcional: entraram em `EMPRESA` (`src/config.ts`) com as variáveis `EMPRESA_RECEBEDOR` (padrão "Equipe de recebimento") e `EMPRESA_JANELA_RECEBIMENTO` (padrão "dias úteis, das 8h às 17h"). A razão social é `EMPRESA_NOME`.
+
+**R13 · Pagamento e desconto.** "À vista" quer dizer no recebimento. Pagamento antecipado é condição a negociar. "O agente pede desconto em QUALQUER OCASIÃO."
+
+- A cotação diz o padrão: "Pagamento: à vista, no recebimento da mercadoria (contra a nota fiscal)", ou a forma que o comprador pediu no pedido.
+- Proposta com pagamento antecipado (antecipado, sinal, entrada, no pedido): o pedido de desconto pede também o pagamento no recebimento.
+- Sem antecipado, a alavanca de pagamento pede desconto pelo padrão à vista no recebimento. Sai a pergunta por prazo maior no boleto (`PRAZO_PAGAMENTO_PADRAO` deixou de existir).
+- Dizer o padrão da empresa pode; prometer pagamento continua barrado pelo validador.
+- "Qualquer ocasião": o pedido de desconto passa a sair também com proposta incompleta (na mesma mensagem que pede o que falta), quando o fornecedor pediu para falar com uma pessoa e com pouco prazo restante (`NEGOCIACAO_RESTANTE_MIN` deixou de existir; a janela só não passa do prazo).
+- **Por bom senso, continua sem pedir:** mensagem com alerta (todos os alertas de hoje são de integridade: comissão, combinação de preço, pagamento por fora, pedido de dado sigiloso, link suspeito); preço que ainda não se sabe qual é (a confirmar); proposta que o comparador vai cortar (item diferente sem aceite, entrega depois do prazo); uma vez por fornecedor e item, porque a rodada do botão e a nova rodada já pedem preço melhor no próprio texto.
+- Nunca cita valor de outro fornecedor (regra de 07/11, abaixo).
+
+**R3b · Alteração de valor.** "Qualquer alteração de valor na proposta deve ser colocada no mapa e confirmada com o solicitante." O agente nunca aceita sozinho frete maior para cumprir o prazo nem preço novo.
+
+- A negociação de prazo (entrega escalonada, frete maior para entregar no prazo) ainda não existe no código. Quando existir, a proposta nova vai para o mapa como proposta do fornecedor e só vale se o comprador a aprovar.
+- Hoje, nenhum caminho aceita sozinho uma mudança de valor depois do mapa: proposta que chega depois do fechamento recebe "a cotação já foi encerrada"; a confirmação de um preço retido abaixo da referência só refaz o mapa, e o comprador decide; o pedido de compra repete o valor aprovado.
+- Antes do mapa, vale a proposta mais recente do fornecedor (regra de antes). Faltava o comprador saber quando ela sobe: agora, preço ou frete maior que na proposta anterior gera aviso ao comprador e registro (`alteracao_valor`). O mapa ainda não marca a subida (fica com quem cuida do Comparador).
+
 ## 07/11/2026 · Regras da área de compras (anotações da Ester)
 
 **Situação:** implementado em parte.

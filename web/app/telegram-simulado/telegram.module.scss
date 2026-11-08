@@ -1,0 +1,374 @@
+// Telegram simulado: tela inteira, sem a casca do site, com cara de chat do Telegram. Só tokens do Carbon.
+@use '@carbon/react/scss/theme';
+@use '@carbon/react/scss/spacing';
+@use '@carbon/react/scss/type';
+
+// Largura da conversa em tela grande, como o Telegram no navegador.
+$largura: calc(#{spacing.$spacing-13} * 6); /* stylelint-disable-line carbon/layout-use */
+
+.tela {
+  display: flex;
+  flex-direction: column;
+  block-size: 100dvh;
+  background: theme.$background;
+  color: theme.$text-primary;
+}
+
+// Faixa fixa: deixa claro que nada aqui sai para um Telegram de verdade.
+.faixa {
+  @include type.type-style('body-compact-01');
+
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: spacing.$spacing-02 spacing.$spacing-05;
+  padding: spacing.$spacing-03 spacing.$spacing-05;
+  background: theme.$background-inverse;
+  color: theme.$text-inverse;
+
+  a {
+    color: theme.$link-inverse;
+  }
+}
+
+.faixaTitulo {
+  font-weight: 600;
+}
+
+// ---------- Topo da conversa ----------
+.topo {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: spacing.$spacing-03 spacing.$spacing-05;
+  padding: spacing.$spacing-03 spacing.$spacing-05;
+  background: theme.$layer-01;
+  border-block-end: 1px solid theme.$border-subtle-01;
+}
+
+.quem {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: spacing.$spacing-04;
+  min-inline-size: 0;
+}
+
+.avatar {
+  @include type.type-style('heading-compact-01');
+
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  block-size: spacing.$spacing-08;
+  inline-size: spacing.$spacing-08;
+  border-radius: 50%;
+  background: theme.$background-brand;
+  color: theme.$text-on-color;
+}
+
+.nome {
+  @include type.type-style('heading-compact-01');
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subtitulo {
+  @include type.type-style('label-01');
+
+  color: theme.$text-secondary;
+}
+
+.modo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: spacing.$spacing-03;
+}
+
+// De que cotação se trata, quando veio do pedido com ?item=.
+.contexto {
+  @include type.type-style('body-compact-01');
+
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: spacing.$spacing-02 spacing.$spacing-03;
+  padding: spacing.$spacing-03 spacing.$spacing-05;
+  background: theme.$highlight;
+  border-block-end: 1px solid theme.$border-subtle-01;
+}
+
+.contextoAjuda {
+  color: theme.$text-secondary;
+}
+
+// ---------- Mensagens ----------
+.lista {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-block-size: 0;
+  background: theme.$layer-02;
+}
+
+.coluna {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+  inline-size: 100%;
+  max-inline-size: $largura;
+  margin-inline: auto;
+  padding: spacing.$spacing-05;
+}
+
+.dia {
+  @include type.type-style('label-01');
+
+  align-self: center;
+  margin-block: spacing.$spacing-03;
+  padding: spacing.$spacing-01 spacing.$spacing-04;
+  border-radius: spacing.$spacing-05;
+  background: theme.$layer-accent-01;
+  color: theme.$text-secondary;
+}
+
+.vazio {
+  @include type.type-style('body-01');
+
+  align-self: center;
+  margin-block: spacing.$spacing-07;
+  color: theme.$text-secondary;
+  text-align: center;
+}
+
+.mensagem {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-02;
+  max-inline-size: min(85%, #{spacing.$spacing-13 * 4});
+  scroll-margin-block: spacing.$spacing-07;
+}
+
+// O sistema fala do lado esquerdo; o fornecedor (você), do direito.
+.doSistema {
+  align-self: flex-start;
+}
+
+.doFornecedor {
+  align-self: flex-end;
+}
+
+.balao {
+  @include type.type-style('body-01');
+
+  padding: spacing.$spacing-03 spacing.$spacing-04 spacing.$spacing-02;
+  border-radius: spacing.$spacing-04;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+
+  .doSistema & {
+    background: theme.$layer-01;
+    border: 1px solid theme.$border-subtle-01;
+    border-end-start-radius: 0;
+  }
+
+  .doFornecedor & {
+    background: theme.$layer-accent-01;
+    border-end-end-radius: 0;
+  }
+}
+
+// Mensagem da cotação pedida em ?item=.
+.destaque .balao {
+  outline: 2px solid theme.$border-interactive;
+  outline-offset: 1px;
+}
+
+.marcaCotacao {
+  @include type.type-style('label-01');
+
+  color: theme.$text-secondary;
+
+  .doFornecedor & {
+    text-align: end;
+  }
+}
+
+.rodapeBalao {
+  @include type.type-style('label-01');
+
+  display: block;
+  margin-block-start: spacing.$spacing-01;
+  color: theme.$text-helper;
+  text-align: end;
+}
+
+.falhou {
+  color: theme.$text-error;
+}
+
+.pendente {
+  opacity: 0.7;
+}
+
+// Botões embaixo da mensagem, como os inline do Telegram: largura toda, em grade.
+.botoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(#{spacing.$spacing-12}, 1fr));
+  gap: spacing.$spacing-02;
+
+  // O botão do Carbon guarda espaço à direita para o ícone; aqui não há ícone, e o rótulo fica no meio, como no Telegram.
+  > * {
+    justify-content: center;
+    inline-size: 100%;
+    max-inline-size: none;
+    padding-inline: spacing.$spacing-04;
+    text-align: center;
+  }
+}
+
+// ---------- Campo de escrever ----------
+.rodape {
+  flex: none;
+  background: theme.$layer-01;
+  border-block-start: 1px solid theme.$border-subtle-01;
+}
+
+.rodapeColuna {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+  inline-size: 100%;
+  max-inline-size: $largura;
+  margin-inline: auto;
+  padding: spacing.$spacing-03 spacing.$spacing-05;
+}
+
+.escrever {
+  display: flex;
+  align-items: flex-end;
+  gap: spacing.$spacing-03;
+
+  > :first-child {
+    flex: 1 1 auto;
+    min-inline-size: 0;
+  }
+
+  textarea {
+    resize: none;
+  }
+}
+
+.dica {
+  @include type.type-style('label-01');
+
+  color: theme.$text-secondary;
+}
+
+// ---------- Lista de chats ----------
+.chats {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-block-size: 0;
+}
+
+.chatsLista {
+  inline-size: 100%;
+  max-inline-size: $largura;
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+}
+
+.chat {
+  display: flex;
+  align-items: center;
+  gap: spacing.$spacing-04;
+  padding: spacing.$spacing-04 spacing.$spacing-05;
+  border-block-end: 1px solid theme.$border-subtle-01;
+  color: theme.$text-primary;
+  text-decoration: none;
+
+  &:hover {
+    background: theme.$layer-hover-01;
+  }
+
+  &:focus-visible {
+    outline: 2px solid theme.$focus;
+    outline-offset: -2px;
+  }
+}
+
+.chatMeio {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: spacing.$spacing-01;
+  min-inline-size: 0;
+}
+
+.chatLinha {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: spacing.$spacing-03;
+}
+
+.chatHora {
+  @include type.type-style('label-01');
+
+  flex: none;
+  color: theme.$text-secondary;
+}
+
+.chatPrevia {
+  @include type.type-style('body-compact-01');
+
+  overflow: hidden;
+  color: theme.$text-secondary;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.titulo {
+  @include type.type-style('heading-03');
+
+  inline-size: 100%;
+  max-inline-size: $largura;
+  margin: 0 auto;
+  padding: spacing.$spacing-06 spacing.$spacing-05 spacing.$spacing-03;
+}
+
+.tituloAjuda {
+  @include type.type-style('body-01');
+
+  inline-size: 100%;
+  max-inline-size: $largura;
+  margin: 0 auto;
+  padding: 0 spacing.$spacing-05 spacing.$spacing-05;
+  color: theme.$text-secondary;
+}
+
+// Chat não encontrado.
+.naoEncontradoTitulo {
+  @include type.type-style('heading-03');
+}
+
+.naoEncontrado {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: spacing.$spacing-05;
+  inline-size: 100%;
+  max-inline-size: $largura;
+  margin: 0 auto;
+  padding: spacing.$spacing-09 spacing.$spacing-05;
+}

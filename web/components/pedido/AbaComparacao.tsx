@@ -15,7 +15,7 @@ import type { Linha } from "@/lib/dados";
 import type { DadosPedido, ItemDoPedido } from "@/lib/dados-pedido";
 import { brl, nota } from "@/lib/formato";
 import { BotaoLink } from "./BotaoLink";
-import { Fornecedor, IndiceItens, SecaoItem, textoDias } from "./Item";
+import { chatDoFornecedor, Fornecedor, IndiceItens, SecaoItem, textoDias } from "./Item";
 import { Status } from "./Status";
 import { hrefAba } from "./textos";
 import s from "./pedido.module.scss";
@@ -40,7 +40,7 @@ function Melhor({ texto }: { texto: string }) {
 }
 
 /** O mapa: linhas são os critérios, colunas são as propostas válidas. A recomendada vem primeiro. */
-function Mapa({ i }: { i: ItemDoPedido }) {
+function Mapa({ d, i }: { d: DadosPedido; i: ItemDoPedido }) {
   const c = i.mapa!.comparacao;
   const comparaveis = c.validas.length >= 3;
   const menorPrazo = Math.min(...c.validas.map((l) => l.oferta.prazoDias ?? Infinity));
@@ -92,7 +92,7 @@ function Mapa({ i }: { i: ItemDoPedido }) {
             </TableHeader>
             {c.validas.map((l, n) => (
               <TableHeader key={l.oferta.id} className={n === 0 ? s.colunaRecomendada : undefined}>
-                <Fornecedor nome={l.oferta.fornecedorNome} simulado={l.oferta.simulado} online={l.oferta.online} />
+                <Fornecedor nome={l.oferta.fornecedorNome} simulado={l.oferta.simulado} online={l.oferta.online} chat={chatDoFornecedor(d, i, l.oferta.fornecedorId)} />
                 {n === 0 ? <span className={s.rotuloRecomendada}>{c.podeDizerMelhor ? "Recomendada" : "Na frente"}</span> : null}
               </TableHeader>
             ))}
@@ -168,7 +168,7 @@ function Recomendacao({ d, i }: { d: DadosPedido; i: ItemDoPedido }) {
   );
 }
 
-function DeOndeVemANota({ i }: { i: ItemDoPedido }) {
+function DeOndeVemANota({ d, i }: { d: DadosPedido; i: ItemDoPedido }) {
   const c = i.mapa!.comparacao;
   const comCriterios = c.validas.filter((l) => l.criterios);
   if (!comCriterios.length) return null;
@@ -181,7 +181,7 @@ function DeOndeVemANota({ i }: { i: ItemDoPedido }) {
         destaque={[0]}
         colunas={["Fornecedor", ...CRITERIOS.map((k) => `${ROTULO_CRITERIO[k]} (${c.pesos[k]})`), "Nota"]}
         linhas={comCriterios.map((l) => [
-          <Fornecedor key="f" nome={l.oferta.fornecedorNome} simulado={l.oferta.simulado} online={l.oferta.online} />,
+          <Fornecedor key="f" nome={l.oferta.fornecedorNome} simulado={l.oferta.simulado} online={l.oferta.online} chat={chatDoFornecedor(d, i, l.oferta.fornecedorId)} />,
           ...CRITERIOS.map((k) => (
             <span key={k} className={s.numero}>
               {nota(l.criterios![k])}
@@ -196,7 +196,7 @@ function DeOndeVemANota({ i }: { i: ItemDoPedido }) {
   );
 }
 
-function ForaDaComparacao({ i }: { i: ItemDoPedido }) {
+function ForaDaComparacao({ d, i }: { d: DadosPedido; i: ItemDoPedido }) {
   const c = i.mapa!.comparacao;
   if (!c.cortadas.length) return null;
   return (
@@ -206,7 +206,7 @@ function ForaDaComparacao({ i }: { i: ItemDoPedido }) {
         vazio="Nenhuma proposta cortada."
         apagadas={c.cortadas.map((_, n) => n)}
         colunas={["Fornecedor", "Custo", "Motivo"]}
-        linhas={c.cortadas.map((l) => [<Fornecedor key="f" nome={l.oferta.fornecedorNome} simulado={l.oferta.simulado} online={l.oferta.online} />, brl(l.custo), l.motivos.join("; ")])}
+        linhas={c.cortadas.map((l) => [<Fornecedor key="f" nome={l.oferta.fornecedorNome} simulado={l.oferta.simulado} online={l.oferta.online} chat={chatDoFornecedor(d, i, l.oferta.fornecedorId)} />, brl(l.custo), l.motivos.join("; ")])}
       />
     </Bloco>
   );
@@ -236,16 +236,16 @@ export function AbaComparacao({ d }: { d: DadosPedido }) {
                 <div className={s.divisao}>
                   <Bloco titulo={`Mapa de cotação${i.mapa!.rodada > 1 ? `, rodada ${i.mapa!.rodada}` : ""}: ${c.validas.length} ${c.validas.length === 1 ? "proposta válida" : "propostas válidas"}`}>
                     {c.alertasGerais.length ? <InlineNotification kind="warning" lowContrast hideCloseButton title="Atenção:" subtitle={c.alertasGerais.join("; ")} statusIconDescription="Aviso" /> : null}
-                    {c.validas.length ? <Mapa i={i} /> : <EstadoVazio compacto titulo="Nenhuma proposta válida neste mapa." />}
+                    {c.validas.length ? <Mapa d={d} i={i} /> : <EstadoVazio compacto titulo="Nenhuma proposta válida neste mapa." />}
                   </Bloco>
                   <div className={s.painelPreso}>
                     <Recomendacao d={d} i={i} />
                   </div>
                   <div className={s.inteira}>
-                    <DeOndeVemANota i={i} />
+                    <DeOndeVemANota d={d} i={i} />
                   </div>
                   <div className={s.inteira}>
-                    <ForaDaComparacao i={i} />
+                    <ForaDaComparacao d={d} i={i} />
                   </div>
                 </div>
               ) : (

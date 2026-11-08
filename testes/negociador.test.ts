@@ -57,9 +57,7 @@ test("negociar e reavaliar só a partir da decisão do comprador", () => {
 type Situacao = Parameters<typeof n.deveNegociar>[0];
 const situacao = (s: Partial<Situacao> = {}): Situacao => ({
   temPreco: true,
-  faltam: 0,
   aConfirmar: false,
-  pedidoContato: false,
   alertas: 0,
   jaPedido: false,
   estadoItem: "cotando",
@@ -82,16 +80,20 @@ test("pede desconto em proposta completa, com janela de 25% do prazo sem passar 
   assert.ok(fim.ok && fim.janelaAte.getTime() === min(15).getTime());
 });
 
-test("não pede desconto: incompleta, a confirmar, pessoa, alerta, já pedido, fechada, pouco prazo, portões", () => {
+test("R13: pede desconto em qualquer ocasião, inclusive com pouco prazo restante", () => {
+  // Antes: com menos de 10% do prazo não pedia. Agora pede, e a janela vai até o prazo.
+  const r = n.deveNegociar(situacao({ agora: min(14.5) }));
+  assert.ok(r.ok && r.janelaAte.getTime() === min(15).getTime());
+});
+
+test("não pede desconto: sem preço, a confirmar, alerta, já pedido, fechada, prazo vencido, portões", () => {
   const casos: [Partial<Situacao>, RegExp][] = [
     [{ temPreco: false }, /sem preço/],
-    [{ faltam: 1 }, /incompleta/],
     [{ aConfirmar: true }, /confirmar/],
-    [{ pedidoContato: true }, /pessoa/],
     [{ alertas: 1 }, /alerta/],
     [{ jaPedido: true }, /já pedi/],
     [{ estadoItem: "comparando" }, /fechada/],
-    [{ agora: min(13.6) }, /10%/],
+    [{ agora: min(15) }, /vencido/],
     [{ itemExato: false }, /equivalente/],
     [{ prazoDias: 9 }, /prazo do pedido/],
   ];
@@ -107,10 +109,36 @@ test("não pede desconto: incompleta, a confirmar, pessoa, alerta, já pedido, f
 // ---------- Texto do pedido ----------
 
 test("alavancas verdadeiras, na ordem, no máximo 2", () => {
-  assert.deepEqual(n.escolherAlavancas({ recompra: true, quantidade: 50, prazoPagamentoDias: 0, frete: 60, entregas: "em duas vezes" }), ["recompra", "volume"]);
-  assert.deepEqual(n.escolherAlavancas({ recompra: false, quantidade: 1, prazoPagamentoDias: 30, frete: 60, entregas: null }), ["frete"]);
-  assert.deepEqual(n.escolherAlavancas({ recompra: false, quantidade: 1, prazoPagamentoDias: 30, frete: 0, entregas: "partes" }), ["entregas"]);
-  assert.deepEqual(n.escolherAlavancas({ recompra: false, quantidade: 1, prazoPagamentoDias: null, frete: null, entregas: null }), ["pagamento"]);
+  assert.deepEqual(n.escolherAlavancas({ recompra: true, quantidade: 50, pagamento: "à vista", frete: 60, entregas: "em duas vezes" }), ["recompra", "volume"]);
+  // R13: o padrão da empresa (à vista, no recebimento) é sempre alavanca, salvo preferência do comprador.
+  assert.deepEqual(n.escolherAlavancas({ recompra: false, quantidade: 1, pagamento: "boleto 30 dias", frete: 60, entregas: null }), ["pagamento", "frete"]);
+  assert.deepEqual(n.escolherAlavancas({ recompra: false, quantidade: 1, pagamento: "boleto 30 dias", pagamentoPreferido: "boleto 28 dias", frete: 60, entregas: null }), ["frete"]);
+  assert.deepEqual(n.escolherAlavancas({ recompra: false, quantidade: 1, pagamento: null, pagamentoPreferido: "pix", frete: 0, entregas: "partes" }), ["entregas"]);
+  assert.deepEqual(n.escolherAlavancas({ recompra: false, quantidade: 1, pagamento: null, frete: null, entregas: null }), ["pagamento"]);
+});
+
+test("R13: pagamento antecipado vira alavanca própria, a primeira, e pede o pagamento no recebimento", () => {
+  for (const p of ["50% antecipado", "Pix adiantado", "sinal de 30% e o resto na entrega", "pagamento no ato do pedido", "entrada de 50%"]) {
+    assert.ok(n.pagamentoAntecipado(p), p);
+  }
+  for (const p of ["à vista", "à vista na entrega", "boleto 28 dias", "pix na entrega", null]) assert.ok(!n.pagamentoAntecipado(p), String(p));
+  const alavancas = n.escolherAlavancas({ recompra: true, quantidade: 50, pagamento: "50% antecipado", frete: 60, entregas: null });
+  assert.deepEqual(alavancas, ["antecipado", "recompra"]);
+  const m = n.montarNegociacao({ alavancas, quantidade: "50", unidade: "saco", frete: 60, referencia: null, janelaAte: min(5), agora: T0 });
+  assert.ok(m.validado, m.motivos.join("; "));
+  assert.match(m.texto, /^Por gentileza, conseguiria desconto na cotação\?/);
+  assert.match(m.texto, /Nosso padrão é pagar à vista, no recebimento da mercadoria \(contra a nota fiscal\), e não antecipado/);
+  assert.match(m.texto, /pagamento no recebimento\?/);
+});
+
+test("R13: alavanca de pagamento pede desconto pelo padrão à vista no recebimento, sem prometer", () => {
+  const m = n.montarNegociacao({ alavancas: ["pagamento"], quantidade: "1", unidade: "un", frete: null, referencia: null, janelaAte: min(5), agora: T0 });
+  assert.ok(m.validado, m.motivos.join("; "));
+  assert.match(m.texto, /Nosso padrão é pagamento à vista, no recebimento da mercadoria \(contra a nota fiscal\): há desconto para essa condição\?/);
+  assert.doesNotMatch(m.texto, /boleto/);
+  // Prometer continua barrado.
+  assert.ok(!n.validarTextoNegociacao("Pagamos à vista se fechar.", []).ok);
+  assert.ok(!n.validarTextoNegociacao("Pagamos adiantado.", []).ok);
 });
 
 test("pedido de desconto: frase da Ester, alavancas, sem alavanca falsa e sem valor de fora", () => {
