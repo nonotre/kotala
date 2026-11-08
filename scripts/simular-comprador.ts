@@ -37,6 +37,8 @@ registrarCanal({
   },
 });
 ligarFluxos();
+// O terminal fala pelo canal web, então passa pelo Assistente (Frente 3). ASSISTENTE=desligado testa o fluxo puro.
+if (process.env.ASSISTENTE !== "desligado") (await import("../src/assistente/roteador.ts")).ligarAssistente();
 const pararVarredor = iniciarVarredor(2000);
 aoRegistrarUso((r) => {
   if (!r.ok) console.log(`  (IA ${r.rota}/${r.modelo} falhou: ${r.erro})`);

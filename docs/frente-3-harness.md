@@ -334,3 +334,51 @@ Consequências no desenho:
 - O texto do Assistente usa Markdown. O adaptador do Telegram manda texto puro, então negrito e links apareceriam crus. Converter para HTML (`parse_mode: "HTML"`) no adaptador, que é da Frente 4.
 - O `callback_data` tem até 64 bytes. Os `dado` de hoje cabem (~55 bytes no maior).
 - Streaming com `sendMessageDraft` em chat privado, quando a Etapa B de streaming existir.
+
+## Implementado (08/11/2026, branch `f3-harness`)
+
+| Peça | Onde | O que faz |
+|---|---|---|
+| Contrato | `src/assistente/tipos.ts` | Tipos das consultas, da resposta e as rotas permitidas para links |
+| Consultas | `src/assistente/consultas.ts` | Leitura do banco para as ferramentas, empresa inteira, com `daConversa` |
+| Turno | `src/assistente/agente.ts` | `responder()`: cartão de estado + histórico + até 6 passos com ferramentas; escala para o forte quando a resposta é reprovada; texto seguro se reprovar de novo |
+| Instruções | `src/assistente/instrucoes.ts` | Regras fixas, regras de compra e o cartão de estado |
+| Validador | `src/assistente/validador.ts` | Valor em R$, "pedido N", links (rota, pedido, item do pedido certo, fornecedor) e afirmação de ação, contra os dados das ferramentas e o histórico |
+| Roteador | `src/assistente/roteador.ts` | Só canal `web`: botão, anexo, comando e "sim" com pedido em confirmação vão direto ao fluxo; o resto passa pelo Assistente; IA fora do ar cai no fluxo de hoje |
+| Gancho | `src/bots.ts`, `scripts/simular-comprador.ts` | `ligarAssistente()` depois de `ligarFluxos()`; `ASSISTENTE=desligado` desliga |
+| IA | `src/nucleo/ia/` | Papéis `conversa`, `conversa_forte` e `juiz`; `executarAgente()` roda o turno inteiro na cadeia de reserva e registra em `uso_ia` |
+| Chat web | `web/components/chat/` | Botão `link:` navega sem recarregar e vale em qualquer mensagem; link relativo no texto navega na mesma aba; novos textos e exemplo "o que está pendente pra mim?" |
+| Avaliação | `src/assistente/avaliacao/`, `scripts/avaliar-assistente.ts` | Cenário em memória, casos e pontuação (expectativas + regras de segurança), juiz opcional |
+| Testes | `testes/assistente-*.test.ts` | Validador, pontuação e consultas (integração) |
+
+Ferramentas: `listar_pendencias`, `buscar_pedidos`, `detalhe_pedido`, `mapa_cotacao`, `linha_do_tempo`, `fornecedores` (por nome, id ou categoria), `categorias`, `historico_compras`, `economia`, `regras_de_compra`, `propor_acao`, `botao_link`, `encaminhar_ao_fluxo`.
+
+Como rodar:
+
+```bash
+npm run assistente:avaliar -- --padrao                 # cadeias do .env, com escalada
+npm run assistente:avaliar -- --modelos a,b --rep 2    # compara modelos sem escalada
+npm run assistente:avaliar -- --padrao --juiz          # com nota do juiz (gemini-4-argon)
+npm run simular -- "preciso de 40 sacos de cimento cp2" "o que tá pendente?" "clicar:Confirmar"   # ciclo completo pelo canal web
+```
+
+### Avaliação com a IA real (35 casos, cenário em memória)
+
+| Configuração | Acertos | Falhas de segurança | Mediana por turno |
+|---|---|---|---|
+| `gemini-3.5-flash-lite` sozinho | 31/35 | 1 (falso positivo da pontuação, já corrigido) | 1,7 s |
+| `gemini-3.8-flash` sozinho | 30/35 | 2 (falsos positivos) | 6,6 s |
+| `gemini-3.5-flash` sozinho | 24/35 | 2 (uma real: link de item de outro pedido, já barrado no validador) | 3,4 s |
+| Padrão com escalada por palavra-chave ("por que", "compare") | 32/35 | 0 | 1,8 s, mas 6 a 25 s nos casos escalados |
+
+Decisão: o turno começa no 3.5-flash-lite e só escala para o 3.8-flash quando a resposta é reprovada no validador, ou quando a mensagem é longa. A escalada por palavra-chave saiu: custava até 25 s sem ganho de acerto.
+
+Ponta a ponta (`npm run simular`, banco de teste): pedido pelo chat → encaminhado ao fluxo → "o que tá pendente?" respondido sem virar correção → confirmar → cotação com simulados → "aprova a mais barata" → botão → confirmação em dois toques → compra fechada.
+
+### Furos achados no caminho (para as outras frentes)
+
+- **Categoria do item novo (Frente 4).** A categoria do item é deduzida da base de itens na hora da busca (`categoriaDoItem`) e não fica gravada no item. Item novo vai para o catálogo como "Cadastrado pelo agente", sem categoria de verdade: a cotação vai a todos os fornecedores reais, e os simulados da base não cotam. Sugestão: o Interpretador (ou `cadastrarItensNovos`) classifica o item novo numa das categorias da base; e, com migração da Frente 2, `item_pedido.categoria` gravada na confirmação. Lojas achadas na busca entram sem categoria.
+- **Pergunta vira pedido cancelado, e pergunta vira correção (Frente 4).** Resolvido no chat web pelo Assistente; no Telegram continua.
+- **`src/dados/*.json` fora do git.** O padrão `dados/` do `.gitignore` também pega `src/dados/`. Uma worktree nova precisa copiar a pasta, como o `.env`, senão o simulador não sobe.
+- **Economia (Frente 1).** `economia()` em `web/lib/dados.ts` usa `ne(referenciaPreco.disponivel, false)`, que também descarta referência com `disponivel` nulo. A consulta do Assistente trata nulo como disponível, então os números podem divergir da tela.
+- **Histórico de compras da base fictícia** não tem item de pedido ligado e fica fora de `historico_compras`.

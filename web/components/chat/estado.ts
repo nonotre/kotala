@@ -6,6 +6,23 @@ import { useSyncExternalStore } from "react";
 
 export type Botao = { rotulo: string; dado: string };
 
+/** Igual a PREFIXO_LINK em src/assistente/tipos.ts: copiado aqui para o bundle do navegador não puxar código do servidor. */
+export const PREFIXO_LINK = "link:";
+
+/** Rota interna de um botão de link, ou null se o botão é de ação (ou se a rota não é uma rota do próprio site). */
+export function rotaDoLink(botao: Botao): string | null {
+  if (!botao.dado.startsWith(PREFIXO_LINK)) return null;
+  return rotaInterna(botao.dado.slice(PREFIXO_LINK.length));
+}
+
+/** Só caminho da mesma origem: "//outro.site" e "/\x" também navegariam para fora. */
+export function rotaInterna(href: string): string | null {
+  return /^\/(?![/\\])/.test(href) ? href : null;
+}
+
+/** Botão que o assistente manda para o chat navegar: nada vai ao assistente. */
+export const ehLink = (botao: Botao) => botao.dado.startsWith(PREFIXO_LINK);
+
 /** Uma linha da tabela mensagem, como /api/chat devolve. */
 export type MensagemChat = {
   id: string;
@@ -27,7 +44,7 @@ export type Falha = {
 };
 
 type Estado = {
-  /** Só a última mensagem do assistente com botões mostra os botões, como antes. */
+  /** Só a última mensagem do assistente com botões de ação mostra esses botões, como antes. Os de link não contam. */
   ultimaComBotoes: string | null;
   /** Envios esperando a API interna: os botões ficam desligados enquanto isso. */
   enviando: number;

@@ -15,6 +15,7 @@
     "teste": "node --test --test-concurrency=1 --env-file-if-exists=.env \"testes/**/*.test.ts\"",
     "checar": "npm run tipos && npm run teste",
     "ia:testar": "node --env-file=.env scripts/testar-ia.ts",
+    "assistente:avaliar": "node --env-file=.env scripts/avaliar-assistente.ts",
     "bots": "node --env-file=.env src/bots.ts",
     "simular": "node --env-file=.env scripts/simular-comprador.ts",
     "busca:testar": "node --env-file=.env scripts/testar-busca.ts",
