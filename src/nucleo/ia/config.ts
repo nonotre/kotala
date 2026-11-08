@@ -1,13 +1,29 @@
 import type { Alvo } from "./reserva.ts";
 
-/** Papel decide a cadeia de modelos: "rapido" para extrair e classificar, "forte" para redigir a recomendação. */
-export type Papel = "rapido" | "forte";
+/**
+ * Papel decide a cadeia de modelos: "rapido" para extrair e classificar, "forte" para redigir a recomendação.
+ * "conversa" e "conversa_forte" são do Assistente do chat (o forte entra em pergunta difícil);
+ * "juiz" avalia conversas em lote, fora do chat (latência não importa).
+ */
+export type Papel = "rapido" | "forte" | "conversa" | "conversa_forte" | "juiz";
 
 export type Rota = { nome: string; apiKey: string };
 
 const MODELOS_PADRAO: Record<Papel, string[]> = {
   rapido: ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"],
   forte: ["gemini-3.8-flash", "gemini-3.6-flash"],
+  // Benchmark de 08/11/2026 (docs/frente-3-harness.md): 3.5-flash-lite acertou 14/14 em ~1,2 s por turno.
+  conversa: ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.1-flash-lite"],
+  conversa_forte: ["gemini-3.8-flash", "gemini-3.5-flash"],
+  juiz: ["gemini-4-argon", "gemini-3.8-flash"],
+};
+
+const VARIAVEL_DO_PAPEL: Record<Papel, string> = {
+  rapido: "IA_MODELOS_RAPIDO",
+  forte: "IA_MODELOS_FORTE",
+  conversa: "IA_MODELOS_CONVERSA",
+  conversa_forte: "IA_MODELOS_CONVERSA_FORTE",
+  juiz: "IA_MODELOS_JUIZ",
 };
 
 function lista(valor: string | undefined): string[] {
@@ -31,13 +47,13 @@ export function rotasDoAmbiente(env: NodeJS.ProcessEnv = process.env): Rota[] {
 }
 
 export function modelosDoPapel(papel: Papel, env: NodeJS.ProcessEnv = process.env): string[] {
-  const doEnv = lista(papel === "rapido" ? env.IA_MODELOS_RAPIDO : env.IA_MODELOS_FORTE);
+  const doEnv = lista(env[VARIAVEL_DO_PAPEL[papel]]);
   return doEnv.length ? doEnv : MODELOS_PADRAO[papel];
 }
 
 /** Ordem de tentativa: todos os modelos da rota principal, depois os da reserva. */
-export function alvosDoPapel(papel: Papel, rotas: readonly Rota[], env: NodeJS.ProcessEnv = process.env): Alvo[] {
-  const modelos = modelosDoPapel(papel, env);
+export function alvosDoPapel(papel: Papel, rotas: readonly Rota[], env: NodeJS.ProcessEnv = process.env, modelosFixos?: readonly string[]): Alvo[] {
+  const modelos = modelosFixos?.length ? modelosFixos : modelosDoPapel(papel, env);
   return rotas.flatMap((r) => modelos.map((modelo) => ({ rota: r.nome, modelo })));
 }
 

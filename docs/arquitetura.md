@@ -306,3 +306,15 @@ Tabela `usuario` e coluna `contato.usuario_id` (migração `0015`). Login simple
 - Preço do print do comprador no mapa de cotação. Escolha da variação da base também pela tela (hoje no Telegram e no chat).
 - Voz: ligação pelo celular (exige HTTPS, por exemplo um túnel) e ligação telefônica de verdade.
 - Memória: contrato anual com pedido automático.
+
+## Assistente do chat web (Frente 3)
+
+`src/assistente/`. No chat web, texto livre passa antes por um agente com ferramentas de leitura: ele responde o que está pendente, como está cada pedido, por que uma proposta ficou de fora, quanto se economizou, quem vende cada categoria. Ele cita pedidos e telas com links e oferece botões de ação. Pedido novo, correção, confirmação e resposta a dúvida de fornecedor seguem para o fluxo de pedidos, sem mudança. Botão, anexo e "sim" com pedido em confirmação vão direto ao fluxo.
+
+- **A IA nunca age.** Ação é botão com o mesmo `dado` do fluxo, e aprovar continua em dois toques. Botão de ação só em pedido da própria conversa; para os outros, o link da tela.
+- **Conferência em código.** Valor em R$, número de pedido e link precisam ter vindo das ferramentas ou do histórico. Senão, o modelo forte tenta de novo, e depois disso a resposta cai num texto seguro com os links.
+- **Modelos.** Papel `conversa` (`gemini-3.5-flash-lite`) e `conversa_forte` (`gemini-3.8-flash`), com a mesma cadeia de reserva e o mesmo registro em `uso_ia`. `ASSISTENTE=desligado` volta ao fluxo puro.
+- **Links.** Botão com `dado` `link:/rota` (só o chat web entende) e links Markdown relativos, sempre de uma lista fechada de rotas.
+- **Telegram.** Ainda não passa pelo Assistente. Anotações em [frente-3-harness.md](frente-3-harness.md#telegram-anotações-para-depois).
+
+Desenho, avaliação de modelos e furos achados: [frente-3-harness.md](frente-3-harness.md). Avaliação: `npm run assistente:avaliar`.

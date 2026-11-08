@@ -13,6 +13,7 @@ export const AGENTES = [
   "Negociador",
   "Verificação",
   "Voz",
+  "Assistente", // chat web: respostas e consultas (src/assistente)
   "Comprador", // ação humana
   "Fornecedor",
 ] as const;

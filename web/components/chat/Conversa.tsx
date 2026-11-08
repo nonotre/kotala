@@ -1,5 +1,5 @@
 "use client";
-// Conversar: o mesmo assistente do Telegram, no chat da Carbon. Esta tela não responde nada sozinha:
+// Conversar: o assistente, no chat da Carbon. Esta tela não responde nada sozinha:
 // o que o comprador escreve (ou toca) vai para enviarChat(), que passa pela API interna do processo dos bots,
 // e tudo o que aparece na conversa vem do banco, por /api/chat, consultado a cada 1,5 s.
 
@@ -18,6 +18,7 @@ import {
 } from "@carbon/ai-chat";
 import { Button, SkeletonText } from "@carbon/react";
 import { ArrowDown } from "@carbon/react/icons";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Pagina } from "@/components/Pagina";
 import { enviarChat, type AnexoChat } from "@/lib/acoes";
@@ -25,9 +26,11 @@ import { AVATAR_ASSISTENTE } from "./avatar";
 import {
   comecarEnvio,
   definirUltimaComBotoes,
+  ehLink,
   falhaDoEnvio,
   guardarRotuloDoToque,
   marcarFalha,
+  rotaInterna,
   rotuloDoToque,
   terminarEnvio,
   zerarEstado,
@@ -65,7 +68,7 @@ function base64(file: File): Promise<string> {
 }
 
 /** Para começar: tocar manda a frase ao assistente de verdade. */
-const EXEMPLOS = ["preciso de 40 sacos de cimento cp2 até quinta", "20 barras de ferro 3/8", "1 carrada de areia e 2 milheiros de tijolo"];
+const EXEMPLOS = ["o que está pendente pra mim?", "preciso de 40 sacos de cimento cp2 até quinta", "20 barras de ferro 3/8"];
 
 async function lerConversa(endereco: string): Promise<MensagemChat[] | null> {
   try {
@@ -108,14 +111,15 @@ function paraHistorico(m: MensagemChat): HistoryItem | null {
 }
 
 /**
- * A última mensagem do assistente com botões: só ela mostra os botões. Se o comprador já tocou
+ * A última mensagem do assistente com botões de ação: só ela mostra esses botões. Se o comprador já tocou
  * num botão depois dela, nenhuma fica ativa (senão "Sim, aprovar" podia ser tocado de novo).
+ * Botões de link não entram na conta: só navegam, então uma mensagem só com links não apaga os botões de antes.
  */
 function ultimaComBotoes(msgs: MensagemChat[]): string | null {
   for (let i = msgs.length - 1; i >= 0; i--) {
     const m = msgs[i];
     if (m.direcao === "entrada" && !m.texto && !m.anexos?.length) return null; // toque num botão
-    if (m.direcao === "saida" && m.botoes?.length) return m.id;
+    if (m.direcao === "saida" && m.botoes?.some((b) => !ehLink(b))) return m.id;
   }
   return null;
 }
@@ -142,7 +146,7 @@ const renderBotoes: RenderUserDefinedResponse = (estado) => {
 const renderRodape: RenderCustomRequestFooter = (_slot, mensagem) => (mensagem.id ? <RodapeEnvio id={mensagem.id} /> : null);
 
 const escritos = {
-  homeScreenBeforeInputElement: <p className={s.dicaInicio}>O mesmo assistente do Telegram, aqui no navegador. Escreva o que precisa comprar, do seu jeito.</p>,
+  homeScreenBeforeInputElement: <p className={s.dicaInicio}>Pergunte o que está pendente, como está um pedido, ou escreva o que precisa comprar, do seu jeito.</p>,
 };
 
 /** O chat de quem entrou: o endereço é o id do usuário (contato "web" dele, ver src/contas.ts). */
@@ -159,6 +163,7 @@ export function Conversa({ endereco, topo }: { endereco: string; topo?: ReactNod
   const [historicoPronto, setHistoricoPronto] = useState(false);
   const [chatPronto, setChatPronto] = useState(false);
   const [novas, setNovas] = useState(false);
+  const router = useRouter();
 
   const enderecoAgora = useRef<string | null>(null);
   enderecoAgora.current = endereco;
@@ -349,14 +354,36 @@ export function Conversa({ endereco, topo }: { endereco: string; topo?: ReactNod
         especiais.current.set(id, { tipo: "botao", botao });
         void inst.send({ id, input: { text: botao.rotulo } });
       },
+      abrir: (rota) => router.push(rota),
       tentarDeNovo: (envioId) => {
         const falha = falhaDoEnvio(envioId);
         if (!falha?.podeTentar) return;
         void despachar(envioId, falha.texto, falha.botao ? { rotulo: falha.texto, dado: falha.botao } : undefined);
       },
     }),
-    [despachar],
+    [despachar, router],
   );
+
+  // Links relativos no texto do assistente: a Carbon os desenha com target="_blank" dentro do shadow DOM.
+  // Os da mesma origem navegam pelo router, na mesma aba e sem recarregar; os externos seguem como estão.
+  useEffect(() => {
+    if (!chatPronto) return;
+    const raiz = document.querySelector("cds-aichat-container")?.shadowRoot;
+    if (!raiz) return;
+    const aoClicar = (e: Event) => {
+      const ev = e as MouseEvent;
+      // Ctrl, Cmd, Shift ou botão do meio: quem pediu outra aba ou janela recebe.
+      if (ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+      // O <a> fica no shadow DOM do Markdown da Carbon: de fora, e.target já é o elemento do Markdown.
+      const link = e.composedPath().find((n): n is HTMLAnchorElement => n instanceof HTMLAnchorElement);
+      const rota = rotaInterna(link?.getAttribute("href") ?? "");
+      if (!rota) return;
+      e.preventDefault();
+      router.push(rota);
+    };
+    raiz.addEventListener("click", aoClicar, true);
+    return () => raiz.removeEventListener("click", aoClicar, true);
+  }, [chatPronto, router]);
 
   // ---------- Anexos ----------
 
@@ -421,7 +448,7 @@ export function Conversa({ endereco, topo }: { endereco: string; topo?: ReactNod
       homescreen: {
         isOn: true,
         disableReturn: true,
-        greeting: "Diga o que precisa comprar.",
+        greeting: "Como posso ajudar?",
         starters: { isOn: true, buttons: EXEMPLOS.map((label) => ({ label })) },
       },
       upload: {

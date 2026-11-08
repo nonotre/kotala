@@ -11,6 +11,7 @@ import {
   NoOutputGeneratedError,
   Output,
   RetryError,
+  type LanguageModel,
   type ModelMessage,
   type UserContent,
 } from "ai";
@@ -34,6 +35,8 @@ export type PedidoIa = {
   anexos?: AnexoIa[];
   /** Para o registro de uso. */
   contexto?: { agente?: string; pedidoId?: number; itemPedidoId?: number };
+  /** Cadeia de modelos fixa no lugar da do papel (avaliação compara modelos assim). */
+  modelos?: readonly string[];
 };
 
 export type RegistroUso = {
@@ -157,7 +160,7 @@ async function executarComReserva<T>(
   chamar: (alvo: Alvo) => Promise<{ valor: T; uso?: { inputTokens?: number; outputTokens?: number } }>,
 ) {
   rotas ??= rotasDoAmbiente();
-  const alvos = alvosDoPapel(p.papel, rotas);
+  const alvos = alvosDoPapel(p.papel, rotas, process.env, p.modelos);
   if (!alvos.length) throw new Error("Nenhuma chave de IA configurada. Defina GEMINI_API_KEY no .env.");
   const { valor, alvo, caiuNaReserva } = await comReserva({
     alvos,
@@ -221,6 +224,18 @@ export async function gerarObjeto<S extends z.ZodType>(p: PedidoIa & { schema: S
     });
     return { valor: p.schema.parse(r.output) as z.infer<S>, uso: r.usage };
   });
+}
+
+/**
+ * Agente com ferramentas (Assistente do chat): cada alvo da cadeia recebe o modelo pronto e roda o turno
+ * inteiro. Falha de cota ou de rede passa ao próximo alvo e repete o turno, por isso as ferramentas do
+ * turno não podem ter efeito colateral. Cada tentativa fica em uso_ia como as outras chamadas.
+ */
+export async function executarAgente<T>(
+  p: Pick<PedidoIa, "papel" | "contexto" | "modelos"> & { prompt: string },
+  chamar: (modelo: LanguageModel, alvo: Alvo) => Promise<{ valor: T; uso?: { inputTokens?: number; outputTokens?: number } }>,
+) {
+  return executarComReserva(p, cortar(p.prompt), (alvo) => chamar(provedor(alvo.rota)(alvo.modelo), alvo));
 }
 
 /** Para testes: esquece chaves lidas e alvos em descanso. */

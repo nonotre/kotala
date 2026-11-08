@@ -11,6 +11,7 @@ import { adaptadorSimulado, semearSimulados } from "./simulador/index.ts";
 import { adaptadorWeb } from "./canais/web.ts";
 import { carregarCatalogo } from "./agentes/interpretador/catalogo.ts";
 import { iniciarApiInterna } from "./api-interna.ts";
+import { ligarAssistente } from "./assistente/roteador.ts";
 
 const tokens: [Papel, string | undefined][] = [
   ["comprador", process.env.TELEGRAM_TOKEN_COMPRADOR],
@@ -32,6 +33,8 @@ registrarCanal(adaptadorEmail({ usuarioBot: tokenFornecedor ? await usuarioDoBot
 await semearSimulados();
 await carregarCatalogo();
 ligarFluxos();
+// Assistente do chat web (Frente 3): troca o roteador depois dos fluxos. ASSISTENTE=desligado volta ao fluxo puro.
+if (process.env.ASSISTENTE !== "desligado") ligarAssistente();
 const pararVarredor = iniciarVarredor();
 const runners = iniciarBots(Object.values(bots));
 
