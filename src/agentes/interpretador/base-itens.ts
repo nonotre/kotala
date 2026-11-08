@@ -1,11 +1,12 @@
 // E6: base de itens com especificação técnica (base fictícia feita pela Ester).
 // Casa o item que o Interpretador leu com a base, sem IA:
-// - família: as palavras do nome, com sinônimos de obra;
+// - família: as palavras do nome, com sinônimos da categoria;
 // - termos decisivos: números e classes (50 mm, 4 mm², CP II), que têm de bater.
 // Uma correspondência: o item ganha código e especificação. Várias: o comprador
 // escolhe por botão. Nenhuma: o texto solto continua valendo.
 
 import { readFileSync } from "node:fs";
+import { palavrasVazias, sinonimosDeBusca } from "../../dominio/categorias.ts";
 
 export type ItemBase = {
   id: string;
@@ -30,23 +31,9 @@ export function definirCadastrados(itens: ItemBase[]) {
   cadastrados = itens;
 }
 
-/** Palavras que não dizem nada sobre o produto. */
-const VAZIAS = new Set(["de", "da", "do", "com", "para", "e", "em", "mm", "kg", "m", "un", "unidade", "tipo", "classe", "portland", "lavada", "lavado", "serie", "normal", "bruto", "a", "o"]);
-/** Sinônimos de obra: a palavra da esquerda conta também como as da direita. */
-const SINONIMOS: Record<string, string[]> = {
-  vergalhao: ["barra", "aco"],
-  ferro: ["barra", "aco"],
-  isopor: ["eps"],
-  eps: ["isopor"],
-  fio: ["cabo"],
-  cano: ["tubo"],
-  brita: ["pedra"],
-  pedrisco: ["po", "pedra"],
-  cimentcola: ["argamassa", "colante"],
-  luminaria: ["led"],
-  bota: ["seguranca"],
-  compensado: ["chapa"],
-};
+/** Palavras que não dizem nada sobre o produto e sinônimos: dados por categoria, em src/dominio/. */
+const VAZIAS = palavrasVazias();
+const SINONIMOS = sinonimosDeBusca();
 
 const normal = (s: string) =>
   s

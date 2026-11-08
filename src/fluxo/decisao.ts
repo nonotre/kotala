@@ -66,7 +66,7 @@ export async function aoBotaoDoComprador(contato: Contato, dado: string): Promis
       await enviar(
         contato.id,
         `Confirma repetir a compra de ${quantidade(d.item.quantidade, d.item.unidade)} de ${d.item.descricao} com ${r.fornecedorNome}${r.simulado ? " (simulado)" : ""}, a ${formatarBRL(r.precoUnitario)} por ${d.item.unidade}? O fornecedor confirma se mantém o preço.`,
-        { ...ctx, botoes: [{ rotulo: "Sim, repetir", dado: `item:${itemPedidoId}:repetir_ok` }, { rotulo: "Cotar de novo", dado: `item:${itemPedidoId}:cotar_novo` }] },
+        { ...ctx, botoes: [{ rotulo: "Sim, repetir", dado: `item:${itemPedidoId}:repetir_ok`, estilo: "sucesso" }, { rotulo: "Cotar de novo", dado: `item:${itemPedidoId}:cotar_novo` }] },
       );
       return true;
     }
@@ -115,7 +115,7 @@ export async function aoBotaoDoComprador(contato: Contato, dado: string): Promis
       const l = linha(ofertaId);
       if (!l) break;
       const botoes: Botao[] = [
-        { rotulo: "Sim, aprovar", dado: `item:${itemPedidoId}:confirmar:${l.oferta.id}` },
+        { rotulo: "Sim, aprovar", dado: `item:${itemPedidoId}:confirmar:${l.oferta.id}`, estilo: "sucesso" },
         { rotulo: "Voltar", dado: `item:${itemPedidoId}:voltar` },
       ];
       await enviar(
@@ -152,7 +152,7 @@ export async function aoBotaoDoComprador(contato: Contato, dado: string): Promis
       botoes.push({ rotulo: "Prazo longo: buscar mais fornecedores", dado: `item:${itemPedidoId}:buscar` });
       if (v) botoes.push({ rotulo: `Não confio em ${v.oferta.fornecedorNome}`, dado: `item:${itemPedidoId}:excluir:${v.oferta.fornecedorId}` });
       botoes.push({ rotulo: "Cotar de novo com todos", dado: `item:${itemPedidoId}:reprovar` });
-      botoes.push({ rotulo: "Desistir deste item", dado: `item:${itemPedidoId}:cancelar` });
+      botoes.push({ rotulo: "Desistir deste item", dado: `item:${itemPedidoId}:cancelar`, estilo: "perigo" });
       await enviar(contato.id, "Por que reprovar? Cada motivo leva a um caminho diferente.", { ...ctx, botoes });
       break;
     }
@@ -247,6 +247,7 @@ async function enviarPedidoDeCompra(m: MudancaItem) {
     o.formato === "historico" && o.precoUnitario ? `Mesmo preço da última compra: ${formatarBRL(Number(o.precoUnitario))} por ${d.item.unidade}${o.frete ? `, frete ${formatarBRL(Number(o.frete))}` : ""}.` : "",
     d.pedido.modoEntrega === "retirada" ? "Retirada na loja." : `Entrega: ${d.pedido.destino ?? "a combinar"}${d.pedido.janelaRecebimento ? ` (${d.pedido.janelaRecebimento})` : ""}.`,
     o.prazoDias !== null ? `Prazo: ${dias(o.prazoDias)}.` : "",
+    `Pagamento: ${pagamentoCombinado(o)}.`,
     d.pedido.entregas ? `Entregas: ${d.pedido.entregas}.` : "",
     "Pode confirmar o fornecimento?",
   ]
@@ -256,8 +257,8 @@ async function enviarPedidoDeCompra(m: MudancaItem) {
     itemPedidoId: d.item.id,
     tipo: "pedido_compra",
     botoes: [
-      { rotulo: "Confirmo", dado: `compra:${d.item.id}:confirmo` },
-      { rotulo: "Não consigo atender", dado: `compra:${d.item.id}:desisto` },
+      { rotulo: "Confirmo", dado: `compra:${d.item.id}:confirmo`, estilo: "sucesso" },
+      { rotulo: "Não consigo atender", dado: `compra:${d.item.id}:desisto`, estilo: "perigo" },
     ],
   });
 
@@ -274,6 +275,14 @@ async function enviarPedidoDeCompra(m: MudancaItem) {
     itemPedidoId: d.item.id,
     tipo: "aviso",
   });
+}
+
+/** Forma de pagamento combinada, como a proposta disse (U1.1); sem dado, pede para combinar. */
+export function pagamentoCombinado(o: { pagamento: string | null; prazoPagamentoDias: number | null }): string {
+  const forma = o.pagamento?.trim().replace(/\.$/, "");
+  const prazo = o.prazoPagamentoDias ? `${dias(o.prazoPagamentoDias)} para pagar` : "";
+  if (forma && prazo && !forma.includes(String(o.prazoPagamentoDias))) return `${forma} (${prazo})`;
+  return forma || prazo || "a combinar com o comprador";
 }
 
 /** Avisa os demais que responderam nesta rodada. */
@@ -310,7 +319,7 @@ async function comprarNaLojaOnline(
   });
   const texto = [
     `Pedido ${d.pedido.id}: compra aprovada em ${f.nome} (loja online)${custo !== null ? `, total ${formatarBRL(custo)}` : ""}.`,
-    o.fonte ? `Finalize no site, com o endereço de entrega ${d.pedido.destino ?? "da obra"}: ${o.fonte}` : "Finalize no site da loja.",
+    o.fonte ? `Finalize no site, com o endereço de entrega ${d.pedido.destino ?? "do local de entrega"}: ${o.fonte}` : "Finalize no site da loja.",
     `Simulei a confirmação da loja: ${quantidade(d.item.quantidade, d.item.unidade)} de ${d.item.descricao}${o.prazoDias !== null ? `, entrega em ${dias(o.prazoDias)}` : ""}, ${o.pagamento ?? "pagamento à vista"}. Confira o prazo e o frete no carrinho antes de pagar.`,
   ].join("\n");
   await enviar(d.pedido.compradorId, texto, { ...ctx, tipo: "aviso" });

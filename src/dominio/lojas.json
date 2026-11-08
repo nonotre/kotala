@@ -1,0 +1,7 @@
+{
+  "_sobre": "Lojas VTEX com API pública de catálogo. 'categorias' lista ids de categorias.json; \"*\" vale para qualquer item. Sem loja que bata, a busca usa só o Google Shopping (Serper). Para acrescentar uma loja de outra área, teste antes catalog_system/pub/products/search.",
+  "lojas": [
+    { "nome": "Telhanorte", "dominio": "www.telhanorte.com.br", "categorias": ["agregados", "cimenticios", "aco", "alvenaria", "ferragens", "hidraulica", "eletrico", "iluminacao", "isolamento", "epi", "tintas", "madeira"] },
+    { "nome": "Obramax", "dominio": "www.obramax.com.br", "categorias": ["agregados", "cimenticios", "aco", "alvenaria", "ferragens", "hidraulica", "eletrico", "iluminacao", "isolamento", "epi", "tintas", "madeira"] }
+  ]
+}

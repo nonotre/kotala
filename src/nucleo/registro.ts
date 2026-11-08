@@ -14,6 +14,7 @@ export const AGENTES = [
   "Verificação",
   "Voz",
   "Assistente", // chat web: respostas e consultas (src/assistente)
+  "Guardrail", // S: triagem, classes e conferências antes da busca e do fornecedor
   "Comprador", // ação humana
   "Fornecedor",
 ] as const;

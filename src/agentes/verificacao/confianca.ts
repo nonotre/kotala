@@ -3,6 +3,7 @@
 // compras e homologação. Verificar é diferente de homologar: a homologação é
 // decisão da empresa e só soma pontos.
 
+import { atividadeCompativel } from "../../dominio/categorias.ts";
 import type { DadosCnpj } from "./cnpj.ts";
 
 export type Nivel = "alta" | "media" | "baixa" | "simulado";
@@ -18,6 +19,8 @@ export type EntradaJulgamento = {
   consultaIndisponivel: boolean;
   /** Link da fonte (site, página do produto) que abre. */
   presencaVerificavel: boolean;
+  /** Categorias do fornecedor (nomes de src/dominio/): definem a atividade (CNAE) esperada. Sem regra, o ponto não conta. */
+  categorias?: string[];
   compras: number;
   prazosCumpridos: number;
   prazosAvaliados: number;
@@ -39,8 +42,6 @@ export type Julgamento = {
   /** Sinais de suspeita (R8), vão para os alertas do mapa. */
   alertas: string[];
 };
-
-const ATIVIDADE_DA_AREA = /constru|ferrag|ferrament|cimento|areia|pedra|brita|madeira|tinta|el[eé]tric|hidr[aá]ulic|tijol|cer[aâ]mic|vidro|a[cç]o|metal|telha|piso|revestiment|argamass|concreto/i;
 
 function anosDesde(data: string, hoje: Date): number | null {
   const d = new Date(data);
@@ -69,13 +70,15 @@ export function julgar(e: EntradaJulgamento): Julgamento {
       motivos.push(`CNPJ ${e.cnpj.situacao.toLowerCase()} na Receita`);
       alertas.push(`CNPJ ${e.cnpj.situacao.toLowerCase()} na Receita`);
     }
-    if (e.cnpj.atividade && ATIVIDADE_DA_AREA.test(e.cnpj.atividade)) {
+    // CNAE esperado por categoria (dados). Categoria sem regra: nem ponto nem punição.
+    const ativ = e.cnpj.atividade ? atividadeCompativel(e.categorias ?? [], e.cnpj.atividade) : null;
+    if (ativ?.compativel) {
       pontos += 10;
-      motivos.push("Atividade de materiais de construção");
-    } else if (e.cnpj.atividade) {
+      motivos.push(`Atividade compatível com ${ativ.categoria}`);
+    } else if (ativ) {
       pontos -= 10;
       motivos.push(`Atividade fora da área: ${e.cnpj.atividade}`);
-      alertas.push("Atividade registrada fora de materiais de construção");
+      alertas.push(`Atividade registrada fora de ${ativ.categoria}`);
     }
     const anos = e.cnpj.abertura ? anosDesde(e.cnpj.abertura, hoje) : null;
     if (anos !== null) {
