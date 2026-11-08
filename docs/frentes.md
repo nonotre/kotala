@@ -141,8 +141,11 @@ Branch `f4-ia-conversa`, a partir de `368d7fc`. Plano e desenhos: [plano-ia.md](
 | Q9, U6 | Telegram: teclado do mapa mantido nas ações não finais, edição da mensagem clicada, aviso em botão velho, texto acima de 4096 dividido, HTML opcional com escape, "digitando...", botões coloridos, documentos, `/start` e `/ajuda`; e-mail com botões em texto e anexos | `canais/`, `texto.ts`, `fluxo/componentes/`, `nucleo/mensagens/` (só acréscimos) |
 | U1.1 | Pagamento combinado no pedido de compra | `fluxo/decisao.ts` |
 | U4 | Cotação ao fornecedor organizada em HTML, com checklist do que responder | `cotador/index.ts` |
-| I3 | Busca mais fornecedores sozinha no fim do prazo com menos de 3 propostas válidas (até 2 levas, urgente 1), na mesma rodada; corrige lembrete repetido e reenvio de cotação parada | `cotador/index.ts`, `busca/index.ts` |
+| I3 | Busca mais fornecedores sozinha no fim do prazo, ou quando todos responderam antes, com menos de 3 propostas válidas (até 2 levas, urgente 1), na mesma rodada; corrige lembrete repetido e reenvio de cotação parada | `cotador/index.ts`, `busca/index.ts` |
 | I4 | Releitura com o modelo forte quando a leitura é sensível ou duvidosa | `interpretador/`, `extrator/` |
+| I1 | Negociação automática em toda cotação: pedido de desconto dentro da mensagem "Recebi sua proposta" (inclusive para a mais barata), janela de 25% do prazo, uma rodada automática por fornecedor e item, desconto calculado em código, antes e depois em `oferta.extraido.negociacao`, validador de texto; o botão do comprador passa a incluir a mais barata | `negociador/`, `fluxo/fornecedor.ts`, `cotador/index.ts` |
+| U3 | Uma pergunta por vez ao fornecedor: fila calculada (sem tabela nova), perguntas juntadas em até 3; encerramento, pedido de compra e lembrete passam direto | `cotador/cadencia.ts` |
+| U5 | Categoria perguntada uma vez a fornecedor real sem categorias, depois da primeira resposta | `fluxo/fornecedor.ts` |
 
 ### Para quem junta
 
@@ -152,7 +155,8 @@ Branch `f4-ia-conversa`, a partir de `368d7fc`. Plano e desenhos: [plano-ia.md](
   - pergunta e conversa não abrem mais pedido;
   - "aceita similar" passa a ser o padrão quando o comprador não exige marca, então o rótulo "(aceita similar)" aparece em quase todo item;
   - a cotação ao fornecedor vai em HTML;
-  - a cotação pode ser prorrogada pela busca automática.
+  - a cotação pode ser prorrogada pela busca automática;
+  - a cotação não fecha mais no instante em que o último responde: espera a janela do pedido de desconto (na demo de 15 min, até uns 4 min).
 - **Nomes que mudaram:** `TEXTO_BOAS_VINDAS` virou `textoBoasVindas()`; `ehPedido` é calculado em código a partir da classe; `ATIVIDADE_DA_AREA` saiu de `confianca.ts`; `limpar` e `extrair` do Extrator ganharam parâmetros opcionais.
 - **Conflitos prováveis:** `src/agentes/cotador/index.ts`, `src/fluxo/comprador.ts` e `src/fluxo/fornecedor.ts` mudaram bastante. `scripts/testar-seguranca.ts` ainda chama `interpretar` sem `posRegras` (funciona, mas não testa as pós-regras).
 
@@ -163,11 +167,16 @@ Branch `f4-ia-conversa`, a partir de `368d7fc`. Plano e desenhos: [plano-ia.md](
   - `alertas` (não ranquear sem nota ou item irregular; mostrar propina e pagamento por fora);
   - `divergencias`;
   - `aConfirmar` (hoje a proposta com preço ambíguo aparece como "Sem preço" no mapa).
+- Mostrar a negociação no mapa a partir de `oferta.extraido.negociacao` (tipos e o leitor `marcaDe` em `src/agentes/negociador/index.ts`):
+  - `produtoAnterior` da proposta mais antiga do fornecedor (o `antes` da marca);
+  - "Desconto obtido: R$ X (de A para B)", "Pedi desconto: manteve", "não respondeu";
+  - `subiu` e `condicional` em "Atenção".
+- A confirmação de preço abaixo da referência deveria passar pela cadência (`pedirAoFornecedor` em `cotador/cadencia.ts`).
 - Contar a busca automática no mapa ("consultei mais N em K levas"). Hoje o número de levas está nos eventos do Cotador, com `dados.tipo = "ampliacao"` e `dados.rodada`.
 - Exportar `contarPropostasValidas` sem a verificação de CNPJ (o Cotador duplica a montagem das ofertas).
 - Q7: referência de preço só de fornecedores físicos; preço online vira alerta, não corte.
 - Frete "a calcular no site"; forma de pagamento aceita no mapa; "Mapa atualizado" quando refeito; PDF do mapa (o Telegram e o e-mail já enviam anexos); "comprador de obra" no prompt do comparador.
-- Regras em `src/config.ts`: `MAX_AMPLIACOES` (hoje constante no cotador), `EMPRESA_NICHO`, política da empresa (bebida, tabaco, uso pessoal, serviços), empresa e endereço padrão neutros.
+- Regras em `src/config.ts`: `MAX_AMPLIACOES` (hoje constante no cotador), `NEGOCIACAO_ESPERA_FRACAO`, `NEGOCIACAO_RESTANTE_MIN` e `PRAZO_PAGAMENTO_PADRAO` (hoje no negociador), `ESPERA_PERGUNTA_FRACAO` (hoje em `cadencia.ts`), `EMPRESA_NICHO`, política da empresa (bebida, tabaco, uso pessoal, serviços), empresa e endereço padrão neutros.
 - Telas: textos com "obra"; tela de alertas de conduta com o botão de bloquear o fornecedor.
 
 **Frente 2 (migrações e contas):**
@@ -175,7 +184,10 @@ Branch `f4-ia-conversa`, a partir de `368d7fc`. Plano e desenhos: [plano-ia.md](
 - Papel de gestor para receber os avisos (hoje é a variável `GESTOR_CONTATO_ID`).
 - Mascarar CPF e cartão na tabela `mensagem`, que guarda o texto bruto.
 
-**Frente 3 (harness):** ver a lista em "Pedidos entre frentes". A mais urgente: o simulador (`src/simulador/personas.ts`) só conhece preços de obra e não baixa o preço quando recebe pedido de desconto sem rodada nova.
+**Frente 3 (harness):** ver a lista em "Pedidos entre frentes". As mais urgentes:
+- o simulador (`src/simulador/personas.ts`) só conhece preços de obra;
+- o simulador não baixa o preço quando recebe o pedido automático de desconto (mensagem `tipo: "negociacao"` na mesma rodada) e reenvia o mesmo preço, que vira "manteve";
+- faltam as personas que dão desconto só quando pedem, em percentual ou condicionado.
 
 **Frente 4, depois:**
 - U1 completo (preferência de pagamento do comprador), que depende da migração.
@@ -188,8 +200,12 @@ Branch `f4-ia-conversa`, a partir de `368d7fc`. Plano e desenhos: [plano-ia.md](
 - Serviços: hoje viram "Ainda cotamos só produtos".
 - Retentar o envio quando a busca automática falha depois de prorrogar.
 - Conferência de saída no convite ao fornecedor.
+- Resposta ao pedido de desconto que chega depois do fechamento ainda recebe "A cotação já foi encerrada".
+- Campo próprio do Extrator para desconto condicionado (hoje é detectado por regex).
+- Não testado com a IA real de ponta a ponta nem com os bots no ar: só testes automáticos e uma sonda do Interpretador.
 
 **Dono, Ester e jurídico:**
+- Escolhas feitas na implementação, a confirmar: não pedir desconto quando a mensagem do fornecedor tem alerta (comissão, sem nota); qualquer resposta sem preço com desconto aberto ("ok", "obrigado") vira "manteve"; lojas online contam para chegar a 3 propostas.
 - Os "10 minutos" do solicitante.
 - A Ester aceitar que a cotação espere a janela do desconto.
 - Validar a lista de produtos controlados (`docs/plano-ia/guardrails.md`).
