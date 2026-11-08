@@ -94,7 +94,7 @@ Risco de cada item:
 - "proibido": crime (lista da classe "proibido").
 - "nenhum": todo o resto.
 
-Jargão de construção (só para itens dessa área):
+Jargão de compras (use só quando o item for daquela área):
 ${textoJargao()}`;
 }
 
