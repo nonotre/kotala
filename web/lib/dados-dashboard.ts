@@ -9,6 +9,7 @@ import { db } from "../../src/nucleo/db/cliente.ts";
 import { cotacao, itemCatalogo, itemPedido, mapaCotacao, mensagem, pedido, usoIa } from "../../src/nucleo/db/schema.ts";
 import type { EstadoItem, EstadoPedido } from "../../src/nucleo/orquestrador/estados.ts";
 import type { Comparacao } from "../../src/agentes/comparador/calculo.ts";
+import { donoDoPedido } from "./dados";
 
 export type StatusRequisicao = "concluida" | "andamento" | "iniciar" | "cancelada";
 
@@ -17,6 +18,8 @@ export type LinhaPedido = {
   /** ISO, para atravessar a fronteira servidor → cliente. */
   criadoEm: string;
   setor: string | null;
+  /** Responsável pelo pedido, o mesmo dono do Quadro e da Lista; null sem usuário ligado. */
+  comprador: string | null;
   categorias: string[];
   status: StatusRequisicao;
   /** Requisição aberta que passou do prazo que o comprador deu. */
@@ -68,7 +71,9 @@ const centavos = (v: number) => Math.round(v * 100) / 100;
 const somaOuNulo = (vs: (number | null)[]) => (vs.some((v) => v !== null) ? centavos(vs.reduce<number>((t, v) => t + (v ?? 0), 0)) : null);
 
 export async function dashboard(): Promise<Dashboard> {
-  const pedidos = await db.select().from(pedido).orderBy(desc(pedido.criadoEm));
+  const comDono = await db.select({ pedido, comprador: donoDoPedido }).from(pedido).orderBy(desc(pedido.criadoEm));
+  const pedidos = comDono.map((l) => l.pedido);
+  const compradorDo = new Map(comDono.map((l) => [l.pedido.id, l.comprador]));
   const itens = pedidos.length ? await db.select().from(itemPedido).where(inArray(itemPedido.pedidoId, pedidos.map((p) => p.id))) : [];
 
   // Último mapa de cada item comprado: é nele que estão a proposta escolhida e as demais.
@@ -112,6 +117,7 @@ export async function dashboard(): Promise<Dashboard> {
       id: p.id,
       criadoEm: p.criadoEm.toISOString(),
       setor: p.setor?.trim() || null,
+      comprador: compradorDo.get(p.id) ?? null,
       categorias: [...new Set(doPedido.map((i) => categoria(i.itemChave)).filter((c): c is string => !!c))].sort(),
       status,
       atrasado: (status === "andamento" || status === "iniciar") && p.prazoMaxDias !== null && agora > p.criadoEm.getTime() + p.prazoMaxDias * DIA_MS,

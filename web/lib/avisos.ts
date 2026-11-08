@@ -1,7 +1,7 @@
 // Avisos: o que espera o comprador agora. Tirado do estado real dos pedidos e itens,
 // sem tabela própria. O sino mostra a contagem; /avisos mostra a lista.
 
-import { and, desc, eq, gt, inArray, ne } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, ne, or } from "drizzle-orm";
 import { db } from "../../src/nucleo/db/cliente.ts";
 import { itemPedido, pedido } from "../../src/nucleo/db/schema.ts";
 
@@ -29,7 +29,13 @@ export async function listarAvisos(): Promise<Aviso[]> {
     .select({ item: itemPedido, urgencia: pedido.urgencia })
     .from(itemPedido)
     .innerJoin(pedido, eq(pedido.id, itemPedido.pedidoId))
-    .where(and(ne(pedido.estado, "cancelado"), inArray(itemPedido.estado, ["aguardando_decisao", "aguardando_recompra", "sem_proposta"]), gt(itemPedido.atualizadoEm, desde)))
+    .where(
+      and(
+        ne(pedido.estado, "cancelado"),
+        // A janela de 7 dias vale só para "sem proposta": decisão e recompra esperam o comprador o tempo que for.
+        or(inArray(itemPedido.estado, ["aguardando_decisao", "aguardando_recompra"]), and(eq(itemPedido.estado, "sem_proposta"), gt(itemPedido.atualizadoEm, desde))),
+      ),
+    )
     .orderBy(desc(itemPedido.atualizadoEm));
 
   const lista: Aviso[] = pedidos.map((p) => ({
@@ -49,7 +55,7 @@ export async function listarAvisos(): Promise<Aviso[]> {
       lista.push({ ...base, chave: `decidir-${item.id}`, tipo: "decidir", titulo: `Decida a compra de ${item.descricao}`, texto: "O mapa de cotação está pronto. Nada é comprado sem a sua aprovação.", href: `/pedidos/${item.pedidoId}/decisao#item-${item.id}` });
     else if (item.estado === "aguardando_recompra")
       lista.push({ ...base, chave: `recompra-${item.id}`, tipo: "recompra", titulo: `Repetir a compra de ${item.descricao}?`, texto: "Você comprou este item há pouco tempo. Repita ou cote de novo.", href: `/pedidos/${item.pedidoId}#item-${item.id}` });
-    else if (item.atualizadoEm > desde)
+    else
       lista.push({ ...base, chave: `sem-${item.id}`, tipo: "sem_proposta", titulo: `Sem proposta válida para ${item.descricao}`, texto: "Nenhum fornecedor mandou proposta que passasse nas regras.", href: `/pedidos/${item.pedidoId}/cotacoes#item-${item.id}` });
   }
   const peso = (u: string) => (u === "obra_parada" ? 0 : u === "urgente" ? 1 : 2);

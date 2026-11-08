@@ -4,7 +4,8 @@
 // gastos e status, e a tabela por pedido.
 // As contas de gasto e saving e a tabela só olham pedidos: requisições concluídas e compradas.
 // O card de atraso e o gráfico de status olham as cotações, que são as requisições ainda abertas.
-// Filtros fixos no topo (período e setor); um clique numa fatia ou barra de setor também filtra.
+// Filtros fixos no topo (período, setor e comprador); um clique numa fatia, barra de setor ou linha
+// da tabela por comprador também filtra.
 
 import { DismissibleTag, Link as CarbonLink, Search, Select, SelectItem, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Tile } from "@carbon/react";
 import dynamic from "next/dynamic";
@@ -44,10 +45,13 @@ const OUTROS = "Outros";
 const MAX_SETORES = 5;
 const TODAS = "todas";
 
-type Filtros = { periodo: Periodo; setor: string; fatia: Fatia };
+const SEM_COMPRADOR = "Sem responsável";
+
+type Filtros = { periodo: Periodo; setor: string; comprador: string; fatia: Fatia };
 type Dimensao = keyof Filtros;
 
 const setorDe = (p: LinhaPedido) => p.setor ?? SEM_SETOR;
+const compradorDe = (p: LinhaPedido) => p.comprador ?? SEM_COMPRADOR;
 const fechado = (p: LinhaPedido) => p.gasto !== null && p.inicial !== null && p.inicial > 0;
 /** Pedido, no sentido da Ester: requisição concluída e efetivamente comprada. */
 const pedidoConcluido = (p: LinhaPedido) => p.status === "concluida" && fechado(p);
@@ -60,6 +64,7 @@ function filtrar(pedidos: LinhaPedido[], f: Filtros, ignorar: Dimensao[] = []) {
   return pedidos.filter((p) => {
     if (!ignorar.includes("periodo") && desde !== null && new Date(p.criadoEm).getTime() < desde) return false;
     if (!ignorar.includes("setor") && f.setor !== "todos" && setorDe(p) !== f.setor) return false;
+    if (!ignorar.includes("comprador") && f.comprador !== "todos" && compradorDe(p) !== f.comprador) return false;
     if (!ignorar.includes("fatia")) {
       if (f.fatia === "Saving" && saving(p) < 0.01) return false;
       if (f.fatia === "Gasto" && p.gasto === null) return false;
@@ -75,12 +80,31 @@ const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um :
 
 export function PainelDashboard({ dados }: { dados: Dashboard }) {
   const router = useRouter();
-  const [f, setF] = useState<Filtros>({ periodo: "tudo", setor: "todos", fatia: null });
+  const [f, setF] = useState<Filtros>({ periodo: "tudo", setor: "todos", comprador: "todos", fatia: null });
   const mudar = (parcial: Partial<Filtros>) => setF((atual) => ({ ...atual, ...parcial }));
 
   const concluidos = useMemo(() => dados.pedidos.filter(pedidoConcluido), [dados.pedidos]);
   const setores = useMemo(() => [...new Set(dados.pedidos.map(setorDe))].sort((a, b) => (a === SEM_SETOR ? 1 : b === SEM_SETOR ? -1 : a.localeCompare(b, "pt-BR"))), [dados.pedidos]);
+  const compradores = useMemo(
+    () => [...new Set(dados.pedidos.map(compradorDe))].sort((a, b) => (a === SEM_COMPRADOR ? 1 : b === SEM_COMPRADOR ? -1 : a.localeCompare(b, "pt-BR"))),
+    [dados.pedidos],
+  );
   const categorias = useMemo(() => [...new Set(concluidos.flatMap((p) => p.categorias))].sort((a, b) => a.localeCompare(b, "pt-BR")), [concluidos]);
+
+  // Por comprador: tudo menos o filtro do próprio comprador, para a tabela seguir dando escolha.
+  // Requisições abertas ou concluídas (sem canceladas); gasto e saving só dos pedidos concluídos, como nos KPIs.
+  const porComprador = useMemo<LinhaComprador[]>(() => {
+    const grupos = new Map<string, LinhaPedido[]>();
+    for (const p of filtrar(dados.pedidos, f, ["comprador", "fatia"]).filter((x) => x.status !== "cancelada")) grupos.set(compradorDe(p), [...(grupos.get(compradorDe(p)) ?? []), p]);
+    return [...grupos]
+      .map(([comprador, ps]) => {
+        const fs = ps.filter(pedidoConcluido);
+        const gasto = fs.reduce((t, p) => t + p.gasto!, 0);
+        const inicial = fs.reduce((t, p) => t + p.inicial!, 0);
+        return { comprador, requisicoes: ps.length, fechados: fs.length, gasto, saving: inicial - gasto, savingPct: inicial > 0 ? ((inicial - gasto) / inicial) * 100 : null };
+      })
+      .sort((a, b) => b.gasto - a.gasto || b.requisicoes - a.requisicoes || a.comprador.localeCompare(b.comprador, "pt-BR"));
+  }, [dados.pedidos, f]);
 
   const visiveis = useMemo(() => filtrar(concluidos, f), [concluidos, f]);
   // Cotações: requisições não canceladas, nos filtros de período e setor (a fatia só vale para pedidos).
@@ -123,6 +147,7 @@ export function PainelDashboard({ dados }: { dados: Dashboard }) {
   const filtrosAtivos = [
     f.periodo !== "tudo" ? { chave: "periodo" as const, texto: PERIODOS.find((p) => p.valor === f.periodo)!.texto, limpar: { periodo: "tudo" as const } } : null,
     f.setor !== "todos" ? { chave: "setor" as const, texto: `Setor: ${f.setor}`, limpar: { setor: "todos" } } : null,
+    f.comprador !== "todos" ? { chave: "comprador" as const, texto: `Comprador: ${f.comprador}`, limpar: { comprador: "todos" } } : null,
     f.fatia ? { chave: "fatia" as const, texto: f.fatia === "Saving" ? "Só pedidos com saving" : "Só pedidos com compra", limpar: { fatia: null } } : null,
   ].filter((x) => x !== null);
 
@@ -142,6 +167,12 @@ export function PainelDashboard({ dados }: { dados: Dashboard }) {
               <SelectItem value="todos" text="Todos os setores" />
               {setores.map((st) => (
                 <SelectItem key={st} value={st} text={st} />
+              ))}
+            </Select>
+            <Select id="dash-comprador" labelText="Comprador" size="md" value={f.comprador} onChange={(e) => mudar({ comprador: e.target.value })}>
+              <SelectItem value="todos" text="Todos os compradores" />
+              {compradores.map((c) => (
+                <SelectItem key={c} value={c} text={c} />
               ))}
             </Select>
           </div>
@@ -215,6 +246,19 @@ export function PainelDashboard({ dados }: { dados: Dashboard }) {
           </Column>
         </GradePagina>
 
+        {/* Recorte por pessoa: o responsável pelo pedido, o mesmo dono do Quadro e da Lista */}
+        <GradePagina>
+          <Column sm={4} md={8} lg={16}>
+            <Bloco
+              titulo="Gasto e economia por comprador"
+              descricao="O comprador é o responsável pelo pedido: o escolhido no pedido ou, sem escolha, quem pediu. Requisições sem as canceladas; gasto e saving dos pedidos concluídos, com o saving em % do valor inicial. Clique numa linha para filtrar."
+              plano
+            >
+              <TabelaCompradores linhas={porComprador} escolhido={f.comprador} aoClicar={(c) => mudar({ comprador: f.comprador === c ? "todos" : c })} />
+            </Bloco>
+          </Column>
+        </GradePagina>
+
         {/* 3. Gastos e status */}
         <GradePagina>
           <Column sm={4} md={8} lg={8}>
@@ -227,7 +271,7 @@ export function PainelDashboard({ dados }: { dados: Dashboard }) {
             </Bloco>
           </Column>
           <Column sm={4} md={8} lg={8}>
-            <Bloco titulo="Status das cotações" descricao="Todas as requisições, abertas ou não, no período e setor escolhidos. Em vermelho, a parte em atraso de cada barra. Canceladas ficam de fora.">
+            <Bloco titulo="Status das cotações" descricao="Todas as requisições, abertas ou não, nos filtros escolhidos. Em vermelho, a parte em atraso de cada barra. Canceladas ficam de fora.">
               {temStatus ? <BarrasStatus contagem={contagem} /> : <EstadoVazio compacto titulo="Nenhuma requisição nestes filtros." />}
             </Bloco>
           </Column>
@@ -287,7 +331,7 @@ function BlocoPedidos({ pedidos, categorias, abrir }: { pedidos: LinhaPedido[]; 
   const [categoria, setCategoria] = useState(TODAS);
 
   const termo = normalizar(busca);
-  const linhas = pedidos.filter((p) => (categoria === TODAS || p.categorias.includes(categoria)) && (!termo || normalizar(`pedido ${p.id} ${p.setor ?? ""}`).includes(termo)));
+  const linhas = pedidos.filter((p) => (categoria === TODAS || p.categorias.includes(categoria)) && (!termo || normalizar(`pedido ${p.id} ${p.setor ?? ""} ${p.comprador ?? ""}`).includes(termo)));
 
   return (
     <Bloco
@@ -295,7 +339,7 @@ function BlocoPedidos({ pedidos, categorias, abrir }: { pedidos: LinhaPedido[]; 
       descricao="Só pedidos concluídos e comprados. Preço da compra contra a média das propostas válidas do mapa. Verde: abaixo da média. Clique numa linha para abrir o mapa completo."
       acao={
         <div className={s.ferramentas}>
-          <Search id="dash-busca-pedido" labelText="Buscar pedido" placeholder="Buscar pedido ou setor" size="md" value={busca} onChange={(e) => setBusca(e.target.value)} onClear={() => setBusca("")} />
+          <Search id="dash-busca-pedido" labelText="Buscar pedido" placeholder="Buscar pedido, setor ou comprador" size="md" value={busca} onChange={(e) => setBusca(e.target.value)} onClear={() => setBusca("")} />
           <Select id="dash-categoria" labelText="Categoria" hideLabel size="md" value={categoria} onChange={(e) => setCategoria(e.target.value)}>
             <SelectItem value={TODAS} text="Todas as categorias" />
             {categorias.map((c) => (
@@ -342,7 +386,7 @@ function TabelaPedidos({ pedidos, abrir }: { pedidos: LinhaPedido[]; abrir: (id:
                     </CarbonLink>
                     {p.simulado ? <SeloSimulado /> : null}
                   </span>
-                  {p.setor ? <span className={s.apoio}>{p.setor}</span> : null}
+                  <span className={s.apoio}>{[p.comprador ?? SEM_COMPRADOR, p.setor].filter(Boolean).join(", ")}</span>
                 </TableCell>
                 <TableCell>{p.categorias.length ? p.categorias.join(", ") : <span className={s.apoio}>—</span>}</TableCell>
                 <TableCell className={s.numero}>{brl(p.mediaMapa)}</TableCell>
@@ -353,6 +397,42 @@ function TabelaPedidos({ pedidos, abrir }: { pedidos: LinhaPedido[]; abrir: (id:
               </TableRow>
             );
           })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+// ---------- Por comprador ----------
+
+type LinhaComprador = { comprador: string; requisicoes: number; fechados: number; gasto: number; saving: number; savingPct: number | null };
+
+function TabelaCompradores({ linhas, escolhido, aoClicar }: { linhas: LinhaComprador[]; escolhido: string; aoClicar: (comprador: string) => void }) {
+  if (!linhas.length) return <EstadoVazio compacto titulo="Nenhuma requisição nestes filtros." />;
+  return (
+    <div className={s.tabela}>
+      <Table size="md" aria-label="Gasto e economia por comprador">
+        <TableHead>
+          <TableRow>
+            <TableHeader>Comprador</TableHeader>
+            <TableHeader>Requisições</TableHeader>
+            <TableHeader>Pedidos concluídos</TableHeader>
+            <TableHeader>Valor gasto</TableHeader>
+            <TableHeader>Saving</TableHeader>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {linhas.map((l) => (
+            <TableRow key={l.comprador} className={s.linhaClicavel} isSelected={escolhido === l.comprador} onClick={() => aoClicar(l.comprador)}>
+              <TableCell>{l.comprador}</TableCell>
+              <TableCell className={s.numero}>{l.requisicoes}</TableCell>
+              <TableCell className={s.numero}>{l.fechados}</TableCell>
+              <TableCell className={s.numero}>{l.fechados ? brl(l.gasto) : "—"}</TableCell>
+              <TableCell className={`${s.numero} ${l.saving >= 0.01 ? s.positivo : ""}`}>
+                {l.fechados ? `${brl(l.saving)}${l.savingPct !== null ? ` (${pct(l.savingPct)})` : ""}` : "—"}
+              </TableCell>
+            </TableRow>
+          ))}
         </TableBody>
       </Table>
     </div>

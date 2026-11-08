@@ -129,7 +129,7 @@ export function Entrar() {
         <aside className={`cds--g100 ${s.painel}`} aria-label="O que o Kotala faz">
           <div className={s.painelMiolo}>
             <img src="/logo-branco.svg" alt="Kotala" className={s.logo} />
-            <p className={s.promessa}>Da mensagem da obra à compra aprovada.</p>
+            <p className={s.promessa}>Do pedido em uma mensagem à compra aprovada.</p>
             <ul className={s.passos}>
               {PASSOS.map(({ icone: Icone, titulo, texto }) => (
                 <li key={titulo} className={s.passo}>

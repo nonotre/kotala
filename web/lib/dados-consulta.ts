@@ -2,7 +2,7 @@
 // Só leitura, como lib/dados.ts. Tudo sai serializável (datas em texto ISO),
 // para ir direto às telas de cliente.
 
-import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "../../src/nucleo/db/cliente.ts";
 import {
   contato,
@@ -367,7 +367,8 @@ export async function itensDaBase(): Promise<ItemDaBase[]> {
   const refs = await db
     .select()
     .from(referenciaPreco)
-    .where(and(eq(referenciaPreco.aceita, true), ne(referenciaPreco.disponivel, false)))
+    // Disponibilidade nula é "não sabemos" e conta como disponível (`<> false` descartaria o nulo).
+    .where(and(eq(referenciaPreco.aceita, true), or(isNull(referenciaPreco.disponivel), eq(referenciaPreco.disponivel, true))))
     .orderBy(desc(referenciaPreco.coletadoEm));
 
   const grupos = new Map<string, ItemDaBase>();

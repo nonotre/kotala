@@ -21,7 +21,7 @@ const VAZIO: Valores = { apelido: "", endereco: "", cep: "", janela: "", restric
 
 function validar(v: Valores): Erros {
   const erros: Erros = {};
-  if (!v.apelido.trim()) erros.apelido = "Diga como a obra é chamada.";
+  if (!v.apelido.trim()) erros.apelido = "Diga como o local é chamado.";
   if (!v.endereco.trim()) erros.endereco = "Falta o endereço, com número e cidade.";
   if (!cepValido(v.cep)) erros.cep = "Digite os 8 números do CEP, como 00000-000.";
   return erros;
@@ -75,7 +75,7 @@ function FormLocal({ inicial, editando, aoSalvar, aoFechar }: PropsForm) {
         <TextInput
           id="local-apelido"
           labelText="Nome do local"
-          placeholder="Obra Delta"
+          placeholder="Depósito Centro"
           value={v.apelido}
           invalid={!!erros.apelido}
           invalidText={erros.apelido}

@@ -6,6 +6,7 @@ import { dias, quantidade } from "@/lib/formato";
 import { AbasPedido } from "./AbasPedido";
 import { FaixaProximoPasso } from "./FaixaProximoPasso";
 import { ProgressoPedido } from "./ProgressoPedido";
+import { TrocarResponsavel } from "./TrocarResponsavel";
 import { abasDoPedido, ESTADO_PEDIDO, progressoDoPedido, proximoPasso } from "./textos";
 import s from "./pedido.module.scss";
 
@@ -24,12 +25,12 @@ export function textoPrazo(p: DadosPedido["pedido"]) {
   return p.prazoTexto ? `${p.prazoTexto}${p.prazoMaxDias !== null ? ` (${dias(p.prazoMaxDias)})` : ""}` : null;
 }
 
-/** `Em andamento · Entrega: Obra Alfa · Setor: Obras · Prazo: até sexta (5 dias) · Obra parada`. */
+/** `Em andamento · Responsável: Ana Trocar · Entrega: Sede · Setor: Manutenção · Prazo: até sexta (5 dias) · Urgente`. */
 function ContextoPedido({ p, dono }: { p: DadosPedido["pedido"]; dono: string | null }) {
   const prazo = textoPrazo(p);
   return (
     <>
-      {ESTADO_PEDIDO[p.estado]} · {dono ? `De ${dono}` : "Sem dono"} · {textoEntrega(p)}
+      {ESTADO_PEDIDO[p.estado]} · <TrocarResponsavel pedidoId={p.id} responsavelId={p.responsavelId} dono={dono} /> · {textoEntrega(p)}
       {p.setor ? ` · Setor: ${p.setor}` : ""}
       {prazo ? ` · Prazo: ${prazo}` : ""}
       {p.urgencia !== "normal" ? (

@@ -26,8 +26,14 @@ export type { Comparacao, Linha };
 
 const hora = (d: Date) => d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
 
-/** Frente 2: dono do pedido, o usuário ligado ao contato que pediu. Null quando o contato não tem usuário. */
-const donoDoPedido = sql<string | null>`(select u.nome from contato c join usuario u on u.id = c.usuario_id where c.id = ${pedido.compradorId})`;
+/**
+ * Dono do pedido: o responsável escolhido na tela (`pedido.responsavel_id`); sem ele, o usuário
+ * ligado ao contato que pediu (Frente 2). Null quando nenhum dos dois existe.
+ */
+export const donoDoPedido = sql<string | null>`coalesce(
+  (select u.nome from usuario u where u.id = ${pedido.responsavelId}),
+  (select u.nome from contato c join usuario u on u.id = c.usuario_id where c.id = ${pedido.compradorId})
+)`;
 
 export type Etiqueta = { texto: string; tipo: "atencao" | "info" | "ok" | "alerta" | "urgente" };
 

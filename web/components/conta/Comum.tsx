@@ -12,6 +12,7 @@ const CONTEXTO = {
   visao: "Onde você recebe, onde fatura e quem acessa a conta.",
   enderecos: "O local que recebe e o endereço de faturamento ficam separados.",
   empresas: "As empresas em que você compra e quem acessa cada uma.",
+  regras: "As regras de compra em vigor, para consulta. Mudam no .env do servidor.",
 };
 
 /** Selo curto de demonstração, para o cabeçalho e a entrada. */
@@ -23,7 +24,7 @@ export function SeloDemonstracao() {
   );
 }
 
-/** Cabeçalho comum às três abas: o título fica parado, e só a aba e a frase mudam. */
+/** Cabeçalho comum às abas: o título fica parado, e só a aba e a frase mudam. As regras são reais, sem o selo de demonstração. */
 export function CabecalhoConta({ ativa, lado }: { ativa: keyof typeof CONTEXTO; lado?: ReactNode }) {
   return (
     <CabecalhoPagina
@@ -31,7 +32,7 @@ export function CabecalhoConta({ ativa, lado }: { ativa: keyof typeof CONTEXTO; 
       contexto={CONTEXTO[ativa]}
       lado={
         <span className={s.lado}>
-          <SeloDemonstracao />
+          {ativa === "regras" ? null : <SeloDemonstracao />}
           {lado}
         </span>
       }
@@ -43,6 +44,7 @@ export function CabecalhoConta({ ativa, lado }: { ativa: keyof typeof CONTEXTO; 
             { id: "visao", rotulo: "Visão geral", href: "/configuracoes" },
             { id: "enderecos", rotulo: "Endereços", href: "/configuracoes/enderecos" },
             { id: "empresas", rotulo: "Empresas", href: "/configuracoes/empresas" },
+            { id: "regras", rotulo: "Regras de compra", href: "/configuracoes/regras" },
           ]}
         />
       }
