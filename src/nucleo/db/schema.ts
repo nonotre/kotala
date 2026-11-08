@@ -106,6 +106,9 @@ export const usuario = pgTable("usuario", {
   papel: papelUsuarioEnum("papel").notNull().default("comprador"),
   /** Empresa em que a pessoa trabalha agora (E4, seletor no cabeçalho). Tipo uuid sem referência: a tabela vem depois neste arquivo. */
   empresaId: uuid("empresa_id"),
+  /** Código curto para ligar o Telegram à conta (/vincular CODIGO); some ao ser usado ou ao vencer. */
+  codigoVinculo: text("codigo_vinculo").unique(),
+  codigoVinculoExpiraEm: timestamp("codigo_vinculo_expira_em", { withTimezone: true }),
   criadoEm: criadoEm(),
 });
 

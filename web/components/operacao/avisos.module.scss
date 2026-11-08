@@ -204,6 +204,12 @@
   max-inline-size: 100%;
 }
 
+// Meus ou de todos, no cabeçalho: duas opções curtas.
+.deQuem {
+  inline-size: calc(2 * #{spacing.$spacing-11});
+  max-inline-size: 100%;
+}
+
 .semResultado {
   @include type.type-style('body-compact-01');
 

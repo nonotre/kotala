@@ -12,10 +12,11 @@ export type DadosQuadro = {
   avisos: AvisoSerial[];
 };
 
-export async function dadosDoQuadro(mostrarCanceladas: boolean): Promise<DadosQuadro> {
-  const bruto = await quadro(mostrarCanceladas);
+/** `donoId` ("Só os meus"): só os cards e os avisos das cotações dessa pessoa. */
+export async function dadosDoQuadro(mostrarCanceladas: boolean, donoId?: string | null): Promise<DadosQuadro> {
+  const bruto = await quadro(mostrarCanceladas, donoId);
   const ids = COLUNAS.flatMap((c) => bruto[c].map((x) => x.itemId));
-  const [extras, avisos] = await Promise.all([extrasDosItens(ids), avisosComContexto()]);
+  const [extras, avisos] = await Promise.all([extrasDosItens(ids), avisosComContexto(donoId)]);
 
   const colunas = Object.fromEntries(
     COLUNAS.map((c) => [
@@ -42,6 +43,6 @@ export async function dadosDoQuadro(mostrarCanceladas: boolean): Promise<DadosQu
 }
 
 /** Só o "Precisa de você", para a vista em lista, que não monta o quadro. */
-export async function avisosQuePedemAcao(): Promise<AvisoSerial[]> {
-  return (await avisosComContexto()).filter((a) => pedeAcao(a.tipo));
+export async function avisosQuePedemAcao(donoId?: string | null): Promise<AvisoSerial[]> {
+  return (await avisosComContexto(donoId)).filter((a) => pedeAcao(a.tipo));
 }

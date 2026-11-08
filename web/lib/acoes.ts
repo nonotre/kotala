@@ -3,10 +3,16 @@
 // passar pela mesma receber() do Telegram. A tela não roda agente nenhum.
 
 import { revalidatePath } from "next/cache";
+import { enderecoWebDoUsuario } from "../../src/contas.ts";
+import { usuarioDaSessao } from "./sessao-servidor.ts";
 
 type Resultado = { ok: boolean; erro?: string };
 
+const SEM_SESSAO: Resultado = { ok: false, erro: "Entre de novo para continuar." };
+
+/** Toda ação pede alguém entrado (sessão do cookie), além da proteção das rotas no proxy. */
 async function chamar(rota: string, corpo: unknown): Promise<Resultado> {
+  if (!(await usuarioDaSessao())) return SEM_SESSAO;
   const url = process.env.API_INTERNA_URL ?? "http://127.0.0.1:3301";
   const token = process.env.API_INTERNA_TOKEN;
   if (!token) return { ok: false, erro: "As telas estão só de leitura: falta API_INTERNA_TOKEN." };
@@ -34,8 +40,13 @@ export async function tocarBotao(dado: string): Promise<Resultado> {
 
 export type AnexoChat = { nome: string; mediaType: string; base64: string };
 
+/** Só nas conversas do site da própria pessoa: o endereço tem de ser de um contato web dela. */
 export async function enviarChat(endereco: string, texto: string, botao?: string, anexos?: AnexoChat[]): Promise<Resultado> {
-  return chamar("/chat", { endereco, texto, botao, anexos });
+  const u = await usuarioDaSessao();
+  if (!u) return SEM_SESSAO;
+  if (!(await enderecoWebDoUsuario(String(endereco), u.id))) return { ok: false, erro: "Esta conversa não é da sua conta." };
+  // A API interna confere de novo com o usuário (defesa em profundidade).
+  return chamar("/chat", { endereco, texto, botao, anexos, usuarioId: u.id });
 }
 
 /** Lista de bloqueio e homologação do fornecedor. */

@@ -6,7 +6,6 @@
 import { InlineNotification, Link as CarbonLink, Modal, Select, SelectItem } from "@carbon/react";
 import { useEffect, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
-import { useSessao } from "@/components/conta/sessao";
 import { listarPessoas, trocarResponsavel, type Pessoa } from "@/lib/equipe";
 
 /** Valor do Select para "volta ao padrão" (quem fez o pedido). */
@@ -15,7 +14,6 @@ const PADRAO = "";
 type Props = { pedidoId: number; responsavelId: string | null; dono: string | null };
 
 export function TrocarResponsavel({ pedidoId, responsavelId, dono, semRotulo = false }: Props & { semRotulo?: boolean }) {
-  const sessao = useSessao();
   const [aberto, setAberto] = useState(false);
   const [pessoas, setPessoas] = useState<Pessoa[] | null>(null);
   const [escolha, setEscolha] = useState(responsavelId ?? PADRAO);
@@ -37,7 +35,7 @@ export function TrocarResponsavel({ pedidoId, responsavelId, dono, semRotulo = f
   const salvar = () =>
     iniciar(async () => {
       setErro(null);
-      const r = await trocarResponsavel(pedidoId, escolha || null, sessao?.id ?? null);
+      const r = await trocarResponsavel(pedidoId, escolha || null);
       if (!r.ok) setErro(r.erro ?? "Não deu certo.");
       else setAberto(false);
     });

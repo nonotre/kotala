@@ -6,6 +6,7 @@ import { autoRetry } from "@grammyjs/auto-retry";
 import { run, sequentialize, type RunnerHandle } from "@grammyjs/runner";
 import { Api, Bot, GrammyError, InlineKeyboard, InputFile, type Context } from "grammy";
 import { existsSync } from "node:fs";
+import { lerComandoVincular, vincularTelegram } from "../contas.ts";
 import { conferirDado, tecladoAposClique } from "../fluxo/componentes/botoes.ts";
 import { htmlParaTexto } from "../texto.ts";
 import { receber, type AdaptadorCanal, type Anexo, type Botao, type MensagemEntrada } from "../nucleo/mensagens/index.ts";
@@ -107,6 +108,22 @@ export function montarTeclado(botoes: Botao[]): InlineKeyboard {
   return teclado;
 }
 
+/** O comando /vincular: só o bot do comprador liga o chat à conta (o dono dos pedidos sai dele). */
+async function respostaDoVincular(papel: Papel, ctx: Context, codigo: string): Promise<string> {
+  if (papel !== "comprador") return "Para ligar o seu Telegram à conta, mande o código ao bot do comprador.";
+  if (!codigo || !ctx.chat) return "Mande o código junto, assim: /vincular CODIGO. O código está nas telas do Kotala, em Configurações.";
+  const nome = [ctx.from?.first_name, ctx.from?.last_name].filter(Boolean).join(" ") || undefined;
+  try {
+    const r = await vincularTelegram({ endereco: enderecoDe(papel, ctx.chat.id), nome, codigo });
+    return r.ok
+      ? `Pronto: este Telegram está ligado à conta de ${r.nome}. Os pedidos que fizer aqui aparecem com o seu nome nas telas.`
+      : "Código inválido ou vencido. Gere outro nas telas do Kotala, em Configurações, e mande de novo.";
+  } catch (erro) {
+    console.error(`[telegram:${papel}] vincular`, erro);
+    return "Não consegui ligar agora. Tente de novo em instantes.";
+  }
+}
+
 const ehErroDeHtml = (e: unknown) => e instanceof GrammyError && e.error_code === 400 && /parse entities|can't parse/i.test(e.description);
 const naoMudou = (e: unknown) => e instanceof GrammyError && /message is not modified/i.test(e.description);
 
@@ -162,6 +179,13 @@ export function criarBot(token: string, papel: Papel) {
 
   bot.on("message", async (ctx) => {
     const texto = ctx.message.text ?? ctx.message.caption ?? "";
+    // /vincular CODIGO: liga este chat à conta das telas. Responde aqui mesmo e não entra em receber():
+    // o código não vai para o histórico nem para a IA.
+    const codigo = lerComandoVincular(texto);
+    if (codigo !== null) {
+      await ctx.reply(await respostaDoVincular(papel, ctx, codigo)).catch((e) => console.error(`[telegram:${papel}] vincular`, e));
+      return;
+    }
     const convite = texto.startsWith("/start ") ? texto.slice(7).trim() : undefined;
     await entregar(ctx, { idExterno: String(ctx.message.message_id), texto, anexos: anexosDe(ctx), convite });
   });

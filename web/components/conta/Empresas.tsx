@@ -1,13 +1,14 @@
 "use client";
+// Empresas compradoras (E4), no banco (empresa). A empresa em uso é a de quem entrou (usuario.empresa_id),
+// a mesma do seletor no topo; ela define os locais de entrega e o faturamento.
 
 import {
   Button,
   Column,
+  InlineNotification,
   Layer,
   Modal,
   RadioTile,
-  Select,
-  SelectItem,
   Stack,
   Table,
   TableBody,
@@ -15,134 +16,176 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  Tag,
   TextInput,
   TileGroup,
 } from "@carbon/react";
-import { UserFollow } from "@carbon/react/icons";
-import { useEffect, useRef, useState, type SyntheticEvent } from "react";
+import { Add, Edit } from "@carbon/react/icons";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Bloco } from "@/components/Bloco";
 import { CorpoPagina, GradePagina, Pagina } from "@/components/Pagina";
-import { AvisoDemonstracao, AvisoFeito, CabecalhoConta, plural, useFeito } from "./Comum";
-import { CONTA_EXEMPLO, EMPRESAS, PAPEIS, emailDeExemplo, useConta } from "./demo";
+import { salvarEmpresa, trocarEmpresaAtiva, type ContaCompleta, type Empresa } from "@/lib/contas";
+import { AvisoErro, AvisoFeito, CabecalhoConta, cepValido, daEmpresaAtiva, formatarCep, ouAConfirmar, plural, useFeito } from "./Comum";
 import s from "./conta.module.scss";
 
-type PropsConvite = {
-  nomeEmpresa: string;
-  /** Quem já é usuário ou já foi convidado nesta empresa. */
-  emailsComAcesso: string[];
-  aoEnviar: (email: string, papel: string) => void;
-  aoFechar: () => void;
-};
+type Valores = { nome: string; cnpj: string; razaoSocial: string; enderecoFaturamento: string; cepFaturamento: string };
+type Erros = Partial<Record<keyof Valores, string>>;
+const VAZIO: Valores = { nome: "", cnpj: "", razaoSocial: "", enderecoFaturamento: "", cepFaturamento: "" };
 
-/** Convite de demonstração: nada é enviado, e só aceita e-mail fictício. */
-function ModalConvite({ nomeEmpresa, emailsComAcesso, aoEnviar, aoFechar }: PropsConvite) {
-  const [email, setEmail] = useState("");
-  const [papel, setPapel] = useState(PAPEIS[0]);
-  const [erro, setErro] = useState("");
+function validar(v: Valores): Erros {
+  const erros: Erros = {};
+  if (!v.nome.trim()) erros.nome = "Diga o nome da empresa.";
+  if (v.cepFaturamento && !cepValido(v.cepFaturamento)) erros.cepFaturamento = "Digite os 8 números do CEP, como 00000-000.";
+  return erros;
+}
 
-  function enviar(evento: SyntheticEvent<HTMLElement>) {
-    // Enviado pelo Enter, o foco volta ao botão de convidar: sem isto, o mesmo Enter o aciona e o modal reabre.
-    evento.preventDefault();
-    const limpo = email.trim();
-    const problema = !emailDeExemplo(limpo)
-      ? "Na demonstração, use um e-mail terminado em .exemplo."
-      : emailsComAcesso.some((e) => e.toLowerCase() === limpo.toLowerCase())
-        ? "Este e-mail já tem acesso a esta empresa."
-        : "";
-    if (problema) {
-      setErro(problema);
-      document.getElementById("convite-email")?.focus();
+const valoresDe = (e: Empresa): Valores => ({
+  nome: e.nome,
+  cnpj: e.cnpj ?? "",
+  razaoSocial: e.razaoSocial ?? "",
+  enderecoFaturamento: e.enderecoFaturamento ?? "",
+  cepFaturamento: e.cepFaturamento ?? "",
+});
+
+type PropsForm = { inicial: Valores; editando: boolean; salvando: boolean; erroServidor: string | null; aoSalvar: (v: Valores) => void; aoFechar: () => void };
+
+/** Nova empresa ou correção dos dados de faturamento. */
+function FormEmpresa({ inicial, editando, salvando, erroServidor, aoSalvar, aoFechar }: PropsForm) {
+  const [v, setV] = useState<Valores>(inicial);
+  const [erros, setErros] = useState<Erros>({});
+
+  function salvar() {
+    if (salvando) return;
+    const novos = validar(v);
+    setErros(novos);
+    const primeiro = (Object.keys(VAZIO) as (keyof Valores)[]).find((k) => novos[k]);
+    if (primeiro) {
+      document.getElementById(`empresa-${primeiro}`)?.focus();
       return;
     }
-    aoEnviar(limpo, papel);
+    aoSalvar(v);
+  }
+
+  function mudar(campo: keyof Valores, valor: string) {
+    setV((atual) => ({ ...atual, [campo]: valor }));
+    if (erros[campo]) setErros((atual) => ({ ...atual, [campo]: undefined }));
   }
 
   return (
     <Modal
       open
       size="sm"
-      modalLabel={nomeEmpresa}
-      modalHeading="Convidar usuário"
-      primaryButtonText="Convidar"
+      modalLabel="Empresas"
+      modalHeading={editando ? "Corrigir dados da empresa" : "Adicionar empresa"}
+      primaryButtonText={salvando ? "Salvando…" : "Salvar empresa"}
+      primaryButtonDisabled={salvando}
       secondaryButtonText="Cancelar"
       closeButtonLabel="Fechar"
       preventCloseOnClickOutside
       shouldSubmitOnEnter
-      selectorPrimaryFocus="#convite-email"
+      selectorPrimaryFocus="#empresa-nome"
       onRequestClose={aoFechar}
-      onRequestSubmit={enviar}
+      onRequestSubmit={salvar}
     >
       <Stack gap={5}>
+        {erroServidor ? <InlineNotification kind="error" lowContrast hideCloseButton title={erroServidor} /> : null}
+        <TextInput id="empresa-nome" labelText="Nome" placeholder="Filial Centro" value={v.nome} invalid={!!erros.nome} invalidText={erros.nome} onChange={(e) => mudar("nome", e.target.value)} />
+        <TextInput id="empresa-razaoSocial" labelText="Razão social (opcional)" value={v.razaoSocial} onChange={(e) => mudar("razaoSocial", e.target.value)} />
+        <TextInput id="empresa-cnpj" labelText="CNPJ (opcional)" placeholder="00.000.000/0001-00" value={v.cnpj} onChange={(e) => mudar("cnpj", e.target.value)} />
         <TextInput
-          id="convite-email"
-          labelText="E-mail"
-          placeholder="nome@empresa.exemplo"
-          helperText="Demonstração: nenhum convite é enviado."
-          value={email}
-          invalid={!!erro}
-          invalidText={erro}
-          onChange={(e) => {
-            setEmail(e.target.value);
-            setErro("");
-          }}
+          id="empresa-enderecoFaturamento"
+          labelText="Endereço de faturamento (opcional)"
+          helperText="Não vira destino: o destino é o local de entrega."
+          value={v.enderecoFaturamento}
+          onChange={(e) => mudar("enderecoFaturamento", e.target.value)}
         />
-        <Select id="convite-papel" labelText="Papel" value={papel} onChange={(e) => setPapel(e.target.value)}>
-          {PAPEIS.map((p) => (
-            <SelectItem key={p} value={p} text={p} />
-          ))}
-        </Select>
+        <TextInput
+          id="empresa-cepFaturamento"
+          labelText="CEP do faturamento (opcional)"
+          placeholder="00000-000"
+          inputMode="numeric"
+          value={v.cepFaturamento}
+          invalid={!!erros.cepFaturamento}
+          invalidText={erros.cepFaturamento}
+          onChange={(e) => mudar("cepFaturamento", formatarCep(e.target.value))}
+        />
       </Stack>
     </Modal>
   );
 }
 
-export function Empresas() {
-  const { empresa, convites, todosConvites, todosLocais, trocarEmpresa, convidar } = useConta();
-  const [convidando, setConvidando] = useState(false);
+const PAPEL: Record<string, string> = { comprador: "Comprador", gestor: "Gestor de compras" };
+
+export function Empresas({ conta }: { conta: ContaCompleta }) {
+  const { empresa, pessoas } = daEmpresaAtiva(conta);
+  const [form, setForm] = useState<{ empresa: Empresa | null } | null>(null);
+  const [erroForm, setErroForm] = useState<string | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
   const { feito, confirmar, limpar } = useFeito();
-  const botaoConvidar = useRef<HTMLButtonElement>(null);
+  const [ocupado, iniciar] = useTransition();
+  const botaoNovo = useRef<HTMLButtonElement>(null);
   const estavaAberto = useRef(false);
 
-  // Fechado de qualquer jeito, o foco volta ao botão. O modal é montado só quando abre.
+  // Fechado de qualquer jeito, o foco volta ao botão de adicionar. O modal é montado só quando abre.
   useEffect(() => {
-    if (estavaAberto.current && !convidando) botaoConvidar.current?.focus();
-    estavaAberto.current = convidando;
-  }, [convidando]);
+    if (estavaAberto.current && !form) botaoNovo.current?.focus();
+    estavaAberto.current = !!form;
+  }, [form]);
 
   function locaisDe(id: string) {
-    const locais = todosLocais.filter((l) => l.empresaId === id);
+    const locais = conta.locais.filter((l) => l.empresaId === id);
     return locais.length ? locais.map((l) => l.apelido).join(", ") : "Nenhum local de entrega ainda";
+  }
+
+  function trocar(id: string) {
+    if (id === empresa.id) return;
+    iniciar(async () => {
+      limpar();
+      setErro(null);
+      const r = await trocarEmpresaAtiva(id).catch(() => ({ ok: false as const, erro: "Não deu para trocar a empresa agora." }));
+      if (!r.ok) return setErro(r.erro);
+      confirmar(`Agora você compra por ${conta.empresas.find((e) => e.id === id)?.nome ?? "outra empresa"}.`, "Os pedidos sem destino vão para o local padrão dela.");
+    });
+  }
+
+  function salvar(v: Valores) {
+    const editando = form?.empresa ?? null;
+    iniciar(async () => {
+      setErroForm(null);
+      const r = await salvarEmpresa(v, editando?.id).catch(() => ({ ok: false as const, erro: "Não deu para salvar agora. Tente de novo." }));
+      if (!r.ok) return setErroForm(r.erro);
+      confirmar(editando ? `Dados de ${r.empresa.nome} corrigidos.` : `${r.empresa.nome} entrou na lista.`, editando ? undefined : "Escolha-a acima para comprar por ela.");
+      setForm(null);
+    });
   }
 
   return (
     <Pagina>
-      <CabecalhoConta ativa="empresas" />
+      <CabecalhoConta
+        ativa="empresas"
+        lado={
+          <span className={s.acaoTopo}>
+            <Button ref={botaoNovo} kind="tertiary" renderIcon={Add} onClick={() => setForm({ empresa: null })}>
+              Adicionar empresa
+            </Button>
+          </span>
+        }
+      />
       <CorpoPagina>
-        <AvisoDemonstracao />
         <AvisoFeito feito={feito} aoFechar={limpar} />
+        <AvisoErro erro={erro} aoFechar={() => setErro(null)} />
         <GradePagina>
           <Column sm={4} md={8} lg={16}>
-            <Bloco titulo="Em qual empresa você compra" descricao="A empresa em uso define os endereços e o faturamento.">
-              <TileGroup
-                legend="Empresa em uso"
-                name="empresa"
-                valueSelected={empresa.id}
-                onChange={(v) => {
-                  trocarEmpresa(String(v));
-                  limpar();
-                }}
-                className={s.empresas}
-              >
-                {EMPRESAS.map((e) => {
-                  const pessoas = e.usuarios.length + todosConvites.filter((c) => c.empresaId === e.id).length;
+            <Bloco titulo="Em qual empresa você compra" descricao="A empresa em uso define os endereços e o faturamento. Também dá para trocar pelo botão da conta, no topo.">
+              <TileGroup legend="Empresa em uso" name="empresa" valueSelected={empresa.id} onChange={(v) => trocar(String(v))} className={s.empresas}>
+                {conta.empresas.map((e) => {
+                  const n = conta.pessoas.filter((p) => p.empresaId === e.id).length;
                   return (
-                    <RadioTile key={e.id} id={`empresa-${e.id}`} value={e.id}>
+                    <RadioTile key={e.id} id={`empresa-${e.id}`} value={e.id} disabled={ocupado}>
                       <span className={s.empresa}>
                         <span className={s.empresaNome}>{e.nome}</span>
-                        <span className={s.apoioLinha}>CNPJ (fictício) {e.cnpj}</span>
+                        <span className={s.apoioLinha}>CNPJ {ouAConfirmar(e.cnpj)}</span>
                         <span className={s.apoioLinha}>{locaisDe(e.id)}</span>
-                        <span className={s.empresaContagem}>{plural(pessoas, "usuário", "usuários")}</span>
+                        <span className={s.empresaContagem}>{plural(n, "pessoa compra por ela", "pessoas compram por ela")}</span>
                       </span>
                     </RadioTile>
                   );
@@ -155,66 +198,60 @@ export function Empresas() {
         <GradePagina>
           <Column sm={4} md={8} lg={16}>
             <Bloco
-              titulo={`Quem acessa ${empresa.nome}`}
+              titulo={`Quem compra por ${empresa.nome}`}
+              descricao="Cada pessoa entra com a própria conta e escolhe a empresa em uso."
               acao={
-                <Button ref={botaoConvidar} kind="tertiary" size="md" renderIcon={UserFollow} onClick={() => setConvidando(true)}>
-                  Convidar usuário
+                <Button kind="ghost" size="md" renderIcon={Edit} onClick={() => setForm({ empresa })}>
+                  Corrigir dados da empresa
                 </Button>
               }
             >
-              <Layer level={0}>
-                <Table aria-label={`Usuários de ${empresa.nome}`} size="lg" className={s.tabelaUsuarios}>
-                  <TableHead>
-                    <TableRow>
-                      <TableHeader>Pessoa</TableHeader>
-                      <TableHeader>Papel</TableHeader>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {empresa.usuarios.map((u) => (
-                      <TableRow key={u.email}>
-                        <TableCell>
-                          <span className={s.pessoa}>
-                            <span className={s.pessoaNome}>
-                              {u.nome}
-                              {u.email === CONTA_EXEMPLO.email ? <span className={s.voce}>você</span> : null}
+              {pessoas.length ? (
+                <Layer level={0}>
+                  <Table aria-label={`Quem compra por ${empresa.nome}`} size="lg" className={s.tabelaUsuarios}>
+                    <TableHead>
+                      <TableRow>
+                        <TableHeader>Pessoa</TableHeader>
+                        <TableHeader>Papel</TableHeader>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {pessoas.map((p) => (
+                        <TableRow key={p.id}>
+                          <TableCell>
+                            <span className={s.pessoa}>
+                              <span className={s.pessoaNome}>
+                                {p.nome}
+                                {p.voce ? <span className={s.voce}>você</span> : null}
+                              </span>
+                              <span className={s.apoioLinha}>{p.login}</span>
                             </span>
-                            <span className={s.apoioLinha}>{u.email}</span>
-                          </span>
-                        </TableCell>
-                        <TableCell>{u.papel}</TableCell>
-                      </TableRow>
-                    ))}
-                    {convites.map((c) => (
-                      <TableRow key={c.email}>
-                        <TableCell>
-                          <span className={s.pessoa}>
-                            <span className={s.pessoaNome}>{c.email}</span>
-                            <Tag as="span" type="gray" size="sm">
-                              convite de demonstração
-                            </Tag>
-                          </span>
-                        </TableCell>
-                        <TableCell>{c.papel}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </Layer>
+                          </TableCell>
+                          <TableCell>{PAPEL[p.papel] ?? p.papel}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </Layer>
+              ) : (
+                <p className={s.apoioLinha}>Ninguém compra por esta empresa ainda.</p>
+              )}
             </Bloco>
           </Column>
         </GradePagina>
       </CorpoPagina>
 
-      {convidando ? (
-        <ModalConvite
-          nomeEmpresa={empresa.nome}
-          emailsComAcesso={[...empresa.usuarios.map((u) => u.email), ...convites.map((c) => c.email)]}
-          aoFechar={() => setConvidando(false)}
-          aoEnviar={(email, papel) => {
-            convidar({ email, papel, empresaId: empresa.id });
-            setConvidando(false);
-            confirmar("Convite registrado na demonstração.", "Nada foi enviado.");
+      {form ? (
+        <FormEmpresa
+          key={form.empresa?.id ?? "nova"}
+          inicial={form.empresa ? valoresDe(form.empresa) : VAZIO}
+          editando={!!form.empresa}
+          salvando={ocupado}
+          erroServidor={erroForm}
+          aoSalvar={salvar}
+          aoFechar={() => {
+            setForm(null);
+            setErroForm(null);
           }}
         />
       ) : null}

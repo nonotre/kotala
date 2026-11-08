@@ -45,6 +45,7 @@ import {
 } from "../nucleo/orquestrador/index.ts";
 import { registrar } from "../nucleo/registro.ts";
 import { EMPRESA, JANELA_CONFIRMACAO_MIN } from "../config.ts";
+import { localPadraoDoContato, TEXTO_OFERTA_VINCULAR } from "../contas.ts";
 import { aoBotaoDoComprador } from "./decisao.ts";
 import { atributosFaltando, exemplosDoNicho } from "../dominio/categorias.ts";
 import { dias, fmtNumero, MOTIVOS_CANCELAMENTO, nomePedido, quantidade, quantidadeDe, type MotivoCancelamento } from "../texto.ts";
@@ -65,11 +66,18 @@ export const AVISO_PRIVACIDADE =
 
 const TEXTO_FALHA_IA = "Não consegui ler seu pedido agora. Pode mandar de novo em instantes?";
 
+type ContatoDoAviso = Pick<MensagemRecebida["contato"], "id" | "avisoPrivacidadeEm"> & Partial<Pick<MensagemRecebida["contato"], "canal" | "usuarioId">>;
+
+/** O aviso do primeiro contato. Telegram sem conta ligada ganha a linha do /vincular. */
+export function textoAvisoPrivacidade(contato: Partial<Pick<MensagemRecebida["contato"], "canal" | "usuarioId">>): string {
+  return contato.canal === "telegram" && !contato.usuarioId ? `${AVISO_PRIVACIDADE}\n\n${TEXTO_OFERTA_VINCULAR}` : AVISO_PRIVACIDADE;
+}
+
 /** Mostra o aviso curto de privacidade (R5) uma vez por contato. Também usado pelo Assistente. */
-export async function garantirAvisoPrivacidade(contato: Pick<MensagemRecebida["contato"], "id" | "avisoPrivacidadeEm">) {
+export async function garantirAvisoPrivacidade(contato: ContatoDoAviso) {
   if (contato.avisoPrivacidadeEm) return;
   await db.update(tContato).set({ avisoPrivacidadeEm: new Date() }).where(eq(tContato.id, contato.id));
-  await enviar(contato.id, AVISO_PRIVACIDADE);
+  await enviar(contato.id, textoAvisoPrivacidade(contato));
 }
 
 /** Resposta de uma consulta ("como está o pedido 12?"): texto e, se houver, botões do fluxo. */
@@ -324,11 +332,14 @@ export async function interpretarEResponder(pedidoId: number, opcoes: { lida?: L
     if (i.hostil && !p.correcoes.length) await registrarCaso({ contatoId: p.compradorId, classe: "ofensa", acao: "Mensagem hostil junto com o pedido.", motivo: "Seguiu o pedido sem comentar.", texto: textoNovo, pedidoId });
   }
 
-  // Sem destino: usa o endereço padrão da empresa, em vez de perguntar.
+  // Sem destino: usa o local padrão da empresa de quem pediu (Configurações › Endereços), em vez de
+  // perguntar. Sem conta, sem empresa ou sem local, fica o endereço de EMPRESA, como antes.
   if (i.ehPedido && i.modoEntrega !== "retirada" && !i.destino) {
-    i.destino = EMPRESA.enderecoEntrega;
-    i.cep = EMPRESA.cep;
-    i.suposicoes = [...i.suposicoes, "Entrega no endereço padrão da empresa"];
+    const local = await localPadraoDoContato(p.compradorId);
+    i.destino = local?.endereco ?? EMPRESA.enderecoEntrega;
+    i.cep = local ? local.cep : EMPRESA.cep;
+    if (local?.janelaRecebimento && !i.janelaRecebimento) i.janelaRecebimento = local.janelaRecebimento;
+    i.suposicoes = [...i.suposicoes, local ? `Entrega no local padrão (${local.apelido})` : "Entrega no endereço padrão da empresa"];
     i.faltando = i.faltando.filter((f) => !/destino|endere[cç]o|entreg|onde|local|cep/i.test(f));
   }
   if (!i.ehPedido) {
@@ -1003,10 +1014,7 @@ export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: Me
 
   let texto = entrada.texto.trim();
   if (INICIO.test(texto)) {
-    if (!contato.avisoPrivacidadeEm) {
-      await db.update(tContato).set({ avisoPrivacidadeEm: new Date() }).where(eq(tContato.id, contato.id));
-      await enviar(contato.id, AVISO_PRIVACIDADE);
-    }
+    await garantirAvisoPrivacidade(contato);
     await enviar(contato.id, textoBoasVindas());
     return;
   }

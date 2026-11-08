@@ -1,15 +1,29 @@
 "use client";
+// Locais de entrega da empresa em uso (E8), no banco (local_entrega). O padrão é o destino quando o
+// pedido não diz onde entregar. As ações (lib/contas.ts) agem sempre na empresa ativa de quem entrou.
 
-import { Button, Column, Modal, OverflowMenu, OverflowMenuItem, Stack, TextInput, preview__IconIndicator as IconIndicator } from "@carbon/react";
-import { Add } from "@carbon/react/icons";
+import {
+  Button,
+  Column,
+  InlineNotification,
+  Link as CarbonLink,
+  Modal,
+  OverflowMenu,
+  OverflowMenuItem,
+  Stack,
+  TextInput,
+  preview__IconIndicator as IconIndicator,
+} from "@carbon/react";
+import { Add, ArrowRight } from "@carbon/react/icons";
+import NextLink from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { BarraAcao } from "@/components/BarraAcao";
 import { Bloco } from "@/components/Bloco";
 import { EstadoVazio } from "@/components/EstadoVazio";
 import { CorpoPagina, GradePagina, Pagina } from "@/components/Pagina";
-import { AvisoDemonstracao, AvisoFeito, CabecalhoConta, Campo, useFeito } from "./Comum";
-import { cepValido, formatarCep, useConta, type LocalEntrega } from "./demo";
+import { removerLocal, salvarLocal, tornarLocalPadrao, type ContaCompleta, type Local } from "@/lib/contas";
+import { AvisoErro, AvisoFeito, CabecalhoConta, Campo, cepValido, daEmpresaAtiva, formatarCep, ouAConfirmar, useFeito } from "./Comum";
 import s from "./conta.module.scss";
 
 // ---------- Formulário ----------
@@ -30,16 +44,20 @@ function validar(v: Valores): Erros {
 type PropsForm = {
   inicial: Valores;
   editando: boolean;
+  salvando: boolean;
+  /** O servidor recusou: o formulário fica aberto, com o que foi digitado. */
+  erroServidor: string | null;
   aoSalvar: (v: Valores) => void;
   aoFechar: () => void;
 };
 
 /** Novo local ou correção. O erro fica no campo, e nada do que foi digitado se perde. */
-function FormLocal({ inicial, editando, aoSalvar, aoFechar }: PropsForm) {
+function FormLocal({ inicial, editando, salvando, erroServidor, aoSalvar, aoFechar }: PropsForm) {
   const [v, setV] = useState<Valores>(inicial);
   const [erros, setErros] = useState<Erros>({});
 
   function salvar() {
+    if (salvando) return;
     const novos = validar(v);
     setErros(novos);
     const primeiro = (Object.keys(VAZIO) as (keyof Valores)[]).find((k) => novos[k]);
@@ -61,7 +79,8 @@ function FormLocal({ inicial, editando, aoSalvar, aoFechar }: PropsForm) {
       size="sm"
       modalLabel="Onde você recebe"
       modalHeading={editando ? "Corrigir local" : "Adicionar local"}
-      primaryButtonText="Salvar local"
+      primaryButtonText={salvando ? "Salvando…" : "Salvar local"}
+      primaryButtonDisabled={salvando}
       secondaryButtonText="Cancelar"
       closeButtonLabel="Fechar"
       preventCloseOnClickOutside
@@ -71,7 +90,7 @@ function FormLocal({ inicial, editando, aoSalvar, aoFechar }: PropsForm) {
       onRequestSubmit={salvar}
     >
       <Stack gap={5}>
-        <p className={s.apoioLinha}>Demonstração: o local fica só neste navegador.</p>
+        {erroServidor ? <InlineNotification kind="error" lowContrast hideCloseButton title={erroServidor} /> : null}
         <TextInput
           id="local-apelido"
           labelText="Nome do local"
@@ -108,6 +127,7 @@ function FormLocal({ inicial, editando, aoSalvar, aoFechar }: PropsForm) {
           id="local-janela"
           labelText="Janela de recebimento (opcional)"
           placeholder="Segunda a sexta, das 7h às 16h"
+          helperText="Vai junto no pedido quando ele não diz outra."
           value={v.janela}
           onChange={(e) => mudar("janela", e.target.value)}
         />
@@ -136,7 +156,9 @@ function botaoAbrirVisivel() {
   return Array.from(botoes).find((b) => b.getClientRects().length > 0);
 }
 
-function LinhaLocal({ local, aoTornarPadrao, aoCorrigir, aoRemover }: { local: LocalEntrega; aoTornarPadrao: () => void; aoCorrigir: () => void; aoRemover: () => void }) {
+type PropsLinha = { local: Local; ocupado: boolean; aoTornarPadrao: () => void; aoCorrigir: () => void; aoRemover: () => void };
+
+function LinhaLocal({ local, ocupado, aoTornarPadrao, aoCorrigir, aoRemover }: PropsLinha) {
   return (
     <li className={s.local}>
       <div className={s.localNome}>
@@ -144,11 +166,11 @@ function LinhaLocal({ local, aoTornarPadrao, aoCorrigir, aoRemover }: { local: L
           {local.apelido}
         </h3>
         <p className={s.localEndereco}>{local.endereco}</p>
-        <p className={s.localEndereco}>CEP {local.cep}</p>
+        <p className={s.localEndereco}>{local.cep ? `CEP ${local.cep}` : "CEP a confirmar"}</p>
       </div>
       <dl className={s.camposLocal}>
-        <Campo rotulo="Janela de recebimento">{local.janela || "A confirmar"}</Campo>
-        <Campo rotulo="Restrição de acesso">{local.restricao || "Sem restrição anotada"}</Campo>
+        <Campo rotulo="Janela de recebimento">{ouAConfirmar(local.janelaRecebimento)}</Campo>
+        <Campo rotulo="Restrição de acesso">{ouAConfirmar(local.restricao, "Sem restrição anotada")}</Campo>
       </dl>
       {/* A marca de padrão ocupa a vaga do botão: trocar o padrão não muda a altura de nenhuma linha. */}
       <div className={s.localAcoes}>
@@ -157,7 +179,7 @@ function LinhaLocal({ local, aoTornarPadrao, aoCorrigir, aoRemover }: { local: L
             <IconIndicator kind="succeeded" label="Padrão" size={16} />
           </span>
         ) : (
-          <Button kind="ghost" size="sm" className={s.tornarPadrao} onClick={aoTornarPadrao}>
+          <Button kind="ghost" size="sm" className={s.tornarPadrao} onClick={aoTornarPadrao} disabled={ocupado}>
             Tornar padrão
           </Button>
         )}
@@ -176,14 +198,17 @@ function frase(n: number) {
   return n === 1 ? "1 local pode receber as suas compras" : `${n} locais podem receber as suas compras`;
 }
 
-type Formulario = { local: LocalEntrega | null };
+type Formulario = { local: Local | null };
 
-export function Enderecos() {
-  const { empresa, locais, guardarLocais } = useConta();
+export function Enderecos({ conta }: { conta: ContaCompleta }) {
+  const { empresa, locais } = daEmpresaAtiva(conta);
   const [form, setForm] = useState<Formulario | null>(null);
-  const [removendo, setRemovendo] = useState<LocalEntrega | null>(null);
+  const [erroForm, setErroForm] = useState<string | null>(null);
+  const [removendo, setRemovendo] = useState<Local | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
   const { feito, confirmar, limpar } = useFeito();
   const [foco, setFoco] = useState<string | null>(null);
+  const [ocupado, iniciar] = useTransition();
   const params = useSearchParams();
   const pedidoNovo = useRef(params.get("novo") === "1");
 
@@ -194,48 +219,59 @@ export function Enderecos() {
     setForm({ local: null });
   }, []);
 
-  // O botão clicado pode ter sumido: o foco vai para a linha que mudou.
+  // O botão clicado pode ter sumido: o foco vai para a linha que mudou. A lista nova chega do servidor
+  // depois da ação, então tenta de novo quando ela muda.
   useEffect(() => {
     if (!foco) return;
-    (foco === BOTAO_ABRIR ? botaoAbrirVisivel() : document.getElementById(foco))?.focus();
+    const alvo = foco === BOTAO_ABRIR ? botaoAbrirVisivel() : document.getElementById(foco);
+    if (!alvo) return;
+    alvo.focus();
     setFoco(null);
-  }, [foco]);
+  }, [foco, locais]);
 
   function salvar(v: Valores) {
-    const base = { apelido: v.apelido.trim(), endereco: v.endereco.trim(), cep: v.cep, janela: v.janela.trim(), restricao: v.restricao.trim() };
-    if (form?.local) {
-      const id = form.local.id;
-      guardarLocais(locais.map((l) => (l.id === id ? { ...l, ...base } : l)));
-      confirmar(`${base.apelido} corrigido.`);
-      setFoco(idTitulo(id));
-    } else {
-      const novo: LocalEntrega = { ...base, id: `l-${crypto.randomUUID()}`, empresaId: empresa.id, padrao: locais.length === 0 };
-      guardarLocais([...locais, novo]);
-      confirmar(`${base.apelido} entrou na lista.`);
-      setFoco(idTitulo(novo.id));
-    }
-    setForm(null);
+    const dados = { apelido: v.apelido, endereco: v.endereco, cep: v.cep, janelaRecebimento: v.janela || null, restricao: v.restricao || null };
+    const id = form?.local?.id;
+    iniciar(async () => {
+      setErroForm(null);
+      const r = await salvarLocal(dados, id).catch(() => ({ ok: false as const, erro: "Não deu para salvar agora. Tente de novo." }));
+      if (!r.ok) {
+        setErroForm(r.erro);
+        return;
+      }
+      confirmar(id ? `${r.local.apelido} corrigido.` : `${r.local.apelido} entrou na lista.`, r.local.padrao && !id ? "É o local padrão da empresa." : undefined);
+      setFoco(idTitulo(r.local.id));
+      setForm(null);
+    });
   }
 
-  function tornarPadrao(id: string) {
-    guardarLocais(locais.map((l) => ({ ...l, padrao: l.id === id })));
-    confirmar(`${locais.find((l) => l.id === id)?.apelido ?? "O local"} agora é o local padrão.`);
-    setFoco(idMarca(id));
+  function tornarPadrao(l: Local) {
+    iniciar(async () => {
+      setErro(null);
+      const r = await tornarLocalPadrao(l.id).catch(() => ({ ok: false as const, erro: "Não deu para trocar o padrão agora." }));
+      if (!r.ok) return setErro(r.erro);
+      confirmar(`${l.apelido} agora é o local padrão.`, "Os pedidos sem destino vão para ele.");
+      setFoco(idMarca(l.id));
+    });
   }
 
-  function remover(local: LocalEntrega) {
-    const restantes = locais.filter((l) => l.id !== local.id);
-    const herdeiro = local.padrao ? restantes[0] : undefined;
-    guardarLocais(restantes.map((l) => (herdeiro && l.id === herdeiro.id ? { ...l, padrao: true } : l)));
-    confirmar(`${local.apelido} saiu da lista.`, herdeiro ? `${herdeiro.apelido} passou a ser o padrão.` : undefined);
-    setFoco(restantes[0] ? idTitulo(restantes[0].id) : BOTAO_ABRIR);
-    setRemovendo(null);
+  function remover(local: Local) {
+    iniciar(async () => {
+      setErro(null);
+      const r = await removerLocal(local.id).catch(() => ({ ok: false as const, erro: "Não deu para remover agora." }));
+      setRemovendo(null);
+      if (!r.ok) return setErro(r.erro);
+      confirmar(`${local.apelido} saiu da lista.`, r.herdeiro ? `${r.herdeiro.apelido} passou a ser o padrão.` : undefined);
+      const restantes = locais.filter((l) => l.id !== local.id);
+      setFoco(restantes[0] ? idTitulo(restantes[0].id) : BOTAO_ABRIR);
+    });
   }
 
   /** Desistiu: o foco volta a quem abriu. */
   function fecharForm() {
     setFoco(form?.local ? idMenu(form.local.id) : BOTAO_ABRIR);
     setForm(null);
+    setErroForm(null);
   }
 
   function fecharRemover() {
@@ -260,20 +296,28 @@ export function Enderecos() {
         }
       />
       <CorpoPagina>
-        <AvisoDemonstracao />
         <AvisoFeito feito={feito} aoFechar={limpar} />
+        <AvisoErro erro={erro} aoFechar={() => setErro(null)} />
         <GradePagina>
           <Column sm={4} md={8} lg={16}>
-            <Bloco titulo={locais.length ? frase(locais.length) : "Onde você pode receber"} descricao="O local que recebe é o destino da cotação. O frete é calculado até o CEP dele.">
+            <Bloco
+              titulo={locais.length ? frase(locais.length) : "Onde você pode receber"}
+              descricao={`Locais de ${empresa.nome}. O padrão é o destino da cotação quando o pedido não diz outro; o frete é calculado até o CEP dele.`}
+            >
               {locais.length ? (
                 <ul className={s.locais}>
                   {locais.map((l) => (
-                    <LinhaLocal key={l.id} local={l} aoTornarPadrao={() => tornarPadrao(l.id)} aoCorrigir={() => setForm({ local: l })} aoRemover={() => setRemovendo(l)} />
+                    <LinhaLocal key={l.id} local={l} ocupado={ocupado} aoTornarPadrao={() => tornarPadrao(l)} aoCorrigir={() => setForm({ local: l })} aoRemover={() => setRemovendo(l)} />
                   ))}
                 </ul>
               ) : (
                 <div data-abrir-local>
-                  <EstadoVazio headingAs="h3" titulo="Nenhum local de entrega ainda." proximoPasso={`Cadastre onde ${empresa.nome} recebe.`} acao={{ texto: "Adicionar local", aoClicar: abrirNovo }} />
+                  <EstadoVazio
+                    headingAs="h3"
+                    titulo="Nenhum local de entrega ainda."
+                    proximoPasso={`Cadastre onde ${empresa.nome} recebe. Até lá, vale o endereço padrão do servidor.`}
+                    acao={{ texto: "Adicionar local", aoClicar: abrirNovo }}
+                  />
                 </div>
               )}
             </Bloco>
@@ -282,12 +326,20 @@ export function Enderecos() {
 
         <GradePagina>
           <Column sm={4} md={8} lg={16}>
-            <Bloco titulo="Endereço de faturamento" descricao="Fica separado do local que recebe. Não vira destino nem entra na conta do frete.">
+            <Bloco
+              titulo="Endereço de faturamento"
+              descricao="Fica separado do local que recebe. Não vira destino nem entra na conta do frete."
+              acao={
+                <CarbonLink as={NextLink} href="/configuracoes/empresas" renderIcon={ArrowRight}>
+                  Corrigir em Empresas
+                </CarbonLink>
+              }
+            >
               <dl className={s.camposFatura}>
-                <Campo rotulo="Razão social">{empresa.faturamento.razaoSocial}</Campo>
-                <Campo rotulo="Endereço">{empresa.faturamento.endereco}</Campo>
-                <Campo rotulo="CEP">{empresa.faturamento.cep}</Campo>
-                <Campo rotulo="CNPJ (fictício)">{empresa.cnpj}</Campo>
+                <Campo rotulo="Razão social">{ouAConfirmar(empresa.razaoSocial)}</Campo>
+                <Campo rotulo="Endereço">{ouAConfirmar(empresa.enderecoFaturamento)}</Campo>
+                <Campo rotulo="CEP">{ouAConfirmar(empresa.cepFaturamento)}</Campo>
+                <Campo rotulo="CNPJ">{ouAConfirmar(empresa.cnpj)}</Campo>
               </dl>
             </Bloco>
           </Column>
@@ -305,8 +357,14 @@ export function Enderecos() {
       {form ? (
         <FormLocal
           key={form.local?.id ?? "novo"}
-          inicial={form.local ? { apelido: form.local.apelido, endereco: form.local.endereco, cep: form.local.cep, janela: form.local.janela, restricao: form.local.restricao } : VAZIO}
+          inicial={
+            form.local
+              ? { apelido: form.local.apelido, endereco: form.local.endereco, cep: form.local.cep ?? "", janela: form.local.janelaRecebimento ?? "", restricao: form.local.restricao ?? "" }
+              : VAZIO
+          }
           editando={!!form.local}
+          salvando={ocupado}
+          erroServidor={erroForm}
           aoSalvar={salvar}
           aoFechar={fecharForm}
         />
@@ -319,14 +377,15 @@ export function Enderecos() {
           size="xs"
           modalLabel="Onde você recebe"
           modalHeading={`Remover ${removendo.apelido}?`}
-          primaryButtonText="Sim, remover"
+          primaryButtonText={ocupado ? "Removendo…" : "Sim, remover"}
+          primaryButtonDisabled={ocupado}
           secondaryButtonText="Cancelar"
           closeButtonLabel="Fechar"
           preventCloseOnClickOutside
           onRequestClose={fecharRemover}
           onRequestSubmit={() => remover(removendo)}
         >
-          <p>Se precisar dele de novo, é só cadastrar.</p>
+          <p>{removendo.padrao ? "É o local padrão: o mais antigo que sobrar passa a ser o padrão." : "Se precisar dele de novo, é só cadastrar."}</p>
         </Modal>
       ) : null}
     </Pagina>

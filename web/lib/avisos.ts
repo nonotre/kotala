@@ -1,9 +1,10 @@
 // Avisos: o que espera o comprador agora. Tirado do estado real dos pedidos e itens,
 // sem tabela própria. O sino mostra a contagem; /avisos mostra a lista.
 
-import { and, desc, eq, gt, inArray, ne, or } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, ne, or, sql, type SQL } from "drizzle-orm";
 import { db } from "../../src/nucleo/db/cliente.ts";
 import { itemPedido, pedido } from "../../src/nucleo/db/schema.ts";
+import { donoIdDoPedido } from "./dados.ts";
 
 export type TipoAviso = "confirmar_pedido" | "decidir" | "recompra" | "sem_proposta";
 
@@ -22,8 +23,19 @@ export type Aviso = {
 /** Sem proposta válida conta como aviso só por este tempo; depois, fica no histórico do pedido. */
 const SEM_PROPOSTA_DIAS = 7;
 
-export async function listarAvisos(): Promise<Aviso[]> {
-  const pedidos = await db.select().from(pedido).where(eq(pedido.estado, "aguardando_confirmacao")).orderBy(desc(pedido.atualizadoEm));
+/** Só as cotações de que a pessoa é dona ou responsável (mesma regra de donoDoPedido); sem id, todas. */
+export function soDoDono(usuarioId?: string | null): SQL | undefined {
+  return usuarioId ? sql`${donoIdDoPedido} = ${usuarioId}` : undefined;
+}
+
+/** `usuarioId`: só os avisos das cotações dessa pessoa (dona ou responsável). Sem ele, os de todos. */
+export async function listarAvisos(usuarioId?: string | null): Promise<Aviso[]> {
+  const doDono = soDoDono(usuarioId);
+  const pedidos = await db
+    .select()
+    .from(pedido)
+    .where(and(eq(pedido.estado, "aguardando_confirmacao"), doDono))
+    .orderBy(desc(pedido.atualizadoEm));
   const desde = new Date(Date.now() - SEM_PROPOSTA_DIAS * 86_400_000);
   const itens = await db
     .select({ item: itemPedido, urgencia: pedido.urgencia })
@@ -32,6 +44,7 @@ export async function listarAvisos(): Promise<Aviso[]> {
     .where(
       and(
         ne(pedido.estado, "cancelado"),
+        doDono,
         // A janela de 7 dias vale só para "sem proposta": decisão e recompra esperam o comprador o tempo que for.
         or(inArray(itemPedido.estado, ["aguardando_decisao", "aguardando_recompra"]), and(eq(itemPedido.estado, "sem_proposta"), gt(itemPedido.atualizadoEm, desde))),
       ),
@@ -62,7 +75,7 @@ export async function listarAvisos(): Promise<Aviso[]> {
   return lista.sort((a, b) => peso(a.urgencia) - peso(b.urgencia) || b.em.getTime() - a.em.getTime());
 }
 
-/** Só o que pede ação: sem proposta é informativo e não conta no sino. */
-export async function contarAvisos(): Promise<number> {
-  return (await listarAvisos()).filter((a) => a.tipo !== "sem_proposta").length;
+/** Só o que pede ação: sem proposta é informativo e não conta no sino. O sino conta os da pessoa. */
+export async function contarAvisos(usuarioId?: string | null): Promise<number> {
+  return (await listarAvisos(usuarioId)).filter((a) => a.tipo !== "sem_proposta").length;
 }

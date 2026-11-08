@@ -1,41 +1,28 @@
 "use client";
-// Peças comuns às telas da conta (Configurações): cabeçalho com abas, aviso de demonstração, campos e confirmação.
+// Peças comuns às telas da conta (Configurações): cabeçalho com abas, campos, confirmação e formato do CEP.
+// Empresas e locais de entrega moram no banco (Bloco 4); as ações estão em lib/contas.ts.
 
-import { Button, Column, InlineNotification, Tag } from "@carbon/react";
+import { Column, InlineNotification } from "@carbon/react";
 import { useCallback, useRef, useState, type ReactNode } from "react";
 import { Abas } from "@/components/Abas";
 import { CabecalhoPagina, GradePagina } from "@/components/Pagina";
-import { AVISO_DEMONSTRACAO, recomecarDemonstracao } from "./demo";
+import type { ContaCompleta } from "@/lib/contas";
 import s from "./conta.module.scss";
 
 const CONTEXTO = {
   visao: "Onde você recebe, onde fatura e quem acessa a conta.",
   enderecos: "O local que recebe e o endereço de faturamento ficam separados.",
-  empresas: "As empresas em que você compra e quem acessa cada uma.",
+  empresas: "As empresas em que você compra e quem trabalha em cada uma.",
   regras: "As regras de compra em vigor, para consulta. Mudam no .env do servidor.",
 };
 
-/** Selo curto de demonstração, para o cabeçalho e a entrada. */
-export function SeloDemonstracao() {
-  return (
-    <Tag type="warm-gray" size="md" title="Nada desta tela é salvo no servidor">
-      {AVISO_DEMONSTRACAO}
-    </Tag>
-  );
-}
-
-/** Cabeçalho comum às abas: o título fica parado, e só a aba e a frase mudam. As regras são reais, sem o selo de demonstração. */
+/** Cabeçalho comum às abas: o título fica parado, e só a aba e a frase mudam. */
 export function CabecalhoConta({ ativa, lado }: { ativa: keyof typeof CONTEXTO; lado?: ReactNode }) {
   return (
     <CabecalhoPagina
       titulo="Configurações"
       contexto={CONTEXTO[ativa]}
-      lado={
-        <span className={s.lado}>
-          {ativa === "regras" ? null : <SeloDemonstracao />}
-          {lado}
-        </span>
-      }
+      lado={lado ? <span className={s.lado}>{lado}</span> : undefined}
       abas={
         <Abas
           ativa={ativa}
@@ -52,25 +39,13 @@ export function CabecalhoConta({ ativa, lado }: { ativa: keyof typeof CONTEXTO; 
   );
 }
 
-/** No topo do corpo, em todo tamanho de tela: deixa claro que a conta ainda é demonstração. */
-export function AvisoDemonstracao() {
+/** Erro de uma ação (o servidor recusou ou caiu), no topo do corpo, como a confirmação. */
+export function AvisoErro({ erro, aoFechar }: { erro: string | null; aoFechar: () => void }) {
+  if (!erro) return null;
   return (
     <GradePagina>
       <Column sm={4} md={8} lg={16}>
-        <InlineNotification
-          kind="info"
-          lowContrast
-          hideCloseButton
-          title={`${AVISO_DEMONSTRACAO}.`}
-          subtitle="A sua conta já fica no servidor; empresas e endereços ainda não. O que você mudar aqui fica só neste navegador, com dados fictícios."
-          statusIconDescription="Informação"
-          className={s.avisoLargo}
-        />
-        <div className={s.recomecar}>
-          <Button kind="ghost" size="sm" onClick={recomecarDemonstracao}>
-            Recomeçar a demonstração
-          </Button>
-        </div>
+        <InlineNotification kind="error" lowContrast title={erro} statusIconDescription="Erro" onCloseButtonClick={aoFechar} className={s.avisoLargo} />
       </Column>
     </GradePagina>
   );
@@ -113,7 +88,7 @@ export function AvisoFeito({ feito, aoFechar }: { feito: Feito | null; aoFechar:
           kind="success"
           lowContrast
           title={feito.titulo}
-          subtitle={feito.texto ? `${feito.texto} Só neste navegador.` : "Só neste navegador."}
+          subtitle={feito.texto}
           statusIconDescription="Feito"
           onCloseButtonClick={aoFechar}
           className={s.avisoLargo}
@@ -125,4 +100,31 @@ export function AvisoFeito({ feito, aoFechar }: { feito: Feito | null; aoFechar:
 
 export function plural(n: number, um: string, varios: string) {
   return `${n} ${n === 1 ? um : varios}`;
+}
+
+// ---------- A empresa em uso ----------
+
+/** A empresa ativa de quem entrou, os locais dela e quem trabalha nela. */
+export function daEmpresaAtiva(conta: ContaCompleta) {
+  const empresa = conta.empresas.find((e) => e.id === conta.empresaAtiva) ?? conta.empresas[0]!;
+  return {
+    empresa,
+    locais: conta.locais.filter((l) => l.empresaId === empresa.id),
+    pessoas: conta.pessoas.filter((p) => p.empresaId === empresa.id),
+  };
+}
+
+/** Campo opcional vazio: diz que falta, em vez de deixar o espaço em branco. */
+export const ouAConfirmar = (v: string | null | undefined, texto = "A confirmar") => v || texto;
+
+// ---------- Formato ----------
+
+/** 8 números, com o hífen. */
+export function formatarCep(texto: string): string {
+  const n = texto.replace(/\D/g, "").slice(0, 8);
+  return n.length > 5 ? `${n.slice(0, 5)}-${n.slice(5)}` : n;
+}
+
+export function cepValido(cep: string): boolean {
+  return /^\d{5}-\d{3}$/.test(cep);
 }

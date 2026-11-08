@@ -1,9 +1,10 @@
 "use client";
-// Frente 2: quem está entrado neste navegador. Fica só no localStorage, sem cookie:
-// o login não tem pretensão de segurança, serve para separar as pessoas e os chats.
+// Frente 2: quem está entrado, como a interface mostra (nome, usuário). É só um espelho no localStorage:
+// a autoridade é a sessão do cookie httpOnly, conferida no servidor (proxy.ts e lib/sessao-servidor.ts).
+// A casca acerta o espelho com o que o servidor diz a cada carga (Casca.tsx).
 
 import { useSyncExternalStore } from "react";
-import type { Sessao } from "@/lib/contas";
+import { sair as sairNoServidor, type Sessao } from "@/lib/contas";
 
 const CHAVE = "kotala-sessao";
 const ouvintes = new Set<() => void>();
@@ -57,13 +58,22 @@ export function guardarSessao(s: Sessao) {
   avisar();
 }
 
-export function sair() {
+/** Só o espelho: o servidor já disse que não há sessão. */
+export function esquecerSessao() {
   try {
     localStorage.removeItem(CHAVE);
   } catch {
     // Nada a apagar.
   }
   avisar();
+}
+
+/** Sair de verdade: apaga a sessão no servidor (e o cookie), o espelho, e recarrega na entrada. */
+export async function sair() {
+  await sairNoServidor().catch(() => {});
+  esquecerSessao();
+  // Carga inteira: nada da conta anterior fica na memória da página.
+  window.location.assign("/login");
 }
 
 /** `undefined` no servidor e antes da hidratação; `null` quando ninguém entrou. */

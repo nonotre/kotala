@@ -34,7 +34,8 @@ function useLista(usuarioId: string | null) {
       if (!primeira && document.visibilityState !== "visible") return;
       primeira = false;
       try {
-        const r = await fetch(`/api/conversas?usuario=${encodeURIComponent(usuarioId)}`, { cache: "no-store" });
+        // O servidor responde com as conversas da sessão do cookie; o id daqui só troca a lista quando a conta muda.
+        const r = await fetch("/api/conversas", { cache: "no-store" });
         if (!r.ok) throw new Error(String(r.status));
         const nova = (await r.json()) as ConversasDoUsuario;
         if (vivo) {
@@ -114,7 +115,7 @@ export function TelaConversas({ linkTelegram }: { linkTelegram: string | null })
     iniciar(async () => {
       if (!sessao) return;
       setErro(null);
-      const r = await novaConversa(sessao.id);
+      const r = await novaConversa();
       if (!r.ok) {
         setErro(r.erro);
         return;

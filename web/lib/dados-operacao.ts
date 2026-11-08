@@ -7,7 +7,7 @@ import { and, asc, desc, eq, gt, inArray, or, sql } from "drizzle-orm";
 import { db } from "../../src/nucleo/db/cliente.ts";
 import { cotacao, evento, fornecedor, itemPedido, mapaCotacao, pedido } from "../../src/nucleo/db/schema.ts";
 import { colunaDoItem, FINAIS_ITEM, type EstadoItem, type EstadoPedido } from "../../src/nucleo/orquestrador/estados.ts";
-import { listarAvisos, type Aviso, type TipoAviso } from "./avisos";
+import { listarAvisos, soDoDono, type Aviso, type TipoAviso } from "./avisos";
 import { listaPedidos, quadro, type Coluna, type Comparacao, type Etiqueta } from "./dados";
 import { VERBO_DO_AVISO } from "../components/operacao/textos";
 
@@ -126,9 +126,9 @@ function propostaDoMapa(i: { estado: EstadoItem; ofertaEscolhidaId: string | nul
 
 // ---------- Avisos ----------
 
-/** Os avisos de lib/avisos.ts com o canal do pedido e o nome do item. */
-export async function avisosComContexto(): Promise<AvisoSerial[]> {
-  const avisos = await listarAvisos();
+/** Os avisos de lib/avisos.ts com o canal do pedido e o nome do item. `usuarioId`: só os das cotações dessa pessoa. */
+export async function avisosComContexto(usuarioId?: string | null): Promise<AvisoSerial[]> {
+  const avisos = await listarAvisos(usuarioId);
   const ids = [...new Set(avisos.map((a) => a.pedidoId))];
   if (!ids.length) return [];
   const pedidos = await db.select({ id: pedido.id, canal: pedido.canalOrigem }).from(pedido).where(inArray(pedido.id, ids));
@@ -148,15 +148,18 @@ export const pedeAcao = (tipo: TipoAviso) => tipo !== "sem_proposta";
 
 export type Acontecido = { chave: string; pedidoId: number; itemId: number; texto: string; item: string; fornecedor: string | null; simulado: boolean; canal: string; em: string; href: string };
 
-/** O que já aconteceu nos últimos dias e não pede nada: compras aprovadas, enviadas, confirmadas e itens cancelados. */
-export async function acontecidosRecentes(dias = 7): Promise<Acontecido[]> {
+/**
+ * O que já aconteceu nos últimos dias e não pede nada: compras aprovadas, enviadas, confirmadas e itens cancelados.
+ * `usuarioId`: só o que aconteceu nas cotações dessa pessoa (dona ou responsável), como os avisos.
+ */
+export async function acontecidosRecentes(dias = 7, usuarioId?: string | null): Promise<Acontecido[]> {
   const desde = new Date(Date.now() - dias * 86_400_000);
   const linhas = await db
     .select({ item: itemPedido, canal: pedido.canalOrigem, fornecedor: fornecedor.nome, origem: fornecedor.origem })
     .from(itemPedido)
     .innerJoin(pedido, eq(pedido.id, itemPedido.pedidoId))
     .leftJoin(fornecedor, eq(fornecedor.id, itemPedido.fornecedorEscolhidoId))
-    .where(and(inArray(itemPedido.estado, ["aprovado", "pedido_enviado", "confirmado", "cancelado"]), gt(itemPedido.atualizadoEm, desde)))
+    .where(and(inArray(itemPedido.estado, ["aprovado", "pedido_enviado", "confirmado", "cancelado"]), gt(itemPedido.atualizadoEm, desde), soDoDono(usuarioId)))
     .orderBy(desc(itemPedido.atualizadoEm))
     .limit(30);
   return linhas.map(({ item, canal, fornecedor: nome, origem }) => {
@@ -201,9 +204,9 @@ const PASSO_DO_ITEM: Record<EstadoItem, string> = {
 
 
 
-/** Todos os pedidos da lista atual (até 100), com etapa, situação, próximo passo e proposta. */
-export async function pedidosOperacao(): Promise<LinhaPedido[]> {
-  const base = await listaPedidos();
+/** Os pedidos da lista atual (até 100), com etapa, situação, próximo passo e proposta. `donoId`: "Só os meus". */
+export async function pedidosOperacao(donoId?: string | null): Promise<LinhaPedido[]> {
+  const base = await listaPedidos(donoId);
   const ids = base.map((p) => p.id);
   if (!ids.length) return [];
   const [pedidos, itens, colunas, avisos] = await Promise.all([

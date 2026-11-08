@@ -6,17 +6,17 @@ import NextLink from "next/link";
 import { Bloco } from "@/components/Bloco";
 import { EstadoVazio } from "@/components/EstadoVazio";
 import { CorpoPagina, GradePagina, Pagina } from "@/components/Pagina";
-import { AvisoDemonstracao, CabecalhoConta, Campo, plural } from "./Comum";
-import { useConta } from "./demo";
+import type { ContaCompleta } from "@/lib/contas";
+import { CabecalhoConta, Campo, daEmpresaAtiva, ouAConfirmar, plural } from "./Comum";
 import { Gestores } from "./Gestores";
 import { SuaConta } from "./SuaConta";
 import s from "./conta.module.scss";
 
 /** Visão geral: o que mais pesa na cotação é onde a compra chega. O resto é consulta. */
-export function VisaoGeral() {
-  const { empresa, locais, convites } = useConta();
+export function VisaoGeral({ conta }: { conta: ContaCompleta }) {
+  const { empresa, locais, pessoas: daEmpresa } = daEmpresaAtiva(conta);
   const padrao = locais.find((l) => l.padrao) ?? locais[0];
-  const pessoas = empresa.usuarios.length + convites.length;
+  const pessoas = daEmpresa.length;
 
   return (
     <Pagina>
@@ -32,7 +32,6 @@ export function VisaoGeral() {
             <Gestores />
           </Column>
         </GradePagina>
-        <AvisoDemonstracao />
         <GradePagina>
           <Column sm={4} md={8} lg={16}>
             <Bloco
@@ -54,9 +53,9 @@ export function VisaoGeral() {
                   </div>
                   <dl className={s.camposQuatro}>
                     <Campo rotulo="Endereço">{padrao.endereco}</Campo>
-                    <Campo rotulo="CEP">{padrao.cep}</Campo>
-                    <Campo rotulo="Janela de recebimento">{padrao.janela || "A confirmar"}</Campo>
-                    <Campo rotulo="Restrição de acesso">{padrao.restricao}</Campo>
+                    <Campo rotulo="CEP">{ouAConfirmar(padrao.cep)}</Campo>
+                    <Campo rotulo="Janela de recebimento">{ouAConfirmar(padrao.janelaRecebimento)}</Campo>
+                    <Campo rotulo="Restrição de acesso">{ouAConfirmar(padrao.restricao, "Sem restrição anotada")}</Campo>
                   </dl>
                 </>
               ) : (
@@ -76,10 +75,10 @@ export function VisaoGeral() {
           <Column sm={4} md={4} lg={8}>
             <Bloco titulo="Faturamento" descricao="Fica separado do local que recebe e não entra na conta do frete.">
               <dl className={s.campos}>
-                <Campo rotulo="Razão social" largo>{empresa.faturamento.razaoSocial}</Campo>
-                <Campo rotulo="Endereço" largo>{empresa.faturamento.endereco}</Campo>
-                <Campo rotulo="CEP">{empresa.faturamento.cep}</Campo>
-                <Campo rotulo="CNPJ (fictício)">{empresa.cnpj}</Campo>
+                <Campo rotulo="Razão social" largo>{ouAConfirmar(empresa.razaoSocial)}</Campo>
+                <Campo rotulo="Endereço" largo>{ouAConfirmar(empresa.enderecoFaturamento)}</Campo>
+                <Campo rotulo="CEP">{ouAConfirmar(empresa.cepFaturamento)}</Campo>
+                <Campo rotulo="CNPJ">{ouAConfirmar(empresa.cnpj)}</Campo>
               </dl>
             </Bloco>
           </Column>
@@ -95,7 +94,7 @@ export function VisaoGeral() {
             >
               <dl className={s.campos}>
                 <Campo rotulo="Empresa em uso" largo>{empresa.nome}</Campo>
-                <Campo rotulo="Quem acessa" largo>{plural(pessoas, "pessoa", "pessoas")}</Campo>
+                <Campo rotulo="Quem compra por ela" largo>{plural(pessoas, "pessoa", "pessoas")}</Campo>
               </dl>
             </Bloco>
           </Column>
