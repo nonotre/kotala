@@ -1,4 +1,6 @@
 // X5: a ferramenta registrar_cotacao do agente de voz chega aqui e vai para o processo dos bots.
+import { cortarTranscricao, respostaDaFerramenta } from "../../../../../src/agentes/voz/sessao.ts";
+
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
@@ -10,11 +12,13 @@ export async function POST(req: Request) {
     const r = await fetch(`${url}/voz/cotacao`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-kotala-token": token },
-      body: JSON.stringify(corpo),
+      // A API interna aceita até 20 kB: a transcrição vai cortada (começo e fim).
+      body: JSON.stringify({ cotacaoId: corpo.cotacaoId, args: corpo.args ?? {}, transcricao: cortarTranscricao(String(corpo.transcricao ?? "")) }),
       signal: AbortSignal.timeout(30_000),
     });
-    return Response.json(await r.json());
+    // Erro do servidor também volta numa resposta que o agente entende (ok + resposta).
+    return Response.json(respostaDaFerramenta(r.ok ? await r.json() : null));
   } catch {
-    return Response.json({ ok: false, resposta: "Não consegui registrar agora. Diga que o comprador retorna e encerre." });
+    return Response.json(respostaDaFerramenta(null));
   }
 }

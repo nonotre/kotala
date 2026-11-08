@@ -758,7 +758,7 @@ async function manteveNoDesconto(
 }
 
 /** Registro do Negociador por resposta ao pedido de desconto (é o que o harness lê para as métricas). */
-async function registrarResultado(m: MarcaNegociacao, fornecedorId: string, ctx: { pedidoId: number; itemPedidoId: number }) {
+export async function registrarResultado(m: MarcaNegociacao, fornecedorId: string, ctx: { pedidoId: number; itemPedidoId: number }) {
   const de = m.produtoAntes ?? null;
   const para = m.produtoDepois ?? null;
   const valores = de !== null && para !== null ? ` de ${formatarBRL(de)} para ${formatarBRL(para)}` : "";
@@ -779,7 +779,7 @@ async function registrarResultado(m: MarcaNegociacao, fornecedorId: string, ctx:
   });
 }
 
-const RESSALVA: Record<AlertaFornecedor, string> = {
+export const RESSALVA: Record<AlertaFornecedor, string> = {
   sem_nota: "Só compramos com nota fiscal. Pode mandar o preço com nota?",
   item_irregular: "Só compramos produto original, com nota e procedência.",
   propina: "Não aceitamos comissão nem vantagem. A escolha segue o mapa de cotação.",
@@ -790,8 +790,8 @@ const RESSALVA: Record<AlertaFornecedor, string> = {
   link_suspeito: "Não abro links nem arquivos desconhecidos. Pode mandar a proposta em texto ou PDF?",
 };
 /** Alertas que impedem a proposta de entrar: o preço não vira proposta limpa. */
-const ALERTAS_BLOQUEANTES: AlertaFornecedor[] = ["sem_nota", "item_irregular", "produto_controlado"];
-const AVISO_COMPRADOR: Record<AlertaFornecedor, string | null> = {
+export const ALERTAS_BLOQUEANTES: AlertaFornecedor[] = ["sem_nota", "item_irregular", "produto_controlado"];
+export const AVISO_COMPRADOR: Record<AlertaFornecedor, string | null> = {
   sem_nota: "ofereceu preço sem nota fiscal. Não registrei como proposta; pedi o preço com nota.",
   item_irregular: "ofereceu produto irregular (réplica, paralelo ou sem procedência). A oferta não entra no mapa.",
   propina: "ofereceu comissão ou vantagem. A proposta fica, marcada; não aceitei nada.",
@@ -801,7 +801,7 @@ const AVISO_COMPRADOR: Record<AlertaFornecedor, string | null> = {
   produto_controlado: null,
   link_suspeito: null,
 };
-const AVISO_GESTOR: AlertaFornecedor[] = ["propina", "combinacao_preco", "produto_controlado"];
+export const AVISO_GESTOR: AlertaFornecedor[] = ["propina", "combinacao_preco", "produto_controlado"];
 
 /**
  * Guardrails do fornecedor: registra e avisa o comprador; nos alertas graves, avisa o gestor

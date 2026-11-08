@@ -10,18 +10,22 @@ const voz = await import("../src/agentes/voz/index.ts");
 
 await migrate(db, { migrationsFolder: "drizzle" });
 const [c] = await db.insert(schema.contato).values({ canal: "web", endereco: `voz-${Date.now()}`, papel: "comprador" }).returning();
-const [p] = await db.insert(schema.pedido).values({ compradorId: c!.id, canalOrigem: "web", textoOriginal: "40 sacos de cimento", destino: "Obra Alfa, São Paulo/SP", cep: "01310-100", prazoTexto: "até quinta", estado: "em_andamento" }).returning();
-const [i] = await db.insert(schema.itemPedido).values({ pedidoId: p!.id, ordem: 1, descricao: "Cimento Portland CP II-E-32", quantidade: "40", unidade: "saco", estado: "cotando" }).returning();
-const [f] = await db.insert(schema.fornecedor).values({ nome: "Depósito Teste da Voz", origem: "simulado" }).returning();
-const [ct] = await db.insert(schema.cotacao).values({ itemPedidoId: i!.id, fornecedorId: f!.id, situacao: "aguardando" }).returning();
+const [p] = await db.insert(schema.pedido).values({ compradorId: c!.id, canalOrigem: "web", textoOriginal: "50 resmas de papel A4", destino: "Rua de Exemplo, 100, São Paulo/SP", cep: "01310-100", prazoTexto: "até quinta", pagamentoPreferido: "pix", estado: "em_andamento" }).returning();
+const [i] = await db.insert(schema.itemPedido).values({ pedidoId: p!.id, ordem: 1, descricao: "Papel sulfite A4 75 g", quantidade: "50", unidade: "resma", estado: "cotando", aceitaSimilar: true, categoria: "Escritório e papelaria", prazoRespostasEm: new Date(Date.now() + 15 * 60_000) }).returning();
+const [f] = await db.insert(schema.fornecedor).values({ nome: "Papelaria Teste da Voz", origem: "simulado" }).returning();
+const [ct] = await db.insert(schema.cotacao).values({ itemPedidoId: i!.id, fornecedorId: f!.id, situacao: "aguardando", enviadaEm: new Date() }).returning();
+// Outra cotação aguardando: a do teste não fecha o item no meio da conversa.
+const [f2] = await db.insert(schema.fornecedor).values({ nome: "Outra Papelaria Teste", origem: "simulado" }).returning();
+await db.insert(schema.cotacao).values({ itemPedidoId: i!.id, fornecedorId: f2!.id, situacao: "aguardando", enviadaEm: new Date() });
 
 const dados = (await voz.dadosDaLigacao(ct!.id))!;
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const falas = [
-  "(a ligação foi atendida) Alô, Depósito Teste, bom dia.",
-  "Tenho sim. O saco sai a trinta e sete e cinquenta.",
-  "O frete fica oitenta reais, entrego em dois dias aí na obra. Pagamento no boleto de vinte e oito dias, a proposta vale sete dias.",
+  "(a ligação foi atendida) Alô, Papelaria Teste, bom dia.",
+  "Tenho sim. Sai a vinte e oito e noventa.",
+  "É cada resma. O frete fica quarenta reais, entrego em dois dias. Pagamento no boleto de vinte e oito dias, a proposta vale sete dias, impostos inclusos.",
   "Isso mesmo, pode registrar.",
+  "Não consigo baixar, o preço é esse.",
 ];
 let transcricao = "";
 let ferramenta: unknown = null;
@@ -64,7 +68,8 @@ await new Promise((r) => setTimeout(r, 4000));
 session.close();
 const [o] = await db.select().from(schema.oferta).where((await import("drizzle-orm")).eq(schema.oferta.cotacaoId, ct!.id));
 console.log("\noferta gravada:", o ? { preco: o.precoUnitario, frete: o.frete, prazo: o.prazoDias, pagamento: o.pagamento, prazoPagamento: o.prazoPagamentoDias, validade: o.validadeDias, entrega: o.entregaNoLocal, formato: o.formato } : "nenhuma");
-const ok = !!o && Number(o.precoUnitario) === 37.5 && Number(o.frete) === 80 && o.prazoDias === 2;
+console.log("extraido:", o ? JSON.stringify({ leituraPreco: (o.extraido as { leituraPreco?: string }).leituraPreco, aConfirmar: (o.extraido as { aConfirmar?: unknown }).aConfirmar, negociacao: (o.extraido as { negociacao?: unknown }).negociacao }) : "-");
+const ok = !!o && Number(o.precoUnitario) === 28.9 && Number(o.frete) === 40 && o.prazoDias === 2;
 console.log(ok ? "\n✔ a conversa virou proposta com os valores certos" : "\n✖ a proposta não saiu como esperado");
 await conexao.end();
 process.exit(ok ? 0 : 1);
