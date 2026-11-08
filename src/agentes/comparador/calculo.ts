@@ -212,8 +212,20 @@ function notaConfianca(o: OfertaComparavel): number {
   return Math.min(100, base + (o.homologado ? 20 : 0) + (o.conhecido ? 10 : 0));
 }
 
-function notaPagamento(dias: number | null): number {
-  return dias === null ? 0 : (Math.min(dias, 30) / 30) * 100;
+/** R13: pagamento antes da entrega (antecipado, sinal, entrada, no pedido). Puro: o negociador usa o mesmo. */
+export function pagamentoAntecipado(pagamento: string | null): boolean {
+  if (!pagamento) return false;
+  return /antecipad|adiantad|\bsinal\b|\bentrada\b|antes d[ae] (entrega|envio|despacho|faturamento|embarque)|no ato do pedido|no pedido|na confirma[cç][aã]o do pedido|no fechamento do pedido|pagamento pr[eé]vio/i.test(pagamento);
+}
+
+/**
+ * R13: o padrão da empresa é à vista no recebimento, então ele e o pagamento a prazo valem o máximo;
+ * antecipado vale zero (é condição a negociar), e não informado também. Antes, à vista valia zero e
+ * só boleto de 30 dias valia o máximo: regra anterior à R13 (achado do simulador, cenário a-vista).
+ */
+function notaPagamento(dias: number | null, pagamento: string | null): number {
+  if (dias === null && !pagamento) return 0;
+  return pagamentoAntecipado(pagamento) ? 0 : 100;
 }
 
 function escalaMenorMelhor(valor: number, todos: number[]): number {
@@ -341,7 +353,8 @@ export function comparar(item: ItemComparado, ofertas: OfertaComparavel[], refer
       );
     }
     if (origemFrete === "informado" && o.online && o.freteAnuncio?.noCep) alertas.push(`Frete do anúncio para o CEP (${textoFreteAnuncio(o.freteAnuncio)}): confirme no carrinho`);
-    if (o.prazoPagamentoDias === 0 && !o.conhecido) alertas.push("Pagamento antecipado com fornecedor novo");
+    // R13: só o antecipado de verdade; "à vista no recebimento" (prazo 0) é o padrão da empresa, não alerta.
+    if (pagamentoAntecipado(o.pagamento) && !o.conhecido) alertas.push("Pagamento antecipado com fornecedor novo");
     if (o.impostosValor === null && !o.impostosNaoInclusos) alertas.push("Não disse se há impostos ou taxas fora do preço");
     if (!retirada && o.entregaNoLocal === null) alertas.push("Não confirmou a entrega no local");
     if (o.validadeDias === null) alertas.push("Sem validade da proposta");
@@ -390,7 +403,7 @@ export function comparar(item: ItemComparado, ofertas: OfertaComparavel[], refer
         prazo: escalaMenorMelhor(l.oferta.prazoDias!, prazos),
         confianca: notaConfianca(l.oferta),
         aderencia: l.oferta.itemExato ? 100 : 70,
-        pagamento: notaPagamento(l.oferta.prazoPagamentoDias),
+        pagamento: notaPagamento(l.oferta.prazoPagamentoDias, l.oferta.pagamento),
       };
       const soma = (Object.keys(pesos) as Criterio[]).reduce((t, c) => t + pesos[c] * criterios[c], 0);
       return { ...l, criterios, nota: umaCasa(soma / somaPesos) };

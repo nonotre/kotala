@@ -24,9 +24,7 @@ export const duasMensagens: Cenario = {
   chave: "duas-mensagens",
   titulo: "Proposta em duas mensagens quase juntas",
   descricao: "O fornecedor manda o preço e, 0,3 s depois, o frete. Um pedido de desconto só, nunca junto do pedido do que falta, e o mapa com o frete e o desconto.",
-  esperadoFalhar:
-    "bug (Frente 4, src/fluxo/fornecedor.ts, processarResposta): a segunda mensagem lê a oferta anterior antes de o Extrator da primeira terminar, " +
-    "não acha proposta, responde \"Não encontrei preço\" e perde o frete; o mapa estima o frete e o desconto nunca é pedido.",
+  // Corrigido na junção do Bloco 4: as mensagens do mesmo fornecedor são tratadas uma de cada vez.
   // A IA real leva ~1,5 s por leitura; com a IA falsa instantânea a corrida não aparece.
   ambiente: { SIM_IA_LATENCIA_MS: "1200" },
   fornecedores: [
@@ -119,9 +117,7 @@ export const pagamentoAVista: Cenario = {
   chave: "a-vista",
   titulo: "À vista no recebimento não vira \"pagamento antecipado\"",
   descricao: "Três propostas no padrão da empresa (à vista, no recebimento) e uma com depósito antecipado. Só a antecipada leva o alerta no mapa.",
-  esperadoFalhar:
-    "bug (Comparador, src/agentes/comparador/calculo.ts): prazoPagamentoDias 0 vira \"Pagamento antecipado com fornecedor novo\", mas o Extrator usa 0 " +
-    "para à vista e para antecipado; o padrão da empresa (R13, à vista no recebimento) sai com alerta em toda proposta de fornecedor novo.",
+  // Corrigido na junção do Bloco 4: só o antecipado de verdade leva o alerta (R13).
   fornecedores: [
     personaDireta("cen-alfa", "Depósito Alfa (cenário)", verdade(32), { atrasoSeg: 1, desconto: recusaDesconto() }),
     personaDireta("cen-beta", "Materiais Beta (cenário)", verdade(30), { atrasoSeg: 1.5, desconto: recusaDesconto() }),

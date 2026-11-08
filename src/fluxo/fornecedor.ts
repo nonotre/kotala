@@ -69,7 +69,24 @@ const PERGUNTA_NOME = "Qual o nome da sua empresa?";
 const SAUDACAO = /^(oi+|ol[aá]|opa|e a[ií]|bom dia|boa tarde|boa noite|tudo bem\??|ok|blz|beleza)[!.\s]*$/i;
 const CONFIRMA = /^(confirmo|confirmado|confirmamos|ok,? confirmo|pode mandar|fechado)[!.\s]*$/i;
 
-export async function aoMensagemDoFornecedor({ contato, mensagemId, entrada }: MensagemRecebida) {
+/**
+ * Mensagens do mesmo fornecedor são tratadas uma de cada vez (fila por contato). Proposta e complemento
+ * mandados quase juntos eram lidos em paralelo: a segunda não achava a proposta da primeira e o
+ * complemento se perdia (achado do simulador, cenário duas-mensagens). Um processo só (os bots).
+ */
+const filasDoFornecedor = new Map<string, Promise<unknown>>();
+
+export function aoMensagemDoFornecedor(m: MensagemRecebida): Promise<void> {
+  const anterior = filasDoFornecedor.get(m.contato.id) ?? Promise.resolve();
+  const esta = anterior.catch(() => undefined).then(() => tratarMensagemDoFornecedor(m));
+  filasDoFornecedor.set(m.contato.id, esta);
+  void esta.finally(() => {
+    if (filasDoFornecedor.get(m.contato.id) === esta) filasDoFornecedor.delete(m.contato.id);
+  });
+  return esta;
+}
+
+async function tratarMensagemDoFornecedor({ contato, mensagemId, entrada }: MensagemRecebida) {
   const texto = entrada.texto.trim();
 
   // Botões do pedido de compra e do cadastro.

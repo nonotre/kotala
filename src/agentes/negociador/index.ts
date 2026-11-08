@@ -14,6 +14,7 @@
 
 import { and, eq, sql } from "drizzle-orm";
 import { formatarBRL, ultimoMapa, type Linha } from "../comparador/index.ts";
+import { pagamentoAntecipado } from "../comparador/calculo.ts";
 import { referenciasDoItem } from "../busca/internet.ts";
 import { db } from "../../nucleo/db/cliente.ts";
 import { evento, historicoCompra, oferta } from "../../nucleo/db/schema.ts";
@@ -234,10 +235,7 @@ export function deveNegociar(s: SituacaoDesconto): { ok: true; janelaAte: Date }
  * R13: o fornecedor pede pagamento antes da entrega (antecipado, sinal, entrada, no pedido).
  * Lido em código no texto da condição de pagamento; "à vista" sozinho não é antecipado.
  */
-export function pagamentoAntecipado(pagamento: string | null): boolean {
-  if (!pagamento) return false;
-  return /antecipad|adiantad|\bsinal\b|\bentrada\b|antes d[ae] (entrega|envio|despacho|faturamento|embarque)|no ato do pedido|no pedido|na confirma[cç][aã]o do pedido|no fechamento do pedido|pagamento pr[eé]vio/i.test(pagamento);
-}
+export { pagamentoAntecipado } from "../comparador/calculo.ts";
 
 /**
  * Alavancas verdadeiras, na ordem de prioridade, no máximo MAX_ALAVANCAS. R13: pagamento

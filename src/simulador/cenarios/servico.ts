@@ -1,6 +1,5 @@
-// Pedido de serviço (mão de obra). No main de hoje o fluxo responde que ainda cota só
-// produtos (src/fluxo/comprador.ts, subtipo "servico"), então o cenário roda marcado como
-// esperado falhar: ele mede o que falta e passa a valer quando o recurso entrar.
+// Pedido de serviço (mão de obra). Desde o Bloco 4, serviço é cotado como produto: item com unidade
+// de serviço, escopo na especificação, cotação aos prestadores e mapa.
 
 import { personaDireta, recusaDesconto, verdade } from "./falas.ts";
 import { estadoDoItem, mensagem } from "./gabarito.ts";
@@ -16,13 +15,17 @@ export const servico: Cenario = {
   chave: "servico",
   titulo: "Pedido de serviço (mão de obra)",
   descricao: "Comprador pede um eletricista. Esperado: o pedido vira item de serviço, vai a prestadores e o mapa sai como o de produto.",
-  esperadoFalhar: "cotação de serviço ainda não existe no main: o fluxo responde \"ainda cotamos só produtos\" (src/fluxo/comprador.ts).",
   fornecedores: [E1, E2, E3],
   passos: [
     {
       diz: TEXTO,
-      // O que o Interpretador de hoje devolve para serviço (instrução da classe "ambiguo", subtipo "servico").
-      interpretacao: { classe: "ambiguo", subtipo: "servico", itens: [], setor: "manutenção" },
+      // O que o Interpretador devolve para serviço desde o Bloco 4: pedido com item de serviço e escopo.
+      interpretacao: {
+        itens: [{ descricao: "Troca da fiação da sala de reuniões", quantidade: 1, unidade: "serviço", especificacao: [{ nome: "Escopo", valor: "trocar a fiação elétrica da sala de reuniões" }] }],
+        setor: "manutenção",
+        prazoTexto: "em 10 dias",
+        prazoDias: 10,
+      },
     },
     { clica: /^Confirmar/, timeoutSeg: 10 },
     { espera: "aguardando_decisao", timeoutSeg: 60 },
