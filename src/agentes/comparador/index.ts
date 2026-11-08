@@ -14,7 +14,11 @@ import { enviar, type Botao } from "../../nucleo/mensagens/index.ts";
 import { aoEntrarItem, avancarItem, TransicaoConcorrente, TransicaoInvalida, type MudancaItem } from "../../nucleo/orquestrador/index.ts";
 import { MAX_AMPLIACOES } from "../../config.ts";
 import type { MarcaNegociacao } from "../negociador/index.ts";
-import { anexoPdfDoMapa } from "./pdf.ts";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { PASTA_ARQUIVOS } from "../../nucleo/arquivos.ts";
+import type { Anexo } from "../../nucleo/db/schema.ts";
+import { entradaPdfDoItem, nomeArquivoMapa, pdfDoMapa } from "./pdf.ts";
 import {
   comparar,
   formatarBRL,
@@ -457,6 +461,23 @@ async function montarMapa(m: MudancaItem) {
   await enviar(p.compradorId, texto, { pedidoId: p.id, itemPedidoId: item.id, botoes: botoesDecisao(item.id, c), tipo: "aviso", ...(pdf ? { anexos: [pdf] } : {}) });
   // Só depois do mapa pronto: a resposta do fornecedor encontra o item esperando a decisão.
   await pedirConfirmacaoDePreco(item.id);
+}
+
+/**
+ * Grava o PDF do último mapa do item em dados/arquivos/mapas e devolve o anexo para
+ * enviar() (caminho local: o Telegram sobe o arquivo, o e-mail lê do disco). Null sem mapa.
+ */
+export async function anexoPdfDoMapa(itemPedidoId: number): Promise<Anexo | null> {
+  const e = await entradaPdfDoItem(itemPedidoId);
+  if (!e) return null;
+  const dados = pdfDoMapa(e);
+  const pasta = join(PASTA_ARQUIVOS(), "mapas");
+  await mkdir(pasta, { recursive: true });
+  const nome = nomeArquivoMapa(e.pedido.id, e.item.id, e.rodada);
+  // Um arquivo por versão do mapa: o mapa refeito na mesma rodada não sobrescreve o anterior.
+  const caminho = join(pasta, `${e.mapaEm.getTime()}-${nome}`);
+  await writeFile(caminho, dados);
+  return { tipo: "pdf", mediaType: "application/pdf", ref: caminho, nome, tamanho: dados.length };
 }
 
 /** Q1: o PDF do mapa vai anexado ao mapa. Se falhar, o mapa segue sem ele (e o rastro diz por quê). */

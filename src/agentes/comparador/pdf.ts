@@ -4,16 +4,13 @@
 // páginas, Helvetica e Helvetica-Bold (WinAnsi, que cobre os acentos do português) e
 // quebra de linha pela largura real das letras.
 //
-// Este módulo é carregado pela tela (rota de download): nada de ler arquivo pelo
-// import.meta.url aqui.
+// Este módulo é carregado pela tela (rota de download): sem acesso a arquivo aqui (nem
+// import.meta.url, nem a pasta de arquivos). Gravar o PDF para anexar fica no comparador.
 
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { and, count, desc, eq } from "drizzle-orm";
 import { EMPRESA } from "../../config.ts";
-import { PASTA_ARQUIVOS } from "../../nucleo/arquivos.ts";
 import { db } from "../../nucleo/db/cliente.ts";
-import { cotacao, itemPedido, mapaCotacao, pedido, type Anexo } from "../../nucleo/db/schema.ts";
+import { cotacao, itemPedido, mapaCotacao, pedido } from "../../nucleo/db/schema.ts";
 import { dias, quantidade } from "../../texto.ts";
 import { formatarBRL, formatarNota, MINIMO_PROPOSTAS_VALIDAS, textoFrete, type Comparacao, type Linha } from "./calculo.ts";
 
@@ -291,21 +288,4 @@ export async function entradaPdfDoItem(itemPedidoId: number): Promise<EntradaPdf
     consultados: n?.n ?? 0,
     mapaEm: m.criadoEm,
   };
-}
-
-/**
- * Grava o PDF do último mapa do item em dados/arquivos/mapas e devolve o anexo para
- * enviar() (caminho local: o Telegram sobe o arquivo, o e-mail lê do disco). Null sem mapa.
- */
-export async function anexoPdfDoMapa(itemPedidoId: number): Promise<Anexo | null> {
-  const e = await entradaPdfDoItem(itemPedidoId);
-  if (!e) return null;
-  const dados = pdfDoMapa(e);
-  const pasta = join(PASTA_ARQUIVOS(), "mapas");
-  await mkdir(pasta, { recursive: true });
-  const nome = nomeArquivoMapa(e.pedido.id, e.item.id, e.rodada);
-  // Um arquivo por versão do mapa: o mapa refeito na mesma rodada não sobrescreve o anterior.
-  const caminho = join(pasta, `${e.mapaEm.getTime()}-${nome}`);
-  await writeFile(caminho, dados);
-  return { tipo: "pdf", mediaType: "application/pdf", ref: caminho, nome, tamanho: dados.length };
 }
