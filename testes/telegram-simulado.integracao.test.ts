@@ -5,6 +5,8 @@ import type { AddressInfo } from "node:net";
 import { after, before, test } from "node:test";
 import { setTimeout as esperar } from "node:timers/promises";
 
+// O fornecedor simulado responde na hora aqui: a espera de 5 min (para alguém responder pela tela) é só dos bots no ar.
+process.env.SIM_ESPERA_HUMANO_SEG ??= "0";
 const urlTeste = process.env.DATABASE_URL_TESTE;
 const pular = urlTeste ? false : "defina DATABASE_URL_TESTE no .env";
 if (urlTeste) process.env.DATABASE_URL = urlTeste;
@@ -104,7 +106,7 @@ test("resposta agendada não dispara se o chat foi assumido por fora (estado no 
   await sim.assumirChat(c.id, false);
 });
 
-test("rota de mensagem: entra pela receber() como o fornecedor e assume o chat", { skip: pular }, async () => {
+test("rota de mensagem: entra pela receber() como o fornecedor, sem assumir o chat", { skip: pular }, async () => {
   const c = await contatoDa("sim-ipe");
   const r = await post("/simulado/mensagem", { contatoId: c.id, texto: "  Cimento a R$ 38,00 o saco, entrega em 2 dias.  " });
   assert.equal(r.status, 200);
@@ -113,9 +115,12 @@ test("rota de mensagem: entra pela receber() como o fornecedor e assume o chat",
   assert.equal(lista.length, 1);
   assert.equal(lista[0]!.texto, "Cimento a R$ 38,00 o saco, entrega em 2 dias.");
   assert.match(lista[0]!.idExterno!, /^simtela-/);
+  // Responder pela tela não assume mais o chat: a persona só pula a etapa respondida.
+  assert.equal(await sim.chatAssumido(c.id), false);
+  await post("/simulado/automatico", { contatoId: c.id, ligado: false });
   assert.equal(await sim.chatAssumido(c.id), true);
 
-  // Com o chat assumido, o que o sistema manda não tem resposta automática.
+  // Com o chat assumido (pelo botão), o que o sistema manda não tem resposta automática.
   await m.enviar(c.id, "Confirma esse preço?", { tipo: "confirmar_preco" });
   await esperar(900);
   assert.equal((await entradas(c.id)).length, 1);

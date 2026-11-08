@@ -7,9 +7,9 @@
 // assumido, a persona não reage ao que chega nem dispara respostas já agendadas.
 
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
-import { SIM_ATRASO_FATOR } from "../config.ts";
+import { SIM_ATRASO_FATOR, SIM_ESPERA_HUMANO_SEG } from "../config.ts";
 import { db } from "../nucleo/db/cliente.ts";
-import { contato, evento, fornecedor, itemPedido, pedido, type Anexo } from "../nucleo/db/schema.ts";
+import { contato, evento, fornecedor, itemPedido, mensagem, pedido, type Anexo } from "../nucleo/db/schema.ts";
 import { registrar } from "../nucleo/registro.ts";
 import { receber, type AdaptadorCanal, type OpcoesEnvio } from "../nucleo/mensagens/index.ts";
 import { referenciasDoItem } from "../agentes/busca/internet.ts";
@@ -47,14 +47,17 @@ let seq = 0;
 const agendadas = new Map<string, Set<ReturnType<typeof setTimeout>>>();
 
 function depois(endereco: string, seg: number, fn: () => Promise<unknown>) {
-  const ms = Math.max(500, seg * 1000 * SIM_ATRASO_FATOR());
+  // Pelo menos SIM_ESPERA_HUMANO_SEG: dá tempo de alguém responder como o fornecedor pela tela.
+  const ms = Math.max(500, SIM_ESPERA_HUMANO_SEG() * 1000, seg * 1000 * SIM_ATRASO_FATOR());
+  const desde = new Date();
   const timers = agendadas.get(endereco) ?? new Set();
   agendadas.set(endereco, timers);
   const t = setTimeout(() => {
     timers.delete(t);
-    // Confere de novo na hora do disparo: o chat pode ter sido assumido enquanto a resposta esperava.
-    assumidoPorEndereco(endereco)
-      .then((assumido) => (assumido ? undefined : fn()))
+    // Confere de novo na hora do disparo: o chat pode ter sido assumido, ou alguém já respondeu esta etapa
+    // pela tela (aí a persona pula; volta a contar na próxima mensagem do sistema).
+    Promise.all([assumidoPorEndereco(endereco), respondidoPelaTela(endereco, desde)])
+      .then(([assumido, respondido]) => (assumido || respondido ? undefined : fn()))
       .catch((e) => console.error("[simulador]", e));
   }, ms);
   t.unref?.();
@@ -83,6 +86,17 @@ export async function chatAssumido(contatoId: string): Promise<boolean> {
     .orderBy(desc(evento.criadoEm))
     .limit(1);
   return (e?.dados as DadosAssumido | undefined)?.assumido === true;
+}
+
+/** Alguém escreveu ou tocou num botão como este fornecedor, pela tela, depois de `desde`? */
+async function respondidoPelaTela(endereco: string, desde: Date): Promise<boolean> {
+  const [m] = await db
+    .select({ id: mensagem.id })
+    .from(mensagem)
+    .innerJoin(contato, eq(contato.id, mensagem.contatoId))
+    .where(and(eq(contato.canal, "simulado"), eq(contato.endereco, endereco), eq(mensagem.direcao, "entrada"), sql`${mensagem.idExterno} like 'simtela-%'`, sql`${mensagem.criadoEm} > ${desde.toISOString()}::timestamptz`))
+    .limit(1);
+  return !!m;
 }
 
 async function assumidoPorEndereco(endereco: string) {

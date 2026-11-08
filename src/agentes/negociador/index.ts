@@ -195,8 +195,9 @@ export type SituacaoDesconto = {
 /** Até quando o fornecedor tem para responder ao desconto: 25% do prazo, sem passar do prazo. */
 export function janelaDoDesconto(prazoRespostasEm: Date, inicio: Date, agora: Date): Date {
   const prazo = Math.max(0, prazoRespostasEm.getTime() - inicio.getTime());
-  // Ester: pelo menos 5 min para a negativa ou a proposta revisada, sem passar do prazo.
-  const espera = Math.max(prazo * NEGOCIACAO_ESPERA_FRACAO, ESPERA_MIN_DESCONTO_MS());
+  // Ester: pelo menos 5 min para a negativa ou a proposta revisada (mais 2 de folga: o fornecedor simulado
+  // espera 5 min antes de responder sozinho), sem passar do prazo.
+  const espera = Math.max(prazo * NEGOCIACAO_ESPERA_FRACAO, ESPERA_MIN_DESCONTO_MS() + 120_000);
   return new Date(Math.min(prazoRespostasEm.getTime(), agora.getTime() + espera));
 }
 

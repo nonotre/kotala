@@ -143,8 +143,8 @@ export function iniciarApiInterna(porta: number, token: string, host = "127.0.0.
         const texto = typeof b.texto === "string" ? b.texto.trim().slice(0, 4_000) : "";
         const botao = typeof b.botao === "string" && b.botao.trim() ? b.botao.trim().slice(0, 256) : undefined;
         if (!texto && !botao) return responder(400, { erro: "mande texto ou botão" });
-        // Assume antes de receber: o que o fluxo mandar de volta já encontra a persona calada.
-        await assumirChat(r.contato.id, true);
+        // Não assume mais o chat: a persona pula só a etapa que alguém respondeu pela tela e volta a contar
+        // (SIM_ESPERA_HUMANO_SEG) na próxima mensagem do sistema. "Assumir" continua no botão da tela.
         const rec = await receber({
           canal: "simulado",
           endereco: r.contato.endereco,

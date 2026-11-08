@@ -15,6 +15,8 @@
 // duas mensagens, só Pix, PDF). No fim, imprime as métricas do harness (desconto por
 // rodada, mensagens seguidas sem resposta) do último pedido.
 
+// O fornecedor simulado responde na hora aqui: a espera de 5 min (para alguém responder pela tela) é só dos bots no ar.
+process.env.SIM_ESPERA_HUMANO_SEG ??= "0";
 if (process.env.DATABASE_URL_TESTE) process.env.DATABASE_URL = process.env.DATABASE_URL_TESTE;
 process.env.PRAZO_RESPOSTAS_SEG ??= "40";
 process.env.SIM_ATRASO_FATOR ??= "0.3";

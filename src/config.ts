@@ -78,3 +78,13 @@ export const EMPRESA_NICHO = () => (process.env.EMPRESA_NICHO ?? "geral").split(
 
 /** Ester (revisaodochat.md): depois do pedido de desconto, nada mais sai ao fornecedor por pelo menos este tempo (ou até ele responder). */
 export const ESPERA_MIN_DESCONTO_MS = () => num(process.env.ESPERA_MIN_DESCONTO_SEG, 300) * 1000;
+
+/**
+ * Fornecedor simulado: espera este tempo antes de responder sozinho, para dar tempo de alguém entrar no
+ * Telegram simulado e responder como ele. Quem respondeu pela tela nesse tempo faz a persona pular a etapa;
+ * a contagem recomeça na próxima mensagem do sistema. Não é multiplicado por SIM_ATRASO_FATOR.
+ */
+export const SIM_ESPERA_HUMANO_SEG = () => {
+  const n = Number(process.env.SIM_ESPERA_HUMANO_SEG);
+  return Number.isFinite(n) && n >= 0 ? n : 300;
+};
