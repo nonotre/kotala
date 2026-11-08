@@ -1,6 +1,6 @@
 "use client";
-// Fornecedores: quem recebe cotação, quanto dá para confiar em cada um e o que já mandou ou vendeu.
-// Tabela com busca, filtro e ordenação no notebook; linhas no celular.
+// Base de Dados, aba Fornecedores: quem recebe cotação, quanto dá para confiar em cada um e o que já mandou ou vendeu.
+// Tabela com filtro e ordenação no notebook; linhas no celular. A busca e a categoria vêm da casca comum.
 
 import {
   Button,
@@ -8,7 +8,6 @@ import {
   ContentSwitcher,
   DataTable,
   Link as CarbonLink,
-  Search,
   Select,
   SelectItem,
   Switch,
@@ -20,55 +19,55 @@ import {
   TableHeader,
   TableRow,
   TableToolbar,
-  TableToolbarContent,
-  TableToolbarSearch,
+  preview__IconIndicator as IconIndicator,
   type DataTableHeader,
 } from "@carbon/react";
 import { QrCode } from "@carbon/react/icons";
 import NextLink from "next/link";
-import { useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { AcoesFornecedor } from "@/components/AcoesFornecedor";
 import { BarraAcao } from "@/components/BarraAcao";
 import { Bloco } from "@/components/Bloco";
 import { EstadoVazio } from "@/components/EstadoVazio";
-import { LinkExterno } from "@/components/LinkExterno";
-import { CabecalhoPagina, CorpoPagina, GradePagina, Pagina } from "@/components/Pagina";
+import { CorpoPagina, GradePagina, Pagina } from "@/components/Pagina";
 import { SeloSimulado } from "@/components/SeloSimulado";
 import { useCelular } from "@/components/useCelular";
 import type { LinhaFornecedor } from "@/lib/dados-consulta";
 import { dataHora } from "@/lib/formato";
-import { Canal, Confianca, canalEmTexto, estadoDoCanal, pesoConfianca, type EstadoCanal } from "./marcas";
+import { CabecalhoBaseDados, ControlesBaseDados, enderecoDaBase, mesmaCategoria, normalizar, type FiltrosBase } from "./CascaBaseDados";
+import { Canal, Confianca, PESO_CANAL, canalEmTexto, estadoDoCanal, pesoConfianca, type EstadoCanal } from "./marcas";
 import s from "./consulta.module.scss";
 
 export type Filtro = "todos" | "com-canal" | "sem-canal" | "verificados" | "homologados" | "bloqueados";
 
 type Linha = { f: LinhaFornecedor; canal: EstadoCanal; busca: string };
 
+/** Sem conversa aberta: só e-mail para o convite, só o site, ou nenhum contato. */
+const semConversa = (l: Linha) => l.canal.peso === PESO_CANAL.email || l.canal.peso === PESO_CANAL.site || l.canal.peso === PESO_CANAL.nenhum;
+
 const FILTROS: { id: Filtro; rotulo: string; vazio: string; passo: string; passa: (l: Linha) => boolean }[] = [
   { id: "todos", rotulo: "Todos", vazio: "Nenhum fornecedor ainda.", passo: "Eles aparecem quando o assistente busca fornecedores para um pedido, ou quando alguém entra pelo convite.", passa: () => true },
-  { id: "com-canal", rotulo: "Com canal", vazio: "Nenhum fornecedor com canal ativo.", passo: "Quem entra pelo convite passa a receber as cotações.", passa: (l) => l.canal.peso === 0 },
-  { id: "sem-canal", rotulo: "Sem canal", vazio: "Todos têm canal.", passo: "Lojas achadas na internet aparecem aqui: são referência de preço e não são contatadas.", passa: (l) => l.canal.peso === 1 },
+  { id: "com-canal", rotulo: "Com canal", vazio: "Nenhum fornecedor com canal ativo.", passo: "Quem entra pelo convite passa a receber as cotações.", passa: (l) => l.canal.peso === PESO_CANAL.ativo },
+  { id: "sem-canal", rotulo: "Sem canal ativo", vazio: "Todos têm canal ativo.", passo: "Aqui ficam quem só tem e-mail para o convite, lojas com site próprio e quem não tem contato: são referência de preço e não recebem cotação.", passa: semConversa },
   { id: "verificados", rotulo: "Verificados", vazio: "Nenhum fornecedor verificado.", passo: "A verificação confere o CNPJ na Receita.", passa: (l) => l.f.verificado },
   { id: "homologados", rotulo: "Homologados", vazio: "Nenhum fornecedor homologado.", passo: "Homologar é a sua aprovação, feita aqui ou na ficha de cada um.", passa: (l) => l.f.homologado },
   { id: "bloqueados", rotulo: "Bloqueados", vazio: "Nenhum fornecedor bloqueado.", passo: "Bloqueado não entra nas buscas nem na recompra.", passa: (l) => !!l.f.bloqueadoEm },
 ];
 
 const CABECALHOS: DataTableHeader[] = [
+  { key: "numero", header: "ID" },
   { key: "nome", header: "Fornecedor" },
+  { key: "categoria", header: "Categoria" },
+  { key: "homologacao", header: "Homologação" },
+  { key: "criterios", header: "Critérios relevantes" },
   { key: "confianca", header: "Confiança" },
-  { key: "pesou", header: "O que pesou" },
   { key: "canal", header: "Canal" },
   { key: "propostas", header: "Propostas" },
-  { key: "compras", header: "Compras" },
-  { key: "acoes", header: "Empresa" },
+  { key: "pedidos", header: "Pedidos" },
+  { key: "acoes", header: "Ação" },
 ];
 
-const normalizar = (t: string) =>
-  t
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase()
-    .trim();
+const SEM_ORDEM = new Set(["criterios", "acoes"]);
 
 function usarLargura(consulta: string): boolean {
   return useSyncExternalStore(
@@ -89,8 +88,11 @@ function traduzirOrdem(_id: string, args?: { header?: ReactNode; isSortHeader?: 
   return `Ordenar por ${coluna}, do menor para o maior`;
 }
 
+const categoriasEmTexto = (f: LinhaFornecedor) => f.categorias.join(", ");
+
 // ---------- Células ----------
 
+/** Nome com link para a ficha. Sem link externo: loja da internet aparece pelo nome da plataforma. */
 function Nome({ f }: { f: LinhaFornecedor }) {
   return (
     <span className={s.duasLinhas}>
@@ -101,11 +103,17 @@ function Nome({ f }: { f: LinhaFornecedor }) {
         {f.simulado ? <SeloSimulado /> : null}
       </span>
       {f.cnpj ? <span className={s.apoio}>CNPJ {f.cnpj}</span> : null}
-      {f.homologado ? <span className={s.apoio}>Homologado</span> : null}
       {f.bloqueadoEm ? <span className={s.alerta}>Bloqueado: {f.motivoBloqueio}</span> : null}
-      {f.fonte?.startsWith("http") ? <LinkExterno href={f.fonte}>{f.fonte.replace(/^https?:\/\//, "")}</LinkExterno> : null}
     </span>
   );
+}
+
+function Categoria({ f }: { f: LinhaFornecedor }) {
+  return f.categorias.length ? <span className={s.texto}>{categoriasEmTexto(f)}</span> : <span className={s.semValor}>Não informou</span>;
+}
+
+function Homologacao({ f }: { f: LinhaFornecedor }) {
+  return f.homologado ? <IconIndicator kind="succeeded" label="Homologado" size={16} /> : <IconIndicator kind="not-started" label="Não homologado" size={16} />;
 }
 
 function CelulaConfianca({ f }: { f: LinhaFornecedor }) {
@@ -117,7 +125,8 @@ function CelulaConfianca({ f }: { f: LinhaFornecedor }) {
   );
 }
 
-function Pesou({ f }: { f: LinhaFornecedor }) {
+/** Antes "O que pesou": os motivos da verificação cadastral que embasam a confiança. */
+function Criterios({ f }: { f: LinhaFornecedor }) {
   if (f.simulado) return <span className={s.semValor}>Base fictícia do time</span>;
   const motivos = (f.verificacao?.motivos ?? []).slice(0, 4);
   return (
@@ -128,6 +137,20 @@ function Pesou({ f }: { f: LinhaFornecedor }) {
   );
 }
 
+/** Abrir a ficha completa e, ali mesmo, homologar ou bloquear. */
+function Acao({ f }: { f: LinhaFornecedor }) {
+  return (
+    <span className={s.duasLinhas}>
+      <CarbonLink as={NextLink} href={`/fornecedores/${f.id}`} size="sm">
+        Abrir ficha
+      </CarbonLink>
+      <AcoesFornecedor id={f.id} nome={f.nome} homologado={f.homologado} bloqueado={!!f.bloqueadoEm} />
+    </span>
+  );
+}
+
+const Numero = ({ n }: { n: number }) => <span className={n ? s.numero : `${s.numero} ${s.semValor}`}>{n}</span>;
+
 // ---------- Vistas ----------
 
 type PropsVista = {
@@ -136,8 +159,6 @@ type PropsVista = {
   filtro: Filtro;
   contagens: Record<Filtro, number>;
   aoFiltrar: (f: Filtro) => void;
-  busca: string;
-  aoBuscar: (t: string) => void;
   vazio: ReactNode;
 };
 
@@ -151,18 +172,22 @@ function FiltroEmSeletor({ filtro, contagens, aoFiltrar }: Pick<PropsVista, "fil
   );
 }
 
-function TabelaFornecedores({ linhas, total, filtro, contagens, aoFiltrar, busca, aoBuscar, vazio }: PropsVista) {
-  // Os seis filtros só cabem ao lado da busca em telas bem largas: abaixo disso, viram seletor.
-  const grande = usarLargura("(min-width: 99rem)");
+function TabelaFornecedores({ linhas, total, filtro, contagens, aoFiltrar, vazio }: PropsVista) {
+  // Os seis filtros só cabem lado a lado em telas largas: abaixo disso, viram seletor.
+  const grande = usarLargura("(min-width: 82rem)");
   const porId = useMemo(() => new Map(linhas.map((l) => [l.f.id, l])), [linhas]);
   const dados = linhas.map((l) => ({
     id: l.f.id,
+    numero: l.f.numero,
     nome: l.f.nome,
+    // Quem não informou a categoria vai para o fim, em ordem crescente.
+    categoria: categoriasEmTexto(l.f) || "￿",
+    homologacao: l.f.homologado ? 0 : 1,
+    criterios: "",
     confianca: pesoConfianca(l.f.simulado, l.f.verificacao),
-    pesou: "",
     canal: l.canal.peso,
     propostas: l.f.propostas,
-    compras: l.f.compras,
+    pedidos: l.f.compras,
     acoes: "",
   }));
   return (
@@ -179,7 +204,7 @@ function TabelaFornecedores({ linhas, total, filtro, contagens, aoFiltrar, busca
     >
       {({ rows, headers, getHeaderProps, getRowProps, getTableProps, getToolbarProps }) => (
         <TableContainer className={s.tabela}>
-          <TableToolbar {...getToolbarProps()} aria-label="Filtrar e buscar fornecedores">
+          <TableToolbar {...getToolbarProps()} aria-label="Filtrar fornecedores">
             <div className={s.filtros}>
               {grande ? (
                 <ContentSwitcher size="lg" lowContrast selectedIndex={FILTROS.findIndex((x) => x.id === filtro)} onChange={({ name }) => aoFiltrar(name as Filtro)}>
@@ -191,20 +216,16 @@ function TabelaFornecedores({ linhas, total, filtro, contagens, aoFiltrar, busca
                 <FiltroEmSeletor filtro={filtro} contagens={contagens} aoFiltrar={aoFiltrar} />
               )}
             </div>
-            <TableToolbarContent>
-              <TableToolbarSearch defaultValue={busca} persistent labelText="Buscar fornecedor" placeholder="Buscar por nome, CNPJ, região ou canal" onChange={(_e, valor) => aoBuscar(valor ?? "")} onClear={() => aoBuscar("")} />
-            </TableToolbarContent>
           </TableToolbar>
           {rows.length === 0 ? (
             <div className={s.semLinhas}>{vazio}</div>
           ) : (
-            <div className={s.rolagem}>
+            <div className={`${s.rolagem} ${s.rolagemLarga}`}>
               <Table {...getTableProps()} aria-label="Fornecedores">
                 <TableHead>
                   <TableRow>
                     {headers.map((h) => {
-                      const ordena = h.key !== "pesou" && h.key !== "acoes";
-                      const { key, ...props } = getHeaderProps({ header: h, isSortable: ordena });
+                      const { key, ...props } = getHeaderProps({ header: h, isSortable: !SEM_ORDEM.has(h.key) });
                       return (
                         <TableHeader key={key} {...props} translateWithId={traduzirOrdem}>
                           {h.header}
@@ -221,25 +242,34 @@ function TabelaFornecedores({ linhas, total, filtro, contagens, aoFiltrar, busca
                     return (
                       <TableRow key={key} {...props}>
                         <TableCell>
+                          <span className={s.numero}>#{l.f.numero}</span>
+                        </TableCell>
+                        <TableCell>
                           <Nome f={l.f} />
+                        </TableCell>
+                        <TableCell>
+                          <Categoria f={l.f} />
+                        </TableCell>
+                        <TableCell>
+                          <Homologacao f={l.f} />
+                        </TableCell>
+                        <TableCell className={s.colCriterios}>
+                          <Criterios f={l.f} />
                         </TableCell>
                         <TableCell>
                           <CelulaConfianca f={l.f} />
                         </TableCell>
                         <TableCell>
-                          <Pesou f={l.f} />
-                        </TableCell>
-                        <TableCell>
                           <Canal estado={l.canal} />
                         </TableCell>
                         <TableCell>
-                          <span className={l.f.propostas ? s.numero : `${s.numero} ${s.semValor}`}>{l.f.propostas}</span>
+                          <Numero n={l.f.propostas} />
                         </TableCell>
                         <TableCell>
-                          <span className={l.f.compras ? s.numero : `${s.numero} ${s.semValor}`}>{l.f.compras}</span>
+                          <Numero n={l.f.compras} />
                         </TableCell>
-                        <TableCell>
-                          <AcoesFornecedor id={l.f.id} nome={l.f.nome} homologado={l.f.homologado} bloqueado={!!l.f.bloqueadoEm} />
+                        <TableCell className={s.colAcao}>
+                          <Acao f={l.f} />
                         </TableCell>
                       </TableRow>
                     );
@@ -257,11 +287,10 @@ function TabelaFornecedores({ linhas, total, filtro, contagens, aoFiltrar, busca
   );
 }
 
-function ListaCelular({ linhas, total, filtro, contagens, aoFiltrar, busca, aoBuscar, vazio }: PropsVista) {
+function ListaCelular({ linhas, total, filtro, contagens, aoFiltrar, vazio }: PropsVista) {
   return (
     <div>
       <div className={s.celularBarra}>
-        <Search defaultValue={busca} size="lg" labelText="Buscar fornecedor" placeholder="Buscar por nome, CNPJ, região ou canal" closeButtonLabelText="Limpar busca" onChange={(e) => aoBuscar(e.target.value)} onClear={() => aoBuscar("")} />
         <div className={s.celularFiltro}>
           <FiltroEmSeletor filtro={filtro} contagens={contagens} aoFiltrar={aoFiltrar} />
         </div>
@@ -270,14 +299,19 @@ function ListaCelular({ linhas, total, filtro, contagens, aoFiltrar, busca, aoBu
         <ul className={s.celularLista}>
           {linhas.map((l) => (
             <li key={l.f.id} className={s.celularLinha}>
+              <span className={s.apoio}>
+                #{l.f.numero}
+                {l.f.categorias.length ? ` · ${categoriasEmTexto(l.f)}` : ""}
+              </span>
               <Nome f={l.f} />
+              <Homologacao f={l.f} />
               <Canal estado={l.canal} />
               <CelulaConfianca f={l.f} />
-              <Pesou f={l.f} />
+              <Criterios f={l.f} />
               <span className={s.apoio}>
-                {l.f.propostas} {l.f.propostas === 1 ? "proposta" : "propostas"} · {l.f.compras} {l.f.compras === 1 ? "compra" : "compras"}
+                {l.f.propostas} {l.f.propostas === 1 ? "proposta" : "propostas"} · {l.f.compras} {l.f.compras === 1 ? "pedido" : "pedidos"}
               </span>
-              <AcoesFornecedor id={l.f.id} nome={l.f.nome} homologado={l.f.homologado} bloqueado={!!l.f.bloqueadoEm} />
+              <Acao f={l.f} />
             </li>
           ))}
         </ul>
@@ -293,48 +327,65 @@ function ListaCelular({ linhas, total, filtro, contagens, aoFiltrar, busca, aoBu
 
 // ---------- Tela ----------
 
-export function ListaFornecedores({ fornecedores, filtroInicial }: { fornecedores: LinhaFornecedor[]; filtroInicial: Filtro }) {
+type Props = { fornecedores: LinhaFornecedor[]; categorias: string[]; filtroInicial: Filtro; filtrosIniciais: FiltrosBase };
+
+export function ListaFornecedores({ fornecedores, categorias, filtroInicial, filtrosIniciais }: Props) {
   const celular = useCelular();
   const [filtro, setFiltro] = useState<Filtro>(filtroInicial);
-  const [busca, setBusca] = useState("");
+  const [filtros, setFiltros] = useState<FiltrosBase>(filtrosIniciais);
+
+  // Filtro, busca e categoria ficam no endereço: quem abre uma ficha e volta encontra a lista como deixou.
+  useEffect(() => {
+    window.history.replaceState(null, "", enderecoDaBase("fornecedores", filtros, { filtro: filtro === "todos" ? null : filtro }));
+  }, [filtro, filtros]);
 
   const todas = useMemo(
     () =>
       fornecedores.map((f): Linha => ({
         f,
         canal: estadoDoCanal(f),
-        busca: normalizar([f.nome, f.cnpj ?? "", f.regiao ?? "", f.verificacao?.razaoSocial ?? "", f.verificacao?.municipio ?? "", ...f.canais.map(canalEmTexto)].join(" ")),
+        busca: normalizar(
+          [`#${f.numero}`, f.nome, f.cnpj ?? "", f.regiao ?? "", f.verificacao?.razaoSocial ?? "", f.verificacao?.municipio ?? "", ...f.categorias, ...f.canais.map(canalEmTexto)].join(" "),
+        ),
       })),
     [fornecedores],
   );
-  const contagens = useMemo(() => Object.fromEntries(FILTROS.map((x) => [x.id, todas.filter(x.passa).length])) as Record<Filtro, number>, [todas]);
+  // A categoria vale antes do filtro: as contagens dos filtros já respeitam a categoria escolhida.
+  const naCategoria = filtros.categoria ? todas.filter((l) => l.f.categorias.some((c) => mesmaCategoria(c, filtros.categoria))) : todas;
+  const contagens = Object.fromEntries(FILTROS.map((x) => [x.id, naCategoria.filter(x.passa).length])) as Record<Filtro, number>;
   const dados = FILTROS.find((x) => x.id === filtro) ?? FILTROS[0]!;
-  const termo = normalizar(busca);
-  const linhas = todas.filter((l) => dados.passa(l) && (!termo || l.busca.includes(termo)));
-  const recebem = contagens["com-canal"];
+  const termo = normalizar(filtros.busca);
+  const linhas = naCategoria.filter((l) => dados.passa(l) && (!termo || l.busca.includes(termo)));
+  const recebem = todas.filter((l) => l.canal.peso === PESO_CANAL.ativo).length;
   const simulados = fornecedores.filter((f) => f.simulado).length;
 
-  function aoFiltrar(f: Filtro) {
-    setFiltro(f);
-    // O filtro fica no endereço: quem abre uma ficha e volta encontra a lista como deixou.
-    window.history.replaceState(null, "", f === "todos" ? "/fornecedores" : `/fornecedores?filtro=${f}`);
-  }
-
+  const algumFiltro = filtro !== "todos" || !!termo || !!filtros.categoria;
   const vazio = (
     <EstadoVazio
       tamanho="sm"
-      titulo={termo ? "Nenhum fornecedor com essa busca." : dados.vazio}
-      proximoPasso={termo ? "Confira a escrita, ou veja a lista completa." : dados.passo}
-      acao={filtro !== "todos" || termo ? { texto: "Ver todos", aoClicar: () => aoFiltrar("todos"), tipo: "tertiary" } : undefined}
+      titulo={termo || filtros.categoria ? "Nenhum fornecedor com essa busca ou categoria." : dados.vazio}
+      proximoPasso={termo || filtros.categoria ? "Confira a escrita, troque a categoria, ou veja a lista completa." : dados.passo}
+      acao={
+        algumFiltro
+          ? {
+              texto: "Ver todos",
+              aoClicar: () => {
+                setFiltro("todos");
+                setFiltros({ busca: "", categoria: "" });
+              },
+              tipo: "tertiary",
+            }
+          : undefined
+      }
     />
   );
-  const props: PropsVista = { linhas, total: todas.length, filtro, contagens, aoFiltrar, busca, aoBuscar: setBusca, vazio };
+  const props: PropsVista = { linhas, total: naCategoria.length, filtro, contagens, aoFiltrar: setFiltro, vazio };
 
   return (
     <Pagina>
-      <CabecalhoPagina
-        titulo="Fornecedores"
-        contexto="A confiança de cada fornecedor real é conferida na Receita (CNPJ), nas listas de empresas punidas do Portal da Transparência (CEIS e CNEP), no TJSP, no site e no histórico de compras. Lojas achadas na internet entram como referência de preço e não são contatadas."
+      <CabecalhoBaseDados
+        ativa="fornecedores"
+        filtros={filtros}
         lado={
           <span className={s.acaoTopo}>
             <Button as={NextLink} href="/convite" size="md" renderIcon={QrCode}>
@@ -346,6 +397,7 @@ export function ListaFornecedores({ fornecedores, filtroInicial }: { fornecedore
       <CorpoPagina>
         <GradePagina>
           <Column sm={4} md={8} lg={16}>
+            <ControlesBaseDados aba="fornecedores" filtros={filtros} categorias={categorias} aoMudar={setFiltros} />
             <div className={s.lista}>
               <Bloco
                 plano
@@ -371,8 +423,16 @@ export function ListaFornecedores({ fornecedores, filtroInicial }: { fornecedore
                 <dd>Pontos do que foi conferido: CNPJ na Receita, atividade, idade da empresa, sanções, TJSP, site e histórico de compras. Não se aplica a fornecedor simulado.</dd>
               </div>
               <div>
+                <dt>Critérios relevantes</dt>
+                <dd>Os motivos da verificação cadastral que sustentam a confiança: CNPJ ativo, atividade, idade da empresa, sanções.</dd>
+              </div>
+              <div>
+                <dt>Site próprio</dt>
+                <dd>Loja achada na internet, sem conversa aberta: entra como referência de preço e não é contatada.</dd>
+              </div>
+              <div>
                 <dt>Sem canal</dt>
-                <dd>Loja achada na internet: entra como referência de preço e não é contatada.</dd>
+                <dd>Nenhuma forma de contato conhecida: nem conversa, nem e-mail, nem site.</dd>
               </div>
               <div>
                 <dt>Homologado</dt>

@@ -13,7 +13,7 @@ import { SeloSimulado } from "@/components/SeloSimulado";
 import { Tabela } from "@/components/Tabela";
 import type { CotacaoDaFicha, FichaFornecedor as Ficha } from "@/lib/dados-consulta";
 import { brl, dataHora, dias, nota, quantidade } from "@/lib/formato";
-import { Confianca, ROTULO_CANAL, estadoDoCanal, type Kind } from "./marcas";
+import { Confianca, PESO_CANAL, ROTULO_CANAL, estadoDoCanal, type Kind } from "./marcas";
 import s from "./consulta.module.scss";
 
 const SITUACAO: Record<string, { kind: Kind; rotulo: string }> = {
@@ -57,8 +57,9 @@ function lerSituacao(f: Ficha): Situacao {
     return { kind: sit?.kind ?? "normal", frase: `Última cotação, no pedido ${ultima.pedidoId}: ${(sit?.rotulo ?? ultima.situacao).toLowerCase()}.`, cotacao: ultima };
   }
   const canal = estadoDoCanal({ ...f, canais: f.contatos.map((c) => (c.parouEm ? `${c.canal} (parou)` : c.canal)), canaisAtivos: f.contatos.filter((c) => !c.parouEm).length });
-  if (canal.peso === 0) return { kind: "not-started", frase: "Não recebeu nenhuma cotação ainda.", apoio: "A próxima chega no canal dele." };
-  return { kind: "not-started", frase: "Sem canal: não recebe cotação.", apoio: "Entra como referência de preço. Para cotar com ele, mande o convite." };
+  if (canal.peso === PESO_CANAL.ativo) return { kind: "not-started", frase: "Não recebeu nenhuma cotação ainda.", apoio: "A próxima chega no canal dele." };
+  if (canal.peso === PESO_CANAL.email) return { kind: "pending", frase: "Ainda não entrou: só tem o e-mail para o convite.", apoio: "Não recebe cotação até entrar pelo link do convite." };
+  return { kind: "not-started", frase: `${canal.rotulo}: não recebe cotação.`, apoio: "Entra como referência de preço. Para cotar com ele, mande o convite." };
 }
 
 function Agora({ f }: { f: Ficha }) {
@@ -348,7 +349,7 @@ export function FichaFornecedor({ f }: { f: Ficha }) {
   return (
     <Pagina>
       <CabecalhoPagina
-        trilha={[{ rotulo: "Fornecedores", href: "/fornecedores" }, { rotulo: f.nome }]}
+        trilha={[{ rotulo: "Base de Dados", href: "/fornecedores" }, { rotulo: f.nome }]}
         titulo={
           <span className={s.titulo}>
             {f.nome}
@@ -356,7 +357,7 @@ export function FichaFornecedor({ f }: { f: Ficha }) {
           </span>
         }
         contexto={contexto || undefined}
-        lado={<IconIndicator kind={canal.kind} label={canal.peso === 0 ? `${canal.rotulo}: ${canal.apoio}` : canal.rotulo} size={16} />}
+        lado={<IconIndicator kind={canal.kind} label={canal.peso === PESO_CANAL.ativo ? `Recebe as cotações por ${canal.rotulo}` : canal.rotulo} size={16} />}
       />
       <CorpoPagina>
         <GradePagina>

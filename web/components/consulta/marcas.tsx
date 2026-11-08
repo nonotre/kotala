@@ -14,7 +14,7 @@ const NIVEL: Record<string, { kind: Kind; rotulo: string; peso: number }> = {
   baixa: { kind: "caution-major", rotulo: "Baixa", peso: 2 },
 };
 
-export const ROTULO_CANAL: Record<string, string> = { telegram: "Telegram", whatsapp: "WhatsApp", email: "E-mail", web: "Navegador", voz: "Voz", simulado: "Canal simulado" };
+export const ROTULO_CANAL: Record<string, string> = { telegram: "Telegram", whatsapp: "WhatsApp", email: "E-mail", web: "Chat web", voz: "Voz", simulado: "Canal simulado" };
 
 /** Canal como lib/dados devolve ("telegram (parou)"), em português. */
 export function canalEmTexto(c: string): string {
@@ -38,14 +38,31 @@ export function Confianca({ simulado, verificacao }: { simulado: boolean; verifi
 
 export type EstadoCanal = { kind: Kind; rotulo: string; apoio: string; peso: number };
 
-/** O que importa para cotar: dá para mandar mensagem, ou não, e por quê. */
-export function estadoDoCanal(f: { bloqueadoEm: string | null; parouEm: string | null; canais: string[]; canaisAtivos: number }): EstadoCanal {
+/** Pesos de `estadoDoCanal`, na ordem da tabela. Sem conversa aberta: e-mail, site próprio e sem canal. */
+export const PESO_CANAL = { ativo: 0, email: 1, site: 2, nenhum: 3, parou: 4, pediuParar: 5, bloqueado: 6 } as const;
+
+/** Endereço do site sem o protocolo, ou null quando a fonte não é um site. */
+function dominio(fonte: string | null | undefined): string | null {
+  return fonte?.startsWith("http") ? fonte.replace(/^https?:\/\//, "").replace(/\/$/, "") : null;
+}
+
+/**
+ * O que importa para cotar: dá para mandar mensagem, ou não, e por quê.
+ * "Sem canal" só quando não há forma nenhuma de contato: nem conversa, nem e-mail, nem site.
+ */
+export function estadoDoCanal(f: { bloqueadoEm: string | null; parouEm: string | null; canais: string[]; canaisAtivos: number; email?: string | null; fonte?: string | null }): EstadoCanal {
   const lista = f.canais.map(canalEmTexto).join(", ");
-  if (f.bloqueadoEm) return { kind: "failed", rotulo: "Bloqueado", apoio: lista || "Não entra em busca nem recompra", peso: 4 };
-  if (f.parouEm) return { kind: "failed", rotulo: "Pediu para parar", apoio: "Não recebe mais nada, em nenhum canal", peso: 3 };
-  if (f.canaisAtivos > 0) return { kind: "succeeded", rotulo: "Canal ativo", apoio: lista, peso: 0 };
-  if (f.canais.length) return { kind: "failed", rotulo: "Parou", apoio: lista, peso: 2 };
-  return { kind: "not-started", rotulo: "Sem canal", apoio: "Só referência de preço", peso: 1 };
+  const site = dominio(f.fonte);
+  if (f.bloqueadoEm) return { kind: "failed", rotulo: "Bloqueado", apoio: lista || "Não entra em busca nem recompra", peso: PESO_CANAL.bloqueado };
+  if (f.parouEm) return { kind: "failed", rotulo: "Pediu para parar", apoio: "Não recebe mais nada, em nenhum canal", peso: PESO_CANAL.pediuParar };
+  if (f.canaisAtivos > 0) {
+    const ativos = f.canais.filter((c) => !c.endsWith("(parou)")).map(canalEmTexto).join(", ");
+    return { kind: "succeeded", rotulo: ativos, apoio: "Recebe as cotações", peso: PESO_CANAL.ativo };
+  }
+  if (f.canais.length) return { kind: "failed", rotulo: "Parou", apoio: lista, peso: PESO_CANAL.parou };
+  if (f.email) return { kind: "pending", rotulo: "E-mail", apoio: "Recebe o convite; ainda não entrou", peso: PESO_CANAL.email };
+  if (site) return { kind: "not-started", rotulo: "Site próprio", apoio: `${site} · só referência de preço`, peso: PESO_CANAL.site };
+  return { kind: "not-started", rotulo: "Sem canal", apoio: "Nenhum contato conhecido", peso: PESO_CANAL.nenhum };
 }
 
 export function Canal({ estado }: { estado: EstadoCanal }) {
