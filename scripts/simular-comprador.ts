@@ -8,6 +8,12 @@
 //   clicar:<início do rótulo>  toca no botão da última mensagem que o tiver
 //   esperar:<estado>           espera o item mais recente chegar ao estado (até 5 min)
 //   dormir:<segundos>          só espera (para o fornecedor simulado responder)
+//   persona:<chave>            roteiro pronto de um comprador (src/simulador/compradores.ts:
+//                              obra, escritorio, clips, epi, extintor, limpeza, informatica, copa)
+//
+// SIM_PERSONAS=todas também semeia as personas difíceis de fornecedor (preço ambíguo,
+// duas mensagens, só Pix, PDF). No fim, imprime as métricas do harness (desconto por
+// rodada, mensagens seguidas sem resposta) do último pedido.
 
 if (process.env.DATABASE_URL_TESTE) process.env.DATABASE_URL = process.env.DATABASE_URL_TESTE;
 process.env.PRAZO_RESPOSTAS_SEG ??= "40";
@@ -23,7 +29,7 @@ const { iniciarVarredor } = await import("../src/nucleo/orquestrador/index.ts");
 const { adaptadorSimulado, semearSimulados } = await import("../src/simulador/index.ts");
 
 await migrate(db, { migrationsFolder: "drizzle" });
-await semearSimulados();
+await semearSimulados({ extras: process.env.SIM_PERSONAS === "todas" });
 await (await import("../src/agentes/interpretador/catalogo.ts")).carregarCatalogo();
 
 const { adaptador, enviadas } = canalEmMemoria("web");
@@ -59,7 +65,16 @@ function mostrarNovas() {
 
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-for (const arg of process.argv.slice(2)) {
+const { compradorPorChave } = await import("../src/simulador/compradores.ts");
+const passos = process.argv.slice(2).flatMap((a) => {
+  if (!a.startsWith("persona:")) return [a];
+  const c = compradorPorChave(a.slice(8));
+  if (!c) throw new Error(`Persona de comprador desconhecida: ${a.slice(8)}`);
+  console.log(`(persona ${c.chave}: ${c.quem})`);
+  return c.roteiro;
+});
+
+for (const arg of passos) {
   if (arg.startsWith("dormir:")) {
     await esperar(Number(arg.slice(7)) * 1000);
     mostrarNovas();
@@ -98,5 +113,10 @@ for (const arg of process.argv.slice(2)) {
 
 pararVarredor();
 await esperar(500);
+const [ultimo] = await db.select({ id: schema.pedido.id }).from(schema.pedido).orderBy(desc(schema.pedido.id)).limit(1);
+if (ultimo) {
+  const { metricasDoPedido, textoMetricas } = await import("../src/simulador/metricas.ts");
+  console.log(`\n${textoMetricas(await metricasDoPedido(ultimo.id))}`);
+}
 await conexao.end();
 process.exit(0);

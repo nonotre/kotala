@@ -28,7 +28,10 @@
     "anexo:testar": "node --env-file=.env scripts/testar-anexo.ts",
     "seguranca:testar": "node --env-file=.env scripts/testar-seguranca.ts",
     "voz:testar": "node --env-file=.env scripts/testar-voz.ts",
-    "mock:dashboard": "node --env-file=.env scripts/mock-dashboard.ts"
+    "mock:dashboard": "node --env-file=.env scripts/mock-dashboard.ts",
+    "guardrails:avaliar": "node --env-file=.env scripts/avaliar-guardrails.ts",
+    "regressao:avaliar": "node --env-file=.env scripts/avaliar-regressao.ts",
+    "simular:metricas": "node --env-file=.env scripts/metricas-pedido.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.113",

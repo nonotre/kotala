@@ -1,0 +1,70 @@
+{
+  "_sobre": "Preços fictícios do simulador, por categoria de src/dominio/categorias.json. Só o simulador lê este arquivo. `itens` fica na ordem em que o preço é procurado (a primeira palavra que bate vence); `categorias` guarda o que é da área: onde entrega, conversões de unidade e o preço sintético para item da categoria sem preço na lista.",
+  "itens": [
+    { "categoria": "cimenticios", "palavras": ["cimento", "cp ii", "cp-ii", "cp2", "cp 2"], "unidade": "saco", "preco": 39.9, "equivalente": "Cimento CP II-F 32 marca alternativa, saco 50 kg" },
+    { "categoria": "cimenticios", "palavras": ["cp v", "cp-v", "ari"], "unidade": "saco", "preco": 46.5, "equivalente": "Cimento CP V-ARI marca alternativa" },
+    { "categoria": "agregados", "palavras": ["areia"], "unidade": "m³", "preco": 135, "equivalente": "Areia média lavada de outra jazida" },
+    { "categoria": "agregados", "palavras": ["brita", "pedrisco"], "unidade": "m³", "preco": 145, "equivalente": "Brita 1 de outra pedreira" },
+    { "categoria": "aco", "palavras": ["vergalh", "ferro", "ca-50", "ca 50", "ca-60"], "unidade": "barra", "preco": 58, "equivalente": "Vergalhão CA-50 de outra usina, barra 12 m" },
+    { "categoria": "alvenaria", "palavras": ["tijolo"], "unidade": "milheiro", "preco": 980, "equivalente": "Tijolo cerâmico 8 furos de outra olaria" },
+    { "categoria": "alvenaria", "palavras": ["bloco"], "unidade": "unidade", "preco": 3.9, "equivalente": "Bloco de concreto vedação, outro fabricante" },
+    { "categoria": "cimenticios", "palavras": ["argamassa", "ac-i", "ac-ii", "ac-iii", "ac1", "ac2", "ac3"], "unidade": "saco", "preco": 28.5, "equivalente": "Argamassa AC-II de outra marca, saco 20 kg" },
+    { "categoria": "hidraulica", "palavras": ["tubo", "cano", "pvc"], "unidade": "barra", "preco": 62, "equivalente": "Tubo PVC esgoto 100 mm de outra marca" },
+
+    { "categoria": "escritorio", "palavras": ["papel a4", "sulfite", "resma"], "unidade": "resma", "preco": 27.9, "equivalente": "Papel A4 75 g/m² de outra marca, resma 500 folhas" },
+    { "categoria": "escritorio", "palavras": ["clipe", "clips"], "unidade": "caixa", "preco": 6.5, "equivalente": "Clipes 2/0 galvanizados de outra marca, caixa com 100" },
+    { "categoria": "escritorio", "palavras": ["caneta"], "unidade": "caixa", "preco": 42, "equivalente": "Caneta esferográfica azul de outra marca, caixa com 50" },
+    { "categoria": "escritorio", "palavras": ["grampeador"], "unidade": "unidade", "preco": 34.9, "equivalente": "Grampeador de mesa 26/6 de outra marca" },
+    { "categoria": "escritorio", "palavras": ["grampo"], "unidade": "caixa", "preco": 7.9, "equivalente": "Grampo 26/6 de outra marca, caixa com 5.000" },
+    { "categoria": "escritorio", "palavras": ["envelope"], "unidade": "pacote", "preco": 24, "equivalente": "Envelope pardo A4 de outra marca, pacote com 50" },
+
+    { "categoria": "epi", "palavras": ["luva"], "unidade": "par", "preco": 11.5, "equivalente": "Luva de vaqueta com CA válido, outra marca" },
+    { "categoria": "epi", "palavras": ["capacete"], "unidade": "unidade", "preco": 38, "equivalente": "Capacete classe B com jugular, CA válido, outra marca" },
+    { "categoria": "epi", "palavras": ["bota", "botina"], "unidade": "par", "preco": 119, "equivalente": "Botina de segurança com biqueira, CA válido, outra marca" },
+    { "categoria": "epi", "palavras": ["oculos"], "unidade": "unidade", "preco": 14.9, "equivalente": "Óculos de proteção incolor, CA válido, outra marca" },
+    { "categoria": "epi", "palavras": ["protetor auricular", "abafador"], "unidade": "unidade", "preco": 3.2, "equivalente": "Protetor auricular tipo plug, CA válido, outra marca" },
+    { "categoria": "epi", "palavras": ["pff2", "respirador", "mascara"], "unidade": "unidade", "preco": 4.5, "equivalente": "Respirador PFF2 sem válvula, CA válido, outra marca" },
+
+    { "categoria": "extintores", "palavras": ["extintor"], "unidade": "unidade", "preco": 179, "equivalente": "Extintor ABC 6 kg de outro fabricante, com selo do Inmetro" },
+
+    { "categoria": "limpeza", "palavras": ["detergente"], "unidade": "unidade", "preco": 2.9, "equivalente": "Detergente neutro 500 mL de outra marca" },
+    { "categoria": "limpeza", "palavras": ["desinfetante"], "unidade": "galão", "preco": 21.9, "equivalente": "Desinfetante 5 L de outra marca" },
+    { "categoria": "limpeza", "palavras": ["agua sanitaria", "cloro"], "unidade": "galão", "preco": 13.9, "equivalente": "Água sanitária 5 L de outra marca" },
+    { "categoria": "limpeza", "palavras": ["alcool"], "unidade": "L", "preco": 8.9, "equivalente": "Álcool 70% de outra marca" },
+    { "categoria": "limpeza", "palavras": ["papel toalha", "toalha de papel", "papel higienico"], "unidade": "fardo", "preco": 44.9, "equivalente": "Papel toalha interfolhado de outra marca, fardo" },
+    { "categoria": "limpeza", "palavras": ["saco de lixo", "sacos de lixo"], "unidade": "pacote", "preco": 17.9, "equivalente": "Saco de lixo 100 L reforçado de outra marca, pacote com 100" },
+
+    { "categoria": "informatica", "palavras": ["notebook", "laptop"], "unidade": "unidade", "preco": 4190, "equivalente": "Notebook i5, 16 GB, SSD 512 GB de outra marca" },
+    { "categoria": "informatica", "palavras": ["monitor"], "unidade": "unidade", "preco": 949, "equivalente": "Monitor 24 pol. Full HD de outra marca" },
+    { "categoria": "informatica", "palavras": ["mouse"], "unidade": "unidade", "preco": 44.9, "equivalente": "Mouse óptico USB de outra marca" },
+    { "categoria": "informatica", "palavras": ["teclado"], "unidade": "unidade", "preco": 79.9, "equivalente": "Teclado ABNT2 USB de outra marca" },
+    { "categoria": "informatica", "palavras": ["toner"], "unidade": "unidade", "preco": 319, "equivalente": "Toner compatível de outra marca, mesmo rendimento" },
+
+    { "categoria": "copa", "palavras": ["cafe"], "unidade": "kg", "preco": 47.9, "equivalente": "Café torrado e moído de outra marca, pacote 500 g" },
+    { "categoria": "copa", "palavras": ["acucar"], "unidade": "kg", "preco": 4.9, "equivalente": "Açúcar refinado de outra marca, pacote 1 kg" },
+    { "categoria": "copa", "palavras": ["copo descartavel", "copos descartaveis", "copo"], "unidade": "pacote", "preco": 6.2, "equivalente": "Copo descartável 200 mL de outra marca, pacote com 100" },
+    { "categoria": "copa", "palavras": ["agua mineral", "garrafao"], "unidade": "garrafão", "preco": 14.9, "equivalente": "Água mineral 20 L de outra fonte" },
+    { "categoria": "copa", "palavras": ["filtro de papel", "filtro de cafe"], "unidade": "caixa", "preco": 5.9, "equivalente": "Filtro de papel 103 de outra marca, caixa com 30" }
+  ],
+  "categorias": {
+    "geral": { "entrega": "no endereço informado", "freteAte": "até o endereço", "precoSintetico": { "unidade": "unidade", "preco": 50 } },
+    "agregados": { "entrega": "aí na obra", "freteAte": "até a obra", "conversoes": [{ "unidade": "carrad|caçamba|caminh", "de": "m³", "fator": 6 }], "precoSintetico": { "unidade": "m³", "preco": 140 } },
+    "cimenticios": { "entrega": "aí na obra", "freteAte": "até a obra", "precoSintetico": { "unidade": "saco", "preco": 35 } },
+    "aco": { "entrega": "aí na obra", "freteAte": "até a obra", "precoSintetico": { "unidade": "barra", "preco": 55 } },
+    "alvenaria": { "entrega": "aí na obra", "freteAte": "até a obra", "conversoes": [{ "unidade": "milheiro", "de": "unidade", "fator": 1000 }], "precoSintetico": { "unidade": "unidade", "preco": 4 } },
+    "ferragens": { "entrega": "aí na obra", "freteAte": "até a obra", "precoSintetico": { "unidade": "unidade", "preco": 15 } },
+    "hidraulica": { "entrega": "aí na obra", "freteAte": "até a obra", "precoSintetico": { "unidade": "unidade", "preco": 30 } },
+    "eletrico": { "entrega": "aí na obra", "freteAte": "até a obra", "precoSintetico": { "unidade": "unidade", "preco": 25 } },
+    "iluminacao": { "entrega": "no endereço informado", "freteAte": "até o endereço", "precoSintetico": { "unidade": "unidade", "preco": 35 } },
+    "isolamento": { "entrega": "aí na obra", "freteAte": "até a obra", "precoSintetico": { "unidade": "unidade", "preco": 20 } },
+    "epi": { "entrega": "no endereço informado", "freteAte": "até o endereço", "precoSintetico": { "unidade": "unidade", "preco": 25 } },
+    "extintores": { "entrega": "no endereço informado", "freteAte": "até o endereço", "precoSintetico": { "unidade": "unidade", "preco": 150 } },
+    "tintas": { "entrega": "aí na obra", "freteAte": "até a obra", "precoSintetico": { "unidade": "lata", "preco": 280 } },
+    "madeira": { "entrega": "aí na obra", "freteAte": "até a obra", "precoSintetico": { "unidade": "unidade", "preco": 45 } },
+    "escritorio": { "entrega": "no escritório", "freteAte": "até o escritório", "precoSintetico": { "unidade": "unidade", "preco": 12 } },
+    "limpeza": { "entrega": "no endereço informado", "freteAte": "até o endereço", "precoSintetico": { "unidade": "unidade", "preco": 15 } },
+    "informatica": { "entrega": "no endereço informado", "freteAte": "até o endereço", "precoSintetico": { "unidade": "unidade", "preco": 250 } },
+    "copa": { "entrega": "no endereço informado", "freteAte": "até o endereço", "precoSintetico": { "unidade": "unidade", "preco": 10 } },
+    "manutencao": { "entrega": "no endereço informado", "freteAte": "até o endereço", "precoSintetico": { "unidade": "serviço", "preco": 300 } }
+  }
+}
