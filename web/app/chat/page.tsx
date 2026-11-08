@@ -1,18 +1,7 @@
-import { ChatWeb } from "@/components/chat/ChatWeb";
+import { redirect } from "next/navigation";
 
-/** Usuário do bot do comprador, perguntado ao Telegram com o token do .env (só no servidor, guardado por 1 h). */
-async function linkDoBotComprador(): Promise<string | null> {
-  const token = process.env.TELEGRAM_TOKEN_COMPRADOR;
-  if (!token) return null;
-  try {
-    const r = await fetch(`https://api.telegram.org/bot${token}/getMe`, { next: { revalidate: 3600 }, signal: AbortSignal.timeout(5000) });
-    const j = (await r.json()) as { ok: boolean; result?: { username?: string } };
-    return j.ok && j.result?.username ? `https://t.me/${j.result.username}` : null;
-  } catch {
-    return null;
-  }
-}
-
-export default async function Conversar() {
-  return <ChatWeb linkTelegram={await linkDoBotComprador()} />;
+/** O chat do navegador agora mora na lateral do Início, com as outras conversas. Leva junto a conversa aberta (?c=). */
+export default async function Conversar({ searchParams }: { searchParams: Promise<{ c?: string }> }) {
+  const c = (await searchParams).c;
+  redirect(c ? `/?c=${encodeURIComponent(c)}` : "/");
 }

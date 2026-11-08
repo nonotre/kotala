@@ -1,10 +1,11 @@
 "use client";
-// Peças comuns das telas de operação: etapa, situação, urgência, fornecedor e a troca Quadro | Lista.
+// Peças comuns das telas de operação: etapa, situação, urgência, fornecedor e a troca de vista Quadro | Lista.
 
 import { ContentSwitcher, Switch, preview__IconIndicator as IconIndicator } from "@carbon/react";
 import { useRouter } from "next/navigation";
 import type { ComponentProps } from "react";
 import { SeloSimulado } from "@/components/SeloSimulado";
+import { ROTULO_COLUNA } from "@/lib/colunas";
 import type { Coluna, Etiqueta } from "@/lib/dados";
 import c from "../comum.module.scss";
 import s from "./operacao.module.scss";
@@ -32,7 +33,7 @@ function kindDa(e: Etiqueta): Kind {
 
 /** Coluna do quadro em que o item está. */
 export function EtapaIndicador({ coluna, tamanho = 16 }: { coluna: Coluna; tamanho?: 16 | 20 }) {
-  return <IconIndicator kind={KIND_ETAPA[coluna]} label={coluna} size={tamanho} />;
+  return <IconIndicator kind={KIND_ETAPA[coluna]} label={ROTULO_COLUNA[coluna]} size={tamanho} />;
 }
 
 /** As etiquetas do quadro como indicador com ícone e texto. Urgência fica de fora: vai em `Urgencia`. */
@@ -72,18 +73,18 @@ export function NomeFornecedor({ nome, simulado }: { nome: string; simulado: boo
   );
 }
 
-/** Os mesmos pedidos, em quadro ou em lista. */
-export function VistaPedidos({ atual }: { atual: "quadro" | "lista" }) {
+/** Os mesmos pedidos, em quadro ou em lista. Cada endereço já leva o que a vista guarda (filtro, canceladas). */
+export function VistaPedidos({ atual, hrefQuadro, hrefLista }: { atual: "quadro" | "lista"; hrefQuadro: string; hrefLista: string }) {
   const router = useRouter();
   return (
     <ContentSwitcher
       size="md"
       className={s.vista}
       selectedIndex={atual === "quadro" ? 0 : 1}
-      aria-label="Forma de ver os pedidos"
+      aria-label="Forma de ver as cotações"
       onChange={({ name }) => {
-        if (name === "quadro" && atual !== "quadro") router.push("/quadro");
-        if (name === "lista" && atual !== "lista") router.push("/pedidos");
+        if (name === "quadro" && atual !== "quadro") router.push(hrefQuadro);
+        if (name === "lista" && atual !== "lista") router.push(hrefLista);
       }}
     >
       <Switch name="quadro" text="Quadro" />

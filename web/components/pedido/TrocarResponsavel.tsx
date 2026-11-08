@@ -1,5 +1,6 @@
 "use client";
-// Responsável pelo pedido no cabeçalho, com a troca. Fica dentro do <p> do contexto:
+// Responsável pela cotação, com a troca. Mora nos Detalhes da cotação (Frente 1); `semRotulo` quando a linha já diz "Responsável".
+// Fica dentro de um texto corrido:
 // o gatilho é um link-botão e o modal vai para o body, para não aninhar blocos no parágrafo.
 
 import { InlineNotification, Link as CarbonLink, Modal, Select, SelectItem } from "@carbon/react";
@@ -13,7 +14,7 @@ const PADRAO = "";
 
 type Props = { pedidoId: number; responsavelId: string | null; dono: string | null };
 
-export function TrocarResponsavel({ pedidoId, responsavelId, dono }: Props) {
+export function TrocarResponsavel({ pedidoId, responsavelId, dono, semRotulo = false }: Props & { semRotulo?: boolean }) {
   const sessao = useSessao();
   const [aberto, setAberto] = useState(false);
   const [pessoas, setPessoas] = useState<Pessoa[] | null>(null);
@@ -43,7 +44,7 @@ export function TrocarResponsavel({ pedidoId, responsavelId, dono }: Props) {
 
   return (
     <>
-      {dono ? `Responsável: ${dono}` : "Sem responsável"}{" "}
+      {semRotulo ? (dono ?? "Sem responsável") : dono ? `Responsável: ${dono}` : "Sem responsável"}{" "}
       <CarbonLink as="button" type="button" inline onClick={() => setAberto(true)}>
         Trocar
       </CarbonLink>

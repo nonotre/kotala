@@ -46,9 +46,9 @@ type Linha = { f: LinhaFornecedor; canal: EstadoCanal; busca: string };
 const semConversa = (l: Linha) => l.canal.peso === PESO_CANAL.email || l.canal.peso === PESO_CANAL.site || l.canal.peso === PESO_CANAL.nenhum;
 
 const FILTROS: { id: Filtro; rotulo: string; vazio: string; passo: string; passa: (l: Linha) => boolean }[] = [
-  { id: "todos", rotulo: "Todos", vazio: "Nenhum fornecedor ainda.", passo: "Eles aparecem quando o assistente busca fornecedores para um pedido, ou quando alguém entra pelo convite.", passa: () => true },
-  { id: "com-canal", rotulo: "Com canal", vazio: "Nenhum fornecedor com canal ativo.", passo: "Quem entra pelo convite passa a receber as cotações.", passa: (l) => l.canal.peso === PESO_CANAL.ativo },
-  { id: "sem-canal", rotulo: "Sem canal ativo", vazio: "Todos têm canal ativo.", passo: "Aqui ficam quem só tem e-mail para o convite, lojas com site próprio e quem não tem contato: são referência de preço e não recebem cotação.", passa: semConversa },
+  { id: "todos", rotulo: "Todos", vazio: "Nenhum fornecedor ainda.", passo: "Eles aparecem quando o assistente busca fornecedores para uma cotação, ou quando alguém entra pelo convite.", passa: () => true },
+  { id: "com-canal", rotulo: "Com canal", vazio: "Nenhum fornecedor com canal ativo.", passo: "Quem entra pelo convite passa a receber as solicitações de proposta.", passa: (l) => l.canal.peso === PESO_CANAL.ativo },
+  { id: "sem-canal", rotulo: "Sem canal ativo", vazio: "Todos têm canal ativo.", passo: "Aqui ficam quem só tem e-mail para o convite, lojas com site próprio e quem não tem contato: são referência de preço e não recebem solicitação de proposta.", passa: semConversa },
   { id: "verificados", rotulo: "Verificados", vazio: "Nenhum fornecedor verificado.", passo: "A verificação confere o CNPJ na Receita.", passa: (l) => l.f.verificado },
   { id: "homologados", rotulo: "Homologados", vazio: "Nenhum fornecedor homologado.", passo: "Homologar é a sua aprovação, feita aqui ou na ficha de cada um.", passa: (l) => l.f.homologado },
   { id: "bloqueados", rotulo: "Bloqueados", vazio: "Nenhum fornecedor bloqueado.", passo: "Bloqueado não entra nas buscas nem na recompra.", passa: (l) => !!l.f.bloqueadoEm },
@@ -401,7 +401,7 @@ export function ListaFornecedores({ fornecedores, categorias, filtroInicial, fil
             <div className={s.lista}>
               <Bloco
                 plano
-                titulo={`${recebem} de ${todas.length} ${todas.length === 1 ? "fornecedor recebe" : "fornecedores recebem"} as suas cotações`}
+                titulo={`${recebem} de ${todas.length} ${todas.length === 1 ? "fornecedor recebe" : "fornecedores recebem"} as suas solicitações de proposta`}
                 descricao={
                   simulados ? (
                     <>
@@ -440,7 +440,7 @@ export function ListaFornecedores({ fornecedores, categorias, filtroInicial, fil
               </div>
               <div>
                 <dt>Bloqueado</dt>
-                <dd>Deixa de entrar nas buscas e na recompra. As cotações em andamento continuam.</dd>
+                <dd>Deixa de entrar nas buscas e na recompra. As solicitações de proposta em andamento continuam.</dd>
               </div>
             </dl>
           </Column>

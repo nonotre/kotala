@@ -5,10 +5,12 @@
 // `pedidoCompleto` usa o `cache` do React: o layout e a aba leem o mesmo pedido
 // na mesma requisição sem ir ao banco duas vezes.
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { cache } from "react";
 import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "../../src/nucleo/db/cliente.ts";
-import { cotacao, fornecedor, mapaCotacao, oferta } from "../../src/nucleo/db/schema.ts";
+import { cotacao, fornecedor, itemCatalogo, mapaCotacao, oferta } from "../../src/nucleo/db/schema.ts";
 import { colunaDoItem, FINAIS_ITEM } from "../../src/nucleo/orquestrador/estados.ts";
 import { detalhePedido, type Comparacao } from "./dados";
 
@@ -16,13 +18,36 @@ export { colunaDoItem, FINAIS_ITEM };
 
 export type FornecedorCurto = { id: string; nome: string; simulado: boolean };
 
+/** Estados do pedido (não do item): separam as transições do pedido na linha do tempo. */
+const ESTADOS_SO_DO_PEDIDO = ["interpretando", "aguardando_confirmacao", "em_andamento"];
+
+let categoriasBase: Map<string, string> | null = null;
+
+/**
+ * Categoria por código na base fixa de itens (`src/dados/itens.json`, fora do git: pode faltar).
+ * O `item_chave` do item é esse código quando o item casou com a base. Sem o arquivo, mapa vazio.
+ */
+function categoriasDaBase(): Map<string, string> {
+  if (categoriasBase) return categoriasBase;
+  try {
+    const arquivo = join(/*turbopackIgnore: true*/ process.cwd(), "..", "src", "dados", "itens.json");
+    const { itens } = JSON.parse(readFileSync(arquivo, "utf8")) as { itens: { id: string; categoria?: string | null }[] };
+    categoriasBase = new Map(itens.filter((i) => i.categoria).map((i) => [i.id, i.categoria!]));
+  } catch {
+    categoriasBase = new Map();
+  }
+  return categoriasBase;
+}
+
 export const pedidoCompleto = cache(async (id: number) => {
   if (!Number.isSafeInteger(id) || id <= 0) return null;
   const d = await detalhePedido(id);
   if (!d) return null;
   const ids = d.itens.map((i) => i.item.id);
 
-  const [cotacoes, ofertas, mapas] = ids.length
+  const chaves = [...new Set(d.itens.map((i) => i.item.itemChave).filter((c): c is string => !!c))];
+
+  const [cotacoes, ofertas, mapas, catalogo] = ids.length
     ? await Promise.all([
         db
           .select({
@@ -72,8 +97,11 @@ export const pedidoCompleto = cache(async (id: number) => {
           .from(mapaCotacao)
           .where(inArray(mapaCotacao.itemPedidoId, ids))
           .orderBy(asc(mapaCotacao.criadoEm)),
+        // Categoria do item: o catálogo cadastrado pelo agente usa o código como `item_chave`.
+        chaves.length ? db.select({ codigo: itemCatalogo.codigo, categoria: itemCatalogo.categoria }).from(itemCatalogo).where(inArray(itemCatalogo.codigo, chaves)) : Promise.resolve([]),
       ])
-    : [[], [], []];
+    : [[], [], [], []];
+  const categoriaCatalogo = new Map(catalogo.filter((c) => c.categoria).map((c) => [c.codigo, c.categoria!]));
 
   // Nomes de quem aparece por id no item: o escolhido, os alvos da negociação e os tirados do mapa.
   const idsFornecedor = new Set<string>();
@@ -106,10 +134,18 @@ export const pedidoCompleto = cache(async (id: number) => {
       /** A linha do mapa da oferta aprovada, quando ainda está no mapa atual. */
       escolhida,
       escolhido: i.item.fornecedorEscolhidoId ? (fornecedores[i.item.fornecedorEscolhidoId] ?? null) : null,
+      /** Do catálogo do banco; senão, da base fixa de itens. Nenhum dos dois: null. */
+      categoria: i.item.itemChave ? (categoriaCatalogo.get(i.item.itemChave) ?? categoriasDaBase().get(i.item.itemChave) ?? null) : null,
     };
   });
 
-  return { pedido: d.pedido, dono: d.dono, itens, linhaDoTempo: d.linhaDoTempo, fornecedores };
+  // Quando o comprador confirmou ou cancelou, pela transição do pedido na linha do tempo (a última vale).
+  const transicoes = d.linhaDoTempo.filter((e) => e.tipo === "evento" && e.deEstado && ESTADOS_SO_DO_PEDIDO.includes(e.deEstado));
+  const ultima = (para: string, de?: string) => transicoes.findLast((e) => e.tipo === "evento" && e.paraEstado === para && (!de || e.deEstado === de))?.em ?? null;
+  const confirmadoEm = ultima("em_andamento", "aguardando_confirmacao");
+  const canceladoEm = d.pedido.estado === "cancelado" ? ultima("cancelado") : null;
+
+  return { pedido: d.pedido, dono: d.dono, itens, linhaDoTempo: d.linhaDoTempo, fornecedores, confirmadoEm, canceladoEm };
 });
 
 export type DadosPedido = NonNullable<Awaited<ReturnType<typeof pedidoCompleto>>>;

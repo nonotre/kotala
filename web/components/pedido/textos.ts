@@ -3,10 +3,13 @@
 
 import { MOTIVOS_CANCELAMENTO } from "../../../src/texto.ts";
 import { COLUNAS } from "@/lib/dados";
+import { ROTULO_COLUNA } from "@/lib/colunas";
 import type { DadosPedido, ItemDoPedido } from "@/lib/dados-pedido";
 import { hora, quantidade } from "@/lib/formato";
+import { hrefAba, type AbaId, type EtapaId } from "./rotas";
 
 export { MOTIVOS_CANCELAMENTO };
+export { abaDaRota, areaDaAba, ETAPA_DA_ABA, hrefAba, type AbaId, type AreaId, type EtapaId } from "./rotas";
 
 /** Limite de rodadas de cotação por item (o mesmo do backend). */
 export const MAX_RODADAS = 3;
@@ -42,11 +45,11 @@ export const INDICADOR_ITEM: Record<string, Indicador> = {
 };
 
 export const ESTADO_PEDIDO: Record<string, string> = {
-  interpretando: "Lendo o pedido",
+  interpretando: "Lendo a cotação",
   aguardando_confirmacao: "Aguardando sua confirmação",
   em_andamento: "Em andamento",
-  concluido: "Concluído",
-  cancelado: "Cancelado",
+  concluido: "Concluída",
+  cancelado: "Cancelada",
 };
 
 export const INDICADOR_PEDIDO: Record<string, Indicador> = {
@@ -99,34 +102,126 @@ export const tituloItem = (i: ItemDoPedido["item"]) => `${i.ordem}. ${quantidade
 
 export const DECIDIDOS = ["aprovado", "pedido_enviado", "confirmado"];
 
-// ---------- Abas ----------
+// ---------- Abas e etapas ----------
+// Dois níveis: Pedido (Resumo e Histórico) e Compra, em 4 etapas na ordem em que
+// acontecem. Cada tela continua em `/pedidos/<id>/<aba>`: os endereços antigos
+// (busca, cotacoes, comparacao, negociacao, decisao) seguem valendo sem redirect.
 
-export type AbaId = "resumo" | "busca" | "cotacoes" | "comparacao" | "negociacao" | "decisao" | "historico";
+/** Uma tela do pedido. `oculta`: só aparece quando existe (a Negociação) ou quando é a aberta. */
+export type AbaPedido = { id: AbaId; rotulo: string; href: string; oculta?: boolean };
 
-export type AbaPedido = { id: AbaId; rotulo: string; href: string; desabilitada: boolean; motivo?: string; oculta?: boolean };
+export type EstadoEtapa = "concluida" | "atual" | "futura";
 
-export const hrefAba = (pedidoId: number, aba: AbaId, itemId?: number) =>
-  `/pedidos/${pedidoId}${aba === "resumo" ? "" : `/${aba}`}${itemId !== undefined ? `#item-${itemId}` : ""}`;
+/** Uma etapa da compra: o progresso e, ao mesmo tempo, o link para as telas dela. */
+export type Etapa = {
+  id: EtapaId;
+  rotulo: string;
+  /** A tela que abre ao clicar na etapa. */
+  href: string;
+  estado: EstadoEtapa;
+  /** Pedido cancelado nesta etapa. */
+  invalida: boolean;
+  /** Texto curto abaixo do nome: o andamento ou, desabilitada, o motivo. */
+  apoio: string;
+  desabilitada: boolean;
+  /** As telas da etapa. Com mais de uma visível, aparece o alternador. */
+  vistas: AbaPedido[];
+};
 
-/** Aba sem conteúdo ainda fica desabilitada, com o motivo. Negociação só aparece quando existe. */
-export function abasDoPedido(d: DadosPedido): AbaPedido[] {
-  const { pedido: p, itens } = d;
-  const confirmado = !["interpretando", "aguardando_confirmacao"].includes(p.estado);
+export type NavegacaoPedido = { pedidoId: number; hrefCompra: string; vistasPedido: AbaPedido[]; etapas: Etapa[] };
+
+const ROTULO_ABA: Record<AbaId, string> = {
+  resumo: "Resumo",
+  historico: "Histórico",
+  solicitado: "Solicitada",
+  busca: "Busca",
+  cotacoes: "Propostas",
+  comparacao: "Mapa de cotações",
+  negociacao: "Negociação",
+  decisao: "Decisão",
+};
+
+const NAO_CONFIRMADO = ["interpretando", "aguardando_confirmacao"];
+
+/** O que já existe no pedido para mostrar em cada tela. */
+function conteudo(d: DadosPedido) {
+  const { itens } = d;
   const temBusca = itens.some((i) => i.cotacoesTodas.length || i.referencias.length);
   const temCotacao = itens.some((i) => i.cotacoesTodas.length);
   const temMapa = itens.some((i) => i.mapasPorRodada.length);
+  const temRecompra = itens.some((i) => i.recompra);
   const temNegociacao = itens.some((i) => i.item.negociacao || i.mapasPorRodada.length > 1 || i.ofertas.some((o) => o.rodada > 1));
   const temDecisao = temMapa || itens.some((i) => DECIDIDOS.includes(i.item.estado) || i.item.estado === "sem_proposta");
-  const aba = (id: AbaId, rotulo: string, desabilitada: boolean, motivo?: string, oculta?: boolean): AbaPedido => ({ id, rotulo, href: hrefAba(p.id, id), desabilitada, motivo, oculta });
-  return [
-    aba("resumo", "Resumo", false),
-    aba("busca", "Busca", !temBusca, confirmado ? "A busca ainda não achou fornecedor" : "A busca começa depois que você confirmar o pedido"),
-    aba("cotacoes", "Cotações", !temCotacao, "Nenhum fornecedor recebeu a cotação ainda"),
-    aba("comparacao", "Comparação", !temMapa, "O mapa aparece quando as propostas chegarem"),
-    aba("negociacao", "Negociação", false, undefined, !temNegociacao),
-    aba("decisao", "Decisão", !temDecisao, "Ainda não há o que decidir"),
-    aba("historico", "Histórico", false),
+  return { temBusca, temCotacao, temMapa, temRecompra, temNegociacao, temDecisao };
+}
+
+/**
+ * As 4 etapas da compra. Concluída e atual são clicáveis; futura fica desabilitada com o motivo,
+ * a não ser que já tenha o que mostrar (o mapa pronto abre a Decisão ainda em Comparando).
+ */
+export function navegacaoDoPedido(d: DadosPedido): NavegacaoPedido {
+  const { pedido: p } = d;
+  const c = conteudo(d);
+  const progresso = progressoDoPedido(d);
+  const aba = (id: AbaId, oculta?: boolean): AbaPedido => ({ id, rotulo: ROTULO_ABA[id], href: hrefAba(p.id, id), oculta });
+  const confirmado = !NAO_CONFIRMADO.includes(p.estado);
+  const cancelado = p.estado === "cancelado";
+
+  const definicoes: { id: EtapaId; rotulo: string; vistas: AbaPedido[]; inicio: AbaId; tem: boolean; motivo: string }[] = [
+    { id: "solicitado", rotulo: ROTULO_COLUNA.Solicitado, vistas: [aba("solicitado")], inicio: "solicitado", tem: true, motivo: "" },
+    {
+      id: "cotando",
+      rotulo: ROTULO_COLUNA.Cotando,
+      vistas: [aba("busca"), aba("cotacoes")],
+      // A etapa abre no que está andando: as cotações, quando já saíram; antes, a busca.
+      inicio: c.temCotacao ? "cotacoes" : "busca",
+      tem: c.temBusca,
+      motivo: cancelado ? "A cotação foi cancelada antes da busca" : confirmado ? "A busca ainda não começou" : "A busca começa depois que você confirmar a cotação",
+    },
+    {
+      id: "comparando",
+      rotulo: ROTULO_COLUNA.Comparando,
+      vistas: [aba("comparacao"), aba("negociacao", !c.temNegociacao)],
+      inicio: "comparacao",
+      tem: c.temMapa || c.temRecompra || c.temNegociacao,
+      motivo: cancelado ? "A cotação foi cancelada antes do mapa" : "O mapa aparece quando as propostas chegarem",
+    },
+    {
+      id: "decidido",
+      rotulo: ROTULO_COLUNA.Decidido,
+      vistas: [aba("decisao")],
+      inicio: "decisao",
+      tem: c.temDecisao,
+      motivo: cancelado ? "A cotação foi cancelada sem decisão" : "Ainda não há o que decidir",
+    },
   ];
+
+  const etapas = definicoes.map((e, n): Etapa => {
+    const estado: EstadoEtapa = n < progresso.atual ? "concluida" : n === progresso.atual ? "atual" : "futura";
+    const desabilitada = estado === "futura" && !e.tem;
+    return {
+      id: e.id,
+      rotulo: e.rotulo,
+      href: hrefAba(p.id, e.inicio),
+      estado,
+      invalida: progresso.invalido && n === progresso.atual,
+      apoio: desabilitada ? e.motivo : progresso.apoio[n]!,
+      desabilitada,
+      vistas: e.vistas,
+    };
+  });
+
+  // Compra abre na etapa atual; pedido terminado, na última.
+  const daVez = etapas.find((e) => e.estado === "atual") ?? etapas[etapas.length - 1]!;
+  return { pedidoId: p.id, hrefCompra: daVez.href, vistasPedido: [aba("resumo"), aba("historico")], etapas };
+}
+
+/** "Cotação 14: 5 unidades de Extintor", "Cotação 14: 3 itens" ou só "Cotação 14". */
+export function tituloPedido(d: DadosPedido) {
+  const { pedido: p, itens } = d;
+  if (itens.length === 1) return `Cotação ${p.id}: ${quantidade(itens[0]!.item.quantidade, itens[0]!.item.unidade)} de ${itens[0]!.item.descricao}`;
+  if (itens.length > 1) return `Cotação ${p.id}: ${itens.length} itens`;
+  return `Cotação ${p.id}`;
 }
 
 // ---------- Progresso das etapas ----------
@@ -145,15 +240,18 @@ export function progressoDoPedido(d: DadosPedido): Progresso {
   const { pedido: p, itens } = d;
   const vez = itemDaVez(d);
   const terminou = p.estado === "concluido" || (p.estado === "em_andamento" && itens.length > 0 && !vez);
-  const atual = terminou ? COLUNAS.length : vez ? COLUNAS.indexOf(vez.coluna) : 0;
+  // Cancelado com tudo parado: a etapa em que parou é a última que chegou a ter conteúdo.
+  const c = conteudo(d);
+  const ondeParou = c.temDecisao ? 3 : c.temMapa || c.temRecompra ? 2 : c.temBusca ? 1 : 0;
+  const atual = terminou ? COLUNAS.length : vez ? COLUNAS.indexOf(vez.coluna) : p.estado === "cancelado" ? ondeParou : 0;
 
   const solicitado =
-    p.estado === "interpretando" ? "Lendo o pedido" : p.estado === "aguardando_confirmacao" ? "Falta confirmar" : p.estado === "cancelado" && atual === 0 ? "Cancelado" : "Você confirmou";
+    p.estado === "interpretando" ? "Lendo a cotação" : p.estado === "aguardando_confirmacao" ? "Falta confirmar" : p.estado === "cancelado" && atual === 0 ? "Cancelada" : "Você confirmou";
 
   const consultados = itens.reduce((t, i) => t + i.cotacoes.length, 0);
   const respostas = itens.reduce((t, i) => t + i.cotacoes.filter((c) => c.cotacao.situacao === "respondeu").length, 0);
   const cotando =
-    consultados > 0 ? (respostas === 1 ? `1 de ${consultados} respondeu` : `${respostas} de ${consultados} responderam`) : atual >= 1 ? (vez?.item.estado === "buscando" ? "Procurando fornecedores" : "Sem cotação nova") : "Ainda não começou";
+    consultados > 0 ? (respostas === 1 ? `1 de ${consultados} respondeu` : `${respostas} de ${consultados} responderam`) : atual >= 1 ? (vez?.item.estado === "buscando" ? "Procurando fornecedores" : "Sem proposta nova") : "Ainda não começou";
 
   const validas = itens.reduce((t, i) => t + (i.mapa?.comparacao.validas.length ?? 0), 0);
   const comparando =
@@ -169,37 +267,39 @@ export function progressoDoPedido(d: DadosPedido): Progresso {
 
   const ativos = itens.filter((i) => i.item.estado !== "cancelado");
   const decididos = ativos.filter((i) => DECIDIDOS.includes(i.item.estado)).length;
-  const decidido = ativos.length > 1 ? `${decididos} de ${ativos.length} itens aprovados` : decididos ? "Você aprovou" : "Só com a sua aprovação";
+  const aDecidir = itens.some((i) => i.item.estado === "aguardando_decisao");
+  const todos = (estados: string[]) => ativos.length > 0 && ativos.every((i) => estados.includes(i.item.estado));
+  const decidido = todos(["confirmado"])
+    ? "Fornecedor confirmou o pedido"
+    : todos(["pedido_enviado", "confirmado"])
+      ? "Pedido enviado ao fornecedor"
+      : ativos.length > 1
+        ? `${decididos} de ${ativos.length} itens aprovados`
+        : decididos
+          ? "Você aprovou"
+          : aDecidir
+            ? "Falta a sua aprovação"
+            : "Só com a sua aprovação";
 
   const apoio = [solicitado, cotando, comparando, decidido];
-  const nome = p.estado === "cancelado" ? "Pedido cancelado" : terminou ? "Pedido concluído" : `Etapa: ${COLUNAS[atual]}`;
+  const nome = p.estado === "cancelado" ? "Cotação cancelada" : terminou ? "Cotação concluída" : `Etapa: ${ROTULO_COLUNA[COLUNAS[atual]!]}`;
   return { atual, apoio, nome, invalido: p.estado === "cancelado" };
 }
 
 // ---------- O que falta agora ----------
 
-export type Quem = "comprador" | "fornecedor" | "sistema" | "fim";
+export type Quem = "comprador" | "fornecedor" | "sistema" | "fim" | "cancelado";
 
 export type ProximoPasso = { quem: Quem; texto: string; botao: { texto: string; href: string; aba: AbaId } | null };
-
-const ROTULO_ABA: Record<AbaId, string> = {
-  resumo: "Resumo",
-  busca: "Busca",
-  cotacoes: "Cotações",
-  comparacao: "Comparação",
-  negociacao: "Negociação",
-  decisao: "Decisão",
-  historico: "Histórico",
-};
 
 /** Uma frase só, a partir do estado real. Prioridade: o que depende do comprador. */
 export function proximoPasso(d: DadosPedido): ProximoPasso {
   const { pedido: p, itens } = d;
-  const ir = (aba: AbaId, itemId?: number) => ({ texto: `Ir para ${ROTULO_ABA[aba]}`, href: hrefAba(p.id, aba, itemId), aba });
+  const ir = (aba: AbaId, itemId?: number, texto = `Ir para ${ROTULO_ABA[aba]}`) => ({ texto, href: hrefAba(p.id, aba, itemId), aba });
 
-  if (p.estado === "interpretando") return { quem: "sistema", texto: "O assistente está lendo o pedido.", botao: null };
-  if (p.estado === "aguardando_confirmacao") return { quem: "comprador", texto: "Confira o que o assistente entendeu e confirme o pedido.", botao: ir("resumo") };
-  if (p.estado === "cancelado") return { quem: "fim", texto: p.motivoCancelamento ? `Pedido cancelado: ${p.motivoCancelamento}` : "Pedido cancelado.", botao: null };
+  if (p.estado === "interpretando") return { quem: "sistema", texto: "O assistente está lendo a cotação.", botao: null };
+  if (p.estado === "aguardando_confirmacao") return { quem: "comprador", texto: "Confira o que o assistente entendeu e confirme a cotação.", botao: ir("solicitado", undefined, "Conferir e confirmar") };
+  if (p.estado === "cancelado") return { quem: "cancelado", texto: p.motivoCancelamento ? `Cotação cancelada: ${p.motivoCancelamento}` : "Cotação cancelada.", botao: null };
 
   const com = (estado: string) => itens.find((i) => i.item.estado === estado);
   // Dúvida só pede resposta enquanto a cotação está aberta (o assistente só repassa nesses estados).
@@ -210,7 +310,7 @@ export function proximoPasso(d: DadosPedido): ProximoPasso {
   const decidir = com("aguardando_decisao");
   if (decidir) return { quem: "comprador", texto: `Decida a compra de ${decidir.item.descricao}.`, botao: ir("decisao", decidir.item.id) };
   const recompra = com("aguardando_recompra");
-  if (recompra) return { quem: "comprador", texto: `Repita a compra de ${recompra.item.descricao} ou cote de novo.`, botao: ir("resumo", recompra.item.id) };
+  if (recompra) return { quem: "comprador", texto: `Repita a compra de ${recompra.item.descricao} ou cote de novo.`, botao: ir("comparacao", recompra.item.id, "Repetir ou cotar de novo") };
   const cotando = com("cotando");
   if (cotando) {
     const r = cotando.cotacoes.filter((c) => c.cotacao.situacao === "respondeu").length;
@@ -228,5 +328,5 @@ export function proximoPasso(d: DadosPedido): ProximoPasso {
   }
   const fila = com("na_fila");
   if (fila) return { quem: "sistema", texto: `${fila.item.descricao} está na fila.`, botao: null };
-  return { quem: "fim", texto: p.estado === "concluido" ? "Pedido concluído: todos os itens terminaram." : "Nada pendente neste pedido.", botao: null };
+  return { quem: "fim", texto: p.estado === "concluido" ? "Cotação concluída: todos os itens terminaram." : "Nada pendente nesta cotação.", botao: null };
 }

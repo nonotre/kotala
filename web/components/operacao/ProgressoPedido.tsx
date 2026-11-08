@@ -2,6 +2,7 @@
 
 import { ProgressIndicator, ProgressStep } from "@carbon/react";
 import { BarraProgresso } from "@/components/BarraProgresso";
+import { ROTULO_COLUNA } from "@/lib/colunas";
 import type { Coluna } from "@/lib/dados";
 import s from "./operacao.module.scss";
 
@@ -9,7 +10,7 @@ import s from "./operacao.module.scss";
 const COLUNAS: Coluna[] = ["Solicitado", "Cotando", "Comparando", "Decidido"];
 
 const TEXTO_PASSO: Record<string, string> = {
-  "carbon.progress-step.complete": "Concluído",
+  "carbon.progress-step.complete": "Concluída",
   "carbon.progress-step.incomplete": "Ainda não",
   "carbon.progress-step.current": "Agora",
   "carbon.progress-step.invalid": "Com problema",
@@ -33,7 +34,7 @@ export function ProgressoPedido({ coluna, estadoPedido, estadoItem, respostas, v
   const atual = fechado ? COLUNAS.length : COLUNAS.indexOf(coluna);
 
   const solicitado =
-    estadoPedido === "interpretando" ? "Lendo o pedido" : estadoPedido === "aguardando_confirmacao" ? "Falta confirmar" : estadoItem === "na_fila" ? "Na fila" : "Você confirmou";
+    estadoPedido === "interpretando" ? "Lendo a cotação" : estadoPedido === "aguardando_confirmacao" ? "Falta confirmar" : estadoItem === "na_fila" ? "Na fila" : "Você confirmou";
   const cotando =
     respostas && respostas.consultados > 0
       ? respostas.respostas === 1
@@ -42,7 +43,7 @@ export function ProgressoPedido({ coluna, estadoPedido, estadoItem, respostas, v
       : estadoItem === "buscando"
         ? "Procurando fornecedores"
         : atual > 1
-          ? "Sem cotação nesta rodada"
+          ? "Sem proposta nesta rodada"
           : AINDA_NAO;
   const comparando =
     validas !== null
@@ -58,22 +59,24 @@ export function ProgressoPedido({ coluna, estadoPedido, estadoItem, respostas, v
           : AINDA_NAO;
   const decidido =
     estadoItem === "confirmado"
-      ? "Confirmado"
+      ? "Fornecedor confirmou o pedido"
       : estadoItem === "pedido_enviado"
-        ? "Falta o fornecedor confirmar"
+        ? "Pedido enviado ao fornecedor"
         : estadoItem === "aprovado"
           ? "Você aprovou"
           : estadoItem === "sem_proposta"
             ? "Sem proposta válida"
-            : "Só com a sua aprovação";
+            : estadoItem === "aguardando_decisao"
+              ? "Falta a sua aprovação"
+              : "Só com a sua aprovação";
   const apoio = [solicitado, cotando, comparando, decidido];
-  const nome = fechado ? "Compra fechada" : `Etapa: ${coluna}`;
+  const nome = fechado ? "Compra fechada" : `Etapa: ${ROTULO_COLUNA[coluna]}`;
   return (
     <>
       <div className={s.progressoGrande}>
         <ProgressIndicator currentIndex={atual} spaceEqually>
           {COLUNAS.map((c, i) => (
-            <ProgressStep key={c} label={c} secondaryLabel={apoio[i]} translateWithId={traduzirPasso} />
+            <ProgressStep key={c} label={ROTULO_COLUNA[c]} secondaryLabel={apoio[i]} translateWithId={traduzirPasso} />
           ))}
         </ProgressIndicator>
       </div>

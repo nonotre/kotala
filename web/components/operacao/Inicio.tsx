@@ -102,20 +102,20 @@ function HeroiDecidir({ h, l }: { h: Extract<Heroi, { tipo: "decidir" }>; l: Lin
         v ? (
           <SeloIA titulo={`Recomendamos ${v.fornecedor}`}>
             <p>
-              Maior nota entre as {n} propostas válidas do mapa de cotação.{h.urgente ? " Com a urgência do pedido, o prazo pesa mais." : ""} Quem decide é você.
+              Maior nota entre as {n} propostas válidas do mapa de cotações.{h.urgente ? " Com a urgência da cotação, o prazo pesa mais." : ""} Quem decide é você.
             </p>
           </SeloIA>
         ) : undefined
       }
       rotulo={
         <>
-          <span>Pedido {h.aviso.pedidoId}</span>
+          <span>Cotação {h.aviso.pedidoId}</span>
           <span>{h.descricao}</span>
         </>
       }
       titulo={`Escolha quem entrega ${quantidade(h.quantidade, h.unidade)}`}
       contexto={<Fatos destino={h.destino} prazoTexto={h.prazoTexto} urgencia={h.urgencia} />}
-      rodape={<Rodape acao={acao} secundaria={{ texto: "Ver o pedido", href: `/pedidos/${h.aviso.pedidoId}` }} />}
+      rodape={<Rodape acao={acao} secundaria={{ texto: "Ver a cotação", href: `/pedidos/${h.aviso.pedidoId}` }} />}
     >
       <Progresso l={l} validas={n} respostas={h.respostas.consultados ? h.respostas : null} />
       <div className={s.numeros}>
@@ -140,7 +140,7 @@ function HeroiDecidir({ h, l }: { h: Extract<Heroi, { tipo: "decidir" }>; l: Lin
                   </div>
                 ) : null}
               </dl>
-              {h.urgente && h.difPrazo !== null && h.difPrazo > 0 ? <p className={s.porque}>Com a urgência do pedido, o prazo pesa mais.</p> : null}
+              {h.urgente && h.difPrazo !== null && h.difPrazo > 0 ? <p className={s.porque}>Com a urgência da cotação, o prazo pesa mais.</p> : null}
               <Alertas lista={h.alertas} />
             </div>
           </div>
@@ -234,7 +234,7 @@ function HeroiConfirmar({ h, l }: { h: Extract<Heroi, { tipo: "confirmar_pedido"
           <p>O assistente leu a sua mensagem e separou itens, quantidades, local de entrega e prazo. Nada sai para os fornecedores antes de você confirmar.</p>
         </SeloIA>
       }
-      rotulo={<span>Pedido {h.aviso.pedidoId}</span>}
+      rotulo={<span>Cotação {h.aviso.pedidoId}</span>}
       titulo={h.aviso.titulo}
       contexto={h.urgencia !== "normal" ? <Fatos destino={null} prazoTexto={null} urgencia={h.urgencia} /> : null}
       rodape={<Rodape acao={{ texto: VERBO_DO_AVISO.confirmar_pedido, href: h.aviso.href }} />}
@@ -283,7 +283,7 @@ function HeroiSimples({ h, l }: { h: Extract<Heroi, { tipo: "recompra" | "sem_pr
     <MoldeHeroi
       rotulo={
         <>
-          <span>Pedido {h.aviso.pedidoId}</span>
+          <span>Cotação {h.aviso.pedidoId}</span>
           {h.aviso.item ? <span>{h.aviso.item}</span> : null}
         </>
       }
@@ -298,8 +298,8 @@ function HeroiSimples({ h, l }: { h: Extract<Heroi, { tipo: "recompra" | "sem_pr
 }
 
 const PASSOS: [string, string][] = [
-  ["Você pede", "Escreva do seu jeito, aqui em Conversar ou pelo Telegram. Um pedido pode ter vários itens: eles são cotados um por vez."],
-  ["O assistente cota", "Ele procura fornecedores, manda a cotação, lê as respostas e monta o mapa de cotação."],
+  ["Você pede", "Escreva do seu jeito, aqui em Conversar ou pelo Telegram. Uma cotação pode ter vários itens: eles são cotados um por vez."],
+  ["O assistente cota", "Ele procura fornecedores, pede as propostas, lê as respostas e monta o mapa de cotações."],
   ["Você decide", "Nada é comprado sem a sua aprovação."],
 ];
 
@@ -310,7 +310,7 @@ function HeroiLivre({ primeiraVez, andando }: { primeiraVez: boolean; andando: b
       <Layer className={s.heroiMiolo}>
         <div className={s.heroiTopo}>
           {primeiraVez ? null : <CheckmarkOutline size={32} className={s.heroiIcone} aria-hidden="true" />}
-          <h1 className={s.heroiTitulo}>{primeiraVez ? "Faça seu primeiro pedido" : "Nada precisa de você agora."}</h1>
+          <h1 className={s.heroiTitulo}>{primeiraVez ? "Peça sua primeira cotação" : "Nada precisa de você agora."}</h1>
           <p className={s.heroiFrase}>
             {primeiraVez
               ? "Diga o que a empresa precisa comprar, do seu jeito. O assistente cota e você decide."
@@ -335,11 +335,11 @@ function HeroiLivre({ primeiraVez, andando }: { primeiraVez: boolean; andando: b
           </ol>
         ) : null}
         <div className={s.heroiRodape}>
-          <Button as={NextLink} href="/chat" size="lg" renderIcon={Chat}>
-            Fazer um pedido
+          <Button as={NextLink} href="/" size="lg" renderIcon={Chat}>
+            Pedir uma cotação
           </Button>
           {primeiraVez ? null : (
-            <Button as={NextLink} href="/quadro" kind="ghost" size="lg">
+            <Button as={NextLink} href="/" kind="ghost" size="lg">
               Ver o quadro
             </Button>
           )}
@@ -357,7 +357,7 @@ function PrecisaDeVoce({ lista }: { lista: AvisoSerial[] }) {
       {lista.map((a) => (
         <li key={a.chave} className={s.pendencia}>
           <p className={s.linhaRotulo}>
-            <span>Pedido {a.pedidoId}</span>
+            <span>Cotação {a.pedidoId}</span>
             {a.item ? <span>{a.item}</span> : null}
           </p>
           <p className={s.pendenciaTexto}>{a.titulo}</p>
@@ -387,7 +387,7 @@ function EmAndamento({ lista }: { lista: LinhaPedido[] }) {
           <div className={s.andamentoTopo}>
             <p className={s.andamentoTitulo}>
               <CarbonLink as={NextLink} href={l.itemDaVez ? `/pedidos/${l.id}#item-${l.itemDaVez.id}` : `/pedidos/${l.id}`}>
-                Pedido {l.id}
+                Cotação {l.id}
               </CarbonLink>
               <span className={s.linhaItem}>{nomeDaLinha(l)}</span>
             </p>
@@ -406,9 +406,9 @@ function EmAndamento({ lista }: { lista: LinhaPedido[] }) {
 
 function EmNumeros({ n }: { n: Numeros }) {
   const itens: [string, number][] = [
-    ["Pedidos abertos", n.abertos],
-    ["Itens em cotação", n.emCotacao],
-    ["Cotações esperando resposta", n.aguardandoResposta],
+    ["Cotações abertas", n.abertos],
+    ["Itens em busca de propostas", n.emCotacao],
+    ["Solicitações de proposta sem resposta", n.aguardandoResposta],
     ["Compras fechadas", n.fechadas],
   ];
   return (
@@ -438,7 +438,7 @@ function RegistroAssistente({ pedidoId, itens }: { pedidoId: number; itens: Regi
         ))}
       </ol>
       <CarbonLink as={NextLink} href={`/pedidos/${pedidoId}/historico`} className={s.linkSolto}>
-        Ver o histórico do pedido {pedidoId}
+        Ver o histórico da cotação {pedidoId}
       </CarbonLink>
     </>
   );
@@ -455,7 +455,7 @@ function UltimosAvisos({ lista }: { lista: Informativo[] }) {
               <span className={s.registroAcao}>{a.texto}</span>
               <span className={s.registroMotivo}>
                 <CarbonLink as={NextLink} href={a.href} size="sm">
-                  Pedido {a.pedidoId}
+                  Cotação {a.pedidoId}
                 </CarbonLink>
                 {" · "}
                 {nomeDoCanal(a.canal)}
@@ -505,12 +505,12 @@ export function Inicio({ tarefas, heroi, linhaHeroi, andamento, numeros, registr
   const links =
     numeros.total > 0 ? (
       <p className={s.linksPedidos}>
-        <CarbonLink as={NextLink} href="/pedidos">
-          Ver todos os pedidos
+        <CarbonLink as={NextLink} href="/?vista=lista">
+          Ver todas as cotações
         </CarbonLink>
         {numeros.concluidos > 0 ? (
-          <CarbonLink as={NextLink} href="/pedidos?filtro=concluidos">
-            Concluídos ({numeros.concluidos})
+          <CarbonLink as={NextLink} href="/?vista=lista&filtro=concluidos">
+            Concluídas ({numeros.concluidos})
           </CarbonLink>
         ) : null}
       </p>
@@ -528,10 +528,10 @@ export function Inicio({ tarefas, heroi, linhaHeroi, andamento, numeros, registr
               {andamento.length ? <p className={s.fraseApoio}>Do resto, o assistente está cuidando.</p> : null}
             </Column>
             <Column sm={4} md={8} lg={6} className={s.topoAtalhos}>
-              <Button as={NextLink} href="/chat" kind="tertiary" size="md" renderIcon={Chat}>
+              <Button as={NextLink} href="/" kind="tertiary" size="md" renderIcon={Chat}>
                 Conversar
               </Button>
-              <Button as={NextLink} href="/quadro" kind="ghost" size="md">
+              <Button as={NextLink} href="/" kind="ghost" size="md">
                 Ver o quadro
               </Button>
             </Column>
@@ -579,7 +579,7 @@ export function Inicio({ tarefas, heroi, linhaHeroi, andamento, numeros, registr
           <GradePagina className={s.gradeApoio}>
             {registro?.itens.length ? (
               <Column sm={4} md={8} lg={informativos.length ? 10 : 16} className={s.colunaPlana}>
-                <Bloco titulo={`O que o assistente fez no pedido ${registro.pedidoId}`} plano solto>
+                <Bloco titulo={`O que o assistente fez na cotação ${registro.pedidoId}`} plano solto>
                   <RegistroAssistente pedidoId={registro.pedidoId} itens={registro.itens} />
                 </Bloco>
               </Column>

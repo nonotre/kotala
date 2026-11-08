@@ -1,7 +1,7 @@
 "use client";
 
 import { SideNav, SideNavDivider, SideNavItems, SideNavLink } from "@carbon/react";
-import { Analytics, Chat, Dashboard, DataBase, Home, Logout, QrCode, Security, Settings } from "@carbon/react/icons";
+import { Analytics, DataBase, Home, Logout, QrCode, Security, Settings } from "@carbon/react/icons";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { sair as sairDaConta } from "./conta/sessao";
@@ -9,11 +9,8 @@ import s from "./casca.module.scss";
 
 type Item = { href: string; rotulo: string; icone: typeof Home };
 
-const TRABALHO: Item[] = [
-  { href: "/", rotulo: "Início", icone: Home },
-  { href: "/quadro", rotulo: "Quadro", icone: Dashboard },
-  { href: "/chat", rotulo: "Conversar", icone: Chat },
-];
+// O trabalho todo mora no Início: as cotações (quadro e lista) e as conversas.
+const TRABALHO: Item[] = [{ href: "/", rotulo: "Início", icone: Home }];
 
 const CONSULTA: Item[] = [
   { href: "/fornecedores", rotulo: "Base de Dados", icone: DataBase },
@@ -22,25 +19,28 @@ const CONSULTA: Item[] = [
   { href: "/convite", rotulo: "Convite", icone: QrCode },
 ];
 
+/** Endereços antigos que redirecionam para o Início. */
+const ANTIGOS_DO_INICIO = ["/pedidos", "/quadro", "/conversas", "/chat"];
+
 function ativo(rota: string, href: string) {
-  if (href === "/") return rota === "/";
-  // Quadro e Lista são o mesmo item; um pedido é visto a partir do quadro, e a ligação por voz é de um pedido.
-  if (href === "/quadro") return rota === "/quadro" || rota === "/pedidos" || rota.startsWith("/pedidos/") || rota.startsWith("/voz/");
+  // Uma cotação é aberta a partir do Início, e a ligação por voz é de uma cotação.
+  if (href === "/") return rota === "/" || ANTIGOS_DO_INICIO.includes(rota) || rota.startsWith("/pedidos/") || rota.startsWith("/voz/");
   // Base de Dados: as abas Fornecedores e Itens, e a ficha de cada fornecedor.
   if (href === "/fornecedores") return rota === "/fornecedores" || rota.startsWith("/fornecedores/") || rota === "/itens";
   return rota === href || rota.startsWith(`${href}/`);
 }
 
 type Props = {
-  /** Aberto pelo botão do Header, abaixo de `lg` e no trilho. */
+  /** Aberto como sobreposição, pelo botão do Header: abaixo de `lg`, ou no trilho do pedido. */
   aberto: boolean;
+  /** Com rótulos. A partir de `lg` fora do pedido, vale a escolha do usuário; senão, é o mesmo que `aberto`. */
+  expandido: boolean;
   aoFechar: () => void;
 };
 
-/** Menu principal. Com rótulos a partir de `lg`; dentro de um pedido, trilho de 48 px, porque o mapa precisa da largura. */
-export function MenuLateral({ aberto, aoFechar }: Props) {
+/** Menu principal. Sempre um trilho de 48 px que se expande (rótulos, 16 rem): fixo a partir de `lg`, sobreposição nos demais casos. */
+export function MenuLateral({ aberto, expandido, aoFechar }: Props) {
   const rota = usePathname();
-  const noPedido = /^\/pedidos\/[^/]+/.test(rota);
 
   const item = (l: Item) => {
     const marcado = ativo(rota, l.href);
@@ -56,9 +56,8 @@ export function MenuLateral({ aberto, aoFechar }: Props) {
       {aberto ? <div className={s.veu} aria-hidden="true" onClick={aoFechar} /> : null}
       <SideNav
         aria-label="Menu principal"
-        isRail={noPedido}
-        isFixedNav={!noPedido}
-        expanded={noPedido ? aberto : true}
+        isRail
+        expanded={expandido}
         onOverlayClick={aoFechar}
         className={`cds--g100 ${s.menu} ${aberto ? "" : s.recolhido}`}
       >

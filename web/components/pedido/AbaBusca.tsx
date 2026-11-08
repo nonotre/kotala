@@ -1,4 +1,4 @@
-// Aba Busca: quem a busca achou e recebeu a cotação, em todas as rodadas, e o
+// Compra › Cotando › Busca: quem a busca achou e recebeu a cotação, em todas as rodadas, e o
 // preço público coletado na internet, que serve só de referência.
 
 import { Column } from "@carbon/react";
@@ -11,6 +11,7 @@ import type { DadosPedido, ItemDoPedido } from "@/lib/dados-pedido";
 import { brl, dataHora, dias } from "@/lib/formato";
 import { Fornecedor, IndiceItens, SecaoItem } from "./Item";
 import { Status } from "./Status";
+import { hrefAba } from "./textos";
 import s from "./pedido.module.scss";
 
 const ehLink = (t: string | null) => !!t && /^https?:\/\//.test(t);
@@ -26,10 +27,10 @@ function QuemRecebeu({ i }: { i: ItemDoPedido }) {
   const linhas = [...porFornecedor.values()];
   if (!linhas.length) return null;
   return (
-    <Bloco titulo="Quem recebeu a cotação" descricao={`${linhas.length === 1 ? "1 fornecedor" : `${linhas.length} fornecedores`} encontrados para este item.`}>
+    <Bloco titulo="Quem recebeu a solicitação de proposta" descricao={`${linhas.length === 1 ? "1 fornecedor" : `${linhas.length} fornecedores`} encontrados para este item.`}>
       <Tabela
         rotulo={`Fornecedores do item ${i.item.ordem}`}
-        vazio="Ninguém recebeu a cotação."
+        vazio="Ninguém recebeu a solicitação de proposta."
         colunas={["Fornecedor", "Verificação", "Região", "Fonte", "Rodadas"]}
         linhas={linhas.map(({ c, rodadas }) => [
           <Fornecedor key="f" nome={c.nome} simulado={c.origem === "simulado"} />,
@@ -84,10 +85,10 @@ function Referencias({ i }: { i: ItemDoPedido }) {
 }
 
 function vazioDoItem(d: DadosPedido, i: ItemDoPedido): string {
-  if (["interpretando", "aguardando_confirmacao"].includes(d.pedido.estado)) return "A busca começa depois que você confirmar o pedido.";
+  if (["interpretando", "aguardando_confirmacao"].includes(d.pedido.estado)) return "A busca começa depois que você confirmar a cotação.";
   if (i.item.estado === "na_fila") return "A busca começa quando este item sair da fila.";
   if (i.item.estado === "buscando") return "O assistente está procurando fornecedores.";
-  if (i.item.estado === "aguardando_recompra") return "Compra repetida: sem busca nova até você escolher no Resumo.";
+  if (i.item.estado === "aguardando_recompra") return "Compra repetida: sem busca nova até você escolher na etapa Comparação.";
   if (i.item.estado === "cancelado") return "Item cancelado.";
   return "A busca não achou fornecedor para este item.";
 }
@@ -114,7 +115,7 @@ export function AbaBusca({ d }: { d: DadosPedido }) {
       ))}
       {!d.itens.length ? (
         <Column sm={4} md={8} lg={16}>
-          <EstadoVazio titulo="A busca começa depois que você confirmar o pedido." proximoPasso="O pedido está no Resumo." acao={{ texto: "Ir para Resumo", href: `/pedidos/${d.pedido.id}`, tipo: "tertiary" }} />
+          <EstadoVazio titulo="A busca começa depois que você confirmar a cotação." proximoPasso="A confirmação fica na etapa Solicitada." acao={{ texto: "Ir para Solicitada", href: hrefAba(d.pedido.id, "solicitado"), tipo: "tertiary" }} />
         </Column>
       ) : null}
     </GradePagina>

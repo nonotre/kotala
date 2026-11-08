@@ -5,7 +5,7 @@ export const textosPtBr: LanguagePack = {
   ai_slug_label: 'Explicação da IA',
   ai_slug_title: 'Respostas geradas por IA',
   ai_slug_description:
-    'O assistente entende o pedido, busca fornecedores e compara propostas. Quem aprova é você.',
+    'O assistente entende o que você pede, busca fornecedores e compara propostas. Quem aprova é você.',
   components_overflow_ariaLabel: 'Abrir e fechar a lista de opções',
   components_swiper_currentLabel: '{currentSlideNumber}/{totalSlideCount}',
   errors_communicating:

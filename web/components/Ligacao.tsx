@@ -139,7 +139,7 @@ export function Ligacao({ cotacaoId, modelo, instrucoes, ferramenta }: { cotacao
       r = respostaDaFerramenta(null);
     }
     if (r.ok) setRegistro(r);
-    acrescentar("sistema", r.ok ? "Proposta registrada no mapa de cotação." : r.resposta);
+    acrescentar("sistema", r.ok ? "Proposta registrada no mapa de cotações." : r.resposta);
     atividade();
     // A ferramenta sempre responde, mesmo com falha: o agente não fica esperando.
     sessao.current?.sendToolResponse({ functionResponses: [{ id: fc.id, name: fc.name, response: r }] });

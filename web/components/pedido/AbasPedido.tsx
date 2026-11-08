@@ -2,14 +2,22 @@
 
 import { usePathname } from "next/navigation";
 import { Abas } from "@/components/Abas";
-import type { AbaPedido } from "./textos";
+import { abaDaRota, areaDaAba, hrefAba } from "./rotas";
 
 /**
- * Abas do pedido, pela rota. A aba aberta por endereço direto fica marcada e livre,
- * mesmo desabilitada ou oculta: o Tabs pularia para a primeira livre, e isso viraria navegação.
+ * O primeiro nível do pedido: Pedido (Resumo e Histórico) e Compra (as etapas).
+ * A aba marcada sai da área da tela aberta; Compra leva à etapa atual.
  */
-export function AbasPedido({ itens }: { itens: AbaPedido[] }) {
-  const rota = usePathname();
-  const visiveis = itens.filter((a) => !a.oculta || a.href === rota).map((a) => (a.href === rota ? { ...a, desabilitada: false } : a));
-  return <Abas rotulo="Abas do pedido" itens={visiveis} />;
+export function AbasPedido({ pedidoId, hrefCompra }: { pedidoId: number; hrefCompra: string }) {
+  const aba = abaDaRota(usePathname()) ?? "resumo";
+  return (
+    <Abas
+      rotulo="Partes da cotação"
+      ativa={areaDaAba(aba)}
+      itens={[
+        { id: "pedido", rotulo: "Cotação", href: hrefAba(pedidoId, "resumo") },
+        { id: "compra", rotulo: "Compra", href: hrefCompra },
+      ]}
+    />
+  );
 }

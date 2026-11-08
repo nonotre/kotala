@@ -1,4 +1,4 @@
-// Aba Negociação: a rodada de negociação em curso (a quem o assistente pediu
+// Compra › Comparando › Negociação: a rodada de negociação em curso (a quem o assistente pediu
 // preço melhor e com que números) e como o custo de cada fornecedor mudou de
 // uma rodada para outra, pelos mapas guardados.
 
@@ -99,7 +99,7 @@ export function AbaNegociacao({ d }: { d: DadosPedido }) {
       <GradePagina>
         <Column sm={4} md={8} lg={16}>
           <EstadoVazio
-            titulo="Nenhuma negociação neste pedido."
+            titulo="Nenhuma negociação nesta cotação."
             proximoPasso={decidir ? "Para negociar, reprove por preço alto na Decisão." : "Uma negociação começa quando você reprova o mapa por preço alto."}
             acao={decidir ? { texto: "Ir para Decisão", href: hrefAba(d.pedido.id, "decisao", decidir.item.id), tipo: "tertiary" } : undefined}
           />
@@ -124,7 +124,7 @@ export function AbaNegociacao({ d }: { d: DadosPedido }) {
             ) : (
               <EstadoVazio compacto titulo="Nenhuma negociação neste item." />
             )}
-            {i.item.estado === "aguardando_decisao" ? <Link href={hrefAba(d.pedido.id, "decisao", i.item.id)}>Decidir na aba Decisão</Link> : null}
+            {i.item.estado === "aguardando_decisao" ? <Link href={hrefAba(d.pedido.id, "decisao", i.item.id)}>Decidir na etapa Pedido</Link> : null}
           </SecaoItem>
         </Column>
       ))}

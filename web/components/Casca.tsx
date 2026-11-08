@@ -12,18 +12,19 @@ import { MenuLateral } from "./MenuLateral";
 import s from "./casca.module.scss";
 
 const NOME_PRODUTO = "Kotala";
-/** O `lg` do Carbon: a partir daí, o menu muda de forma. */
+/** O `lg` do Carbon: a partir daí, o menu não é mais sobreposição: alterna entre expandido e trilho. */
 const A_PARTIR_DE_LG = "(min-width: 66rem)";
+/** Onde o navegador guarda a escolha do menu (fora do pedido, a partir de `lg`). */
+const CHAVE_MENU = "kotala-menu";
 
-const NOMES_ABA: Record<string, string> = { busca: "Busca", cotacoes: "Cotações", comparacao: "Comparação", negociacao: "Negociação", decisao: "Decisão", historico: "Histórico" };
+const NOMES_ABA: Record<string, string> = { busca: "Busca", cotacoes: "Propostas", comparacao: "Mapa de cotações", negociacao: "Negociação", decisao: "Decisão", historico: "Histórico", solicitado: "Solicitada", compra: "Compra" };
 
 const NOMES_ROTA: Record<string, string> = {
   "/": "Início",
-  "/quadro": "Quadro",
-  "/pedidos": "Lista de pedidos",
-  "/chat": "Conversar",
   "/fornecedores": "Base de Dados, Fornecedores",
   "/itens": "Base de Dados, Itens",
+  "/conduta": "Alertas de conduta",
+  "/economia": "Economia",
   "/dashboard": "Dashboard",
   "/avisos": "Avisos",
   "/convite": "Convite",
@@ -36,10 +37,10 @@ const NOMES_ROTA: Record<string, string> = {
 /** Título da guia, com pedido e aba. */
 function tituloDaRota(rota: string): string {
   const pedido = rota.match(/^\/pedidos\/(\d+)(?:\/([a-z]+))?/);
-  if (pedido) return [`Pedido ${pedido[1]}`, NOMES_ABA[pedido[2] ?? ""]].filter(Boolean).join(", ");
+  if (pedido) return [`Cotação ${pedido[1]}`, NOMES_ABA[pedido[2] ?? ""]].filter(Boolean).join(", ");
   if (rota.startsWith("/fornecedores/")) return "Ficha do fornecedor";
   if (rota.startsWith("/voz/")) return "Ligação por voz";
-  return NOMES_ROTA[rota] ?? "Cotações";
+  return NOMES_ROTA[rota] ?? NOME_PRODUTO;
 }
 
 function Sino({ n }: { n: number }) {
@@ -71,7 +72,12 @@ function TrocaTema() {
 
 export function Casca({ children, avisos }: { children: ReactNode; avisos: number }) {
   const rota = usePathname();
+  // Menu aberto como sobreposição (abaixo de `lg`, ou o trilho expandido no pedido). Não vale para o menu fixo.
   const [aberto, setAberto] = useState(false);
+  // Escolha do usuário a partir de `lg`, fora do pedido: trilho de ícones em vez do menu com rótulos.
+  const [trilho, setTrilho] = useState(false);
+  // Começa em `true`, como o HTML do servidor: o CSS cuida do celular, e o efeito corrige no cliente.
+  const [largo, setLargo] = useState(true);
   const noPedido = /^\/pedidos\/[^/]+/.test(rota);
   const rotaAnterior = useRef(rota);
   // Frente 2: sem sessão, vai para /login.
@@ -87,22 +93,50 @@ export function Casca({ children, avisos }: { children: ReactNode; avisos: numbe
   }, [rota]);
 
   useEffect(() => {
+    // Sem armazenamento (janela privada, dados bloqueados), fica o padrão: expandido. Um quadro de pulo na carga é aceito.
+    try {
+      if (window.localStorage.getItem(CHAVE_MENU) === "trilho") setTrilho(true);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    const largura = window.matchMedia(A_PARTIR_DE_LG);
+    setLargo(largura.matches);
+    // Ao cruzar lg, o menu muda de forma: a sobreposição aberta não pode ficar para trás.
+    const aoCruzar = () => {
+      setLargo(largura.matches);
+      setAberto(false);
+    };
+    largura.addEventListener("change", aoCruzar);
+    return () => largura.removeEventListener("change", aoCruzar);
+  }, []);
+
+  useEffect(() => {
     if (!aberto) return;
     const aoTeclar = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       setAberto(false);
       document.querySelector<HTMLElement>("[data-botao-menu]")?.focus();
     };
-    // Ao cruzar lg fora do pedido, o botão some: o menu não pode ficar aberto com o conteúdo bloqueado.
-    const largura = window.matchMedia(A_PARTIR_DE_LG);
-    const aoCruzar = () => setAberto(false);
     document.addEventListener("keydown", aoTeclar);
-    largura.addEventListener("change", aoCruzar);
-    return () => {
-      document.removeEventListener("keydown", aoTeclar);
-      largura.removeEventListener("change", aoCruzar);
-    };
+    return () => document.removeEventListener("keydown", aoTeclar);
   }, [aberto]);
+
+  // Sobreposição: abaixo de lg, e no pedido (o trilho expandido empresta a largura, o mapa não se mexe).
+  // Fora disso, a partir de lg, o menu é fixo e o conteúdo acompanha a largura dele.
+  const sobreposicao = !largo || noPedido;
+  const expandido = sobreposicao ? aberto : !trilho;
+
+  const alternarMenu = () => {
+    if (sobreposicao) {
+      setAberto(!aberto);
+      return;
+    }
+    setTrilho(!trilho);
+    try {
+      window.localStorage.setItem(CHAVE_MENU, trilho ? "expandido" : "trilho");
+    } catch {}
+  };
 
   const titulo = <title>{`${tituloDaRota(rota)} · ${NOME_PRODUTO}`}</title>;
 
@@ -123,12 +157,11 @@ export function Casca({ children, avisos }: { children: ReactNode; avisos: numbe
       {titulo}
       <Header aria-label={NOME_PRODUTO} className="cds--g100">
         <SkipToContent href="#conteudo">Pular para o conteúdo</SkipToContent>
-        <HeaderMenuButton aria-label={aberto ? "Fechar menu" : "Abrir menu"} isActive={aberto} isCollapsible={noPedido} onClick={() => setAberto(!aberto)} data-botao-menu="" />
+        <HeaderMenuButton aria-label={expandido ? "Fechar menu" : "Abrir menu"} aria-expanded={expandido} isActive={expandido} isCollapsible onClick={alternarMenu} data-botao-menu="" />
         <HeaderName as={Link} href="/" prefix="">
           {/* Logo do Kotala, desenhada pela Liria; a versão branca vai sobre a casca escura. */}
           <span className={s.marca}>
             <img src="/logo-branco.svg" alt="Kotala" className={s.logo} />
-            <span className={s.nomeProduto}>Cotações</span>
           </span>
         </HeaderName>
         <HeaderGlobalBar>
@@ -142,9 +175,9 @@ export function Casca({ children, avisos }: { children: ReactNode; avisos: numbe
           <QuemEntrou />
         </HeaderGlobalBar>
       </Header>
-      <MenuLateral aberto={aberto} aoFechar={() => setAberto(false)} />
-      {/* Menu aberto cobre o conteúdo: o teclado também não passa por trás dele. */}
-      <Content id="conteudo" tabIndex={-1} inert={aberto} className={`${s.conteudo} ${noPedido ? s.comTrilho : s.comMenu}`}>
+      <MenuLateral aberto={aberto} expandido={expandido} aoFechar={() => setAberto(false)} />
+      {/* Só a sobreposição aberta cobre o conteúdo (e então o teclado também não passa por trás); o menu fixo não cobre. */}
+      <Content id="conteudo" tabIndex={-1} inert={sobreposicao && aberto} className={`${s.conteudo} ${noPedido || trilho ? s.comTrilho : s.comMenu}`}>
         {children}
       </Content>
     </>

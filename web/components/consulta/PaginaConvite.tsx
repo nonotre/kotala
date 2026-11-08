@@ -14,7 +14,7 @@ export function PaginaConvite({ link, svg }: { link: string | null; svg: string 
     <Pagina>
       <CabecalhoPagina
         titulo="Seja um fornecedor"
-        contexto="Aponte a câmera do celular para o código. Você entra no bot do fornecedor, informa o nome da empresa e passa a receber os pedidos de cotação. Responda do seu jeito: texto, áudio, foto ou PDF."
+        contexto="Aponte a câmera do celular para o código. Você entra no bot do fornecedor, informa o nome da empresa e passa a receber as solicitações de proposta. Responda do seu jeito: texto, áudio, foto ou PDF."
       />
       <CorpoPagina>
         <GradePagina>
@@ -31,7 +31,7 @@ export function PaginaConvite({ link, svg }: { link: string | null; svg: string 
                       <OrderedList className={s.passos}>
                         <ListItem>O fornecedor lê o QR ou abre o link e entra no bot do fornecedor.</ListItem>
                         <ListItem>Informa o nome da empresa.</ListItem>
-                        <ListItem>Passa a receber os pedidos de cotação e responde do jeito dele.</ListItem>
+                        <ListItem>Passa a receber as solicitações de proposta e responde do jeito dele.</ListItem>
                       </OrderedList>
                     </div>
                     <p className={s.apoioCorpo}>É uma demonstração: a empresa compradora é fictícia e nenhuma compra é feita sem aprovação do comprador.</p>

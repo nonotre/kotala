@@ -244,9 +244,9 @@ export const PREFIXO_LINK = "link:";
 /** Rotas que o Assistente pode citar. Ids conferidos à parte (pedido e fornecedor têm de existir). */
 export const ROTAS_PERMITIDAS: readonly RegExp[] = [
   /^\/$/,
-  /^\/(quadro|pedidos|avisos|fornecedores|economia|dashboard|itens|convite|chat)$/,
+  /^\/(quadro|pedidos|avisos|fornecedores|economia|dashboard|itens|convite|chat|conversas|conduta|configuracoes)$/,
   /^\/pedidos\/\d+(#item-\d+)?$/,
-  /^\/pedidos\/\d+\/(busca|cotacoes|comparacao|negociacao|decisao|historico)(#item-\d+)?$/,
+  /^\/pedidos\/\d+\/(solicitado|busca|cotacoes|comparacao|negociacao|decisao|historico)(#item-\d+)?$/,
   /^\/fornecedores\/[0-9a-f-]{36}$/,
 ];
 

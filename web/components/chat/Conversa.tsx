@@ -19,8 +19,7 @@ import {
 import { Button, SkeletonText } from "@carbon/react";
 import { ArrowDown } from "@carbon/react/icons";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Pagina } from "@/components/Pagina";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { enviarChat, type AnexoChat } from "@/lib/acoes";
 import { AVATAR_ASSISTENTE } from "./avatar";
 import {
@@ -146,11 +145,21 @@ const renderBotoes: RenderUserDefinedResponse = (estado) => {
 const renderRodape: RenderCustomRequestFooter = (_slot, mensagem) => (mensagem.id ? <RodapeEnvio id={mensagem.id} /> : null);
 
 const escritos = {
-  homeScreenBeforeInputElement: <p className={s.dicaInicio}>Pergunte o que está pendente, como está um pedido, ou escreva o que precisa comprar, do seu jeito.</p>,
+  homeScreenBeforeInputElement: <p className={s.dicaInicio}>Pergunte o que está pendente, como está uma cotação, ou escreva o que precisa comprar, do seu jeito.</p>,
+};
+const escritosPainel = {
+  homeScreenBeforeInputElement: <p className={s.dicaInicio}>Pergunte o que está pendente ou peça uma compra, do seu jeito.</p>,
 };
 
+/**
+ * `pagina`: a conversa inteira, na área principal de uma tela (o painel direito de Conversas).
+ * `painel`: compacta, para uma coluna lateral de 360 a 420 px (o Início).
+ * Nos dois, a altura vem do elemento pai, e o envio é o mesmo.
+ */
+export type ModoConversa = "pagina" | "painel";
+
 /** O chat de quem entrou: o endereço é o id do usuário (contato "web" dele, ver src/contas.ts). */
-export function Conversa({ endereco, topo }: { endereco: string; topo?: ReactNode }) {
+export function Conversa({ endereco, modo = "pagina" }: { endereco: string; modo?: ModoConversa }) {
   // A conversa vem sempre do banco. O chat da Carbon guarda o estado da aba no sessionStorage e, num F5,
   // o restaura no lugar de pedir o histórico: a conversa do banco não aparecia. Apaga antes de o chat montar.
   useState(() => {
@@ -160,10 +169,10 @@ export function Conversa({ endereco, topo }: { endereco: string; topo?: ReactNod
       // Sem sessionStorage, não há o que restaurar.
     }
   });
+  const router = useRouter();
   const [historicoPronto, setHistoricoPronto] = useState(false);
   const [chatPronto, setChatPronto] = useState(false);
   const [novas, setNovas] = useState(false);
-  const router = useRouter();
 
   const enderecoAgora = useRef<string | null>(null);
   enderecoAgora.current = endereco;
@@ -176,6 +185,9 @@ export function Conversa({ endereco, topo }: { endereco: string; topo?: ReactNod
   const noFim = useRef(true);
   /** Arquivos escolhidos ou colados, esperando o envio, pelo id do campo do chat. */
   const arquivos = useRef(new Map<string, File>());
+  /** O chat mora num shadow root: as buscas ficam dentro desta conversa, não da página toda. */
+  const area = useRef<HTMLDivElement>(null);
+  const raizDoChat = useCallback(() => area.current?.querySelector("cds-aichat-container")?.shadowRoot ?? null, []);
 
   useEffect(() => () => zerarEstado(), []);
 
@@ -184,7 +196,7 @@ export function Conversa({ endereco, topo }: { endereco: string; topo?: ReactNod
 
   useEffect(() => {
     if (!chatPronto) return;
-    const raiz = document.querySelector("cds-aichat-container")?.shadowRoot;
+    const raiz = raizDoChat();
     if (!raiz) return;
     let topo = 0;
     const aoRolar = (e: Event) => {
@@ -199,7 +211,7 @@ export function Conversa({ endereco, topo }: { endereco: string; topo?: ReactNod
     };
     raiz.addEventListener("scroll", aoRolar, true);
     return () => raiz.removeEventListener("scroll", aoRolar, true);
-  }, [chatPronto]);
+  }, [chatPronto, raizDoChat]);
 
   // Duas passadas: a segunda pega os botões que montaram depois da primeira.
   const rolar = useCallback((sempre = false) => {
@@ -368,7 +380,7 @@ export function Conversa({ endereco, topo }: { endereco: string; topo?: ReactNod
   // Os da mesma origem navegam pelo router, na mesma aba e sem recarregar; os externos seguem como estão.
   useEffect(() => {
     if (!chatPronto) return;
-    const raiz = document.querySelector("cds-aichat-container")?.shadowRoot;
+    const raiz = raizDoChat();
     if (!raiz) return;
     const aoClicar = (e: Event) => {
       const ev = e as MouseEvent;
@@ -383,7 +395,7 @@ export function Conversa({ endereco, topo }: { endereco: string; topo?: ReactNod
     };
     raiz.addEventListener("click", aoClicar, true);
     return () => raiz.removeEventListener("click", aoClicar, true);
-  }, [chatPronto, router]);
+  }, [chatPronto, router, raizDoChat]);
 
   // ---------- Anexos ----------
 
@@ -401,7 +413,7 @@ export function Conversa({ endereco, topo }: { endereco: string; topo?: ReactNod
   // Colar uma imagem (Ctrl+V de um print) anexa como se tivesse escolhido o arquivo.
   useEffect(() => {
     if (!chatPronto) return;
-    const raiz = document.querySelector("cds-aichat-container")?.shadowRoot;
+    const raiz = raizDoChat();
     if (!raiz) return;
     const aoColar = (e: Event) => {
       const dados = (e as ClipboardEvent).clipboardData;
@@ -430,7 +442,7 @@ export function Conversa({ endereco, topo }: { endereco: string; topo?: ReactNod
     };
     raiz.addEventListener("paste", aoColar, true);
     return () => raiz.removeEventListener("paste", aoColar, true);
-  }, [chatPronto, campoDoArquivo]);
+  }, [chatPronto, campoDoArquivo, raizDoChat]);
 
   // ---------- O chat ----------
 
@@ -441,6 +453,9 @@ export function Conversa({ endereco, topo }: { endereco: string; topo?: ReactNod
       locale: "pt-br",
       strings: textosPtBr,
       openChatByDefault: true,
+      // No painel do Início, o chat não pega o foco ao abrir: a página abre no topo (no celular, ele fica embaixo)
+      // e o foco fica onde o navegador pôs. Na tela inteira de conversa, o campo de envio recebe o foco, como antes.
+      shouldTakeFocusIfOpensAutomatically: modo !== "painel",
       // O texto vem de um modelo de linguagem: HTML nele não é desenhado.
       shouldSanitizeHTML: true,
       layout: { showFrame: false },
@@ -465,7 +480,7 @@ export function Conversa({ endereco, topo }: { endereco: string; topo?: ReactNod
         customLoadHistory: carregarHistorico,
       },
     }),
-    [aoEnviar, carregarHistorico, campoDoArquivo],
+    [aoEnviar, carregarHistorico, campoDoArquivo, modo],
   );
 
   const aoCriar = useCallback(
@@ -481,46 +496,47 @@ export function Conversa({ endereco, topo }: { endereco: string; topo?: ReactNod
   // O campo do pacote traz `aria-multiline` numa `div` sem papel, e o axe reprova. Quem é lido é o campo de dentro.
   useEffect(() => {
     if (!chatPronto) return;
-    const raiz = document.querySelector("cds-aichat-container")?.shadowRoot;
+    const raiz = raizDoChat();
     const limpar = () => raiz?.querySelectorAll("[data-aichat-editor-host][aria-multiline]").forEach((h) => h.removeAttribute("aria-multiline"));
     const vigia = new MutationObserver(limpar);
     if (raiz) vigia.observe(raiz, { childList: true, subtree: true });
     limpar();
     return () => vigia.disconnect();
-  }, [chatPronto]);
+  }, [chatPronto, raizDoChat]);
 
-  return (
-    <Pagina>
-      <div className={s.tela}>
-        <h1 className={s.tituloOculto}>Conversar com o assistente</h1>
-        {topo}
-        <ContextoConversa.Provider value={acoes}>
-          <div className={s.chatArea}>
-            {endereco ? (
-              <ChatCustomElement
-                className={s.chat}
-                {...config}
-                onBeforeRender={aoCriar}
-                renderUserDefinedResponse={renderBotoes}
-                renderCustomRequestFooter={renderRodape}
-                renderWriteableElements={escritos}
-              />
-            ) : null}
-            {novas ? (
-              <div className={s.novas}>
-                <Button kind="secondary" size="sm" renderIcon={ArrowDown} onClick={irAoFim}>
-                  Novas mensagens
-                </Button>
-              </div>
-            ) : null}
-            {!chatPronto ? (
-              <div className={s.chatCarregando} aria-hidden="true">
-                <SkeletonText paragraph lineCount={3} />
-              </div>
-            ) : null}
+  const conteudo = (
+    <ContextoConversa.Provider value={acoes}>
+      <div className={s.chatArea} ref={area}>
+        {endereco ? (
+          <ChatCustomElement
+            className={s.chat}
+            {...config}
+            onBeforeRender={aoCriar}
+            renderUserDefinedResponse={renderBotoes}
+            renderCustomRequestFooter={renderRodape}
+            renderWriteableElements={modo === "painel" ? escritosPainel : escritos}
+          />
+        ) : null}
+        {novas ? (
+          <div className={s.novas}>
+            <Button kind="secondary" size="sm" renderIcon={ArrowDown} onClick={irAoFim}>
+              Novas mensagens
+            </Button>
           </div>
-        </ContextoConversa.Provider>
+        ) : null}
+        {!chatPronto ? (
+          <div className={s.chatCarregando} aria-hidden="true">
+            <SkeletonText paragraph lineCount={3} />
+          </div>
+        ) : null}
       </div>
-    </Pagina>
+    </ContextoConversa.Provider>
+  );
+  // No painel, quem nomeia a região é a coluna que o recebe (o Início já tem o seu `aside`).
+  if (modo === "painel") return <div className={`${s.tela} ${s.telaPainel}`}>{conteudo}</div>;
+  return (
+    <section className={s.tela} aria-label="Conversa com o assistente">
+      {conteudo}
+    </section>
   );
 }

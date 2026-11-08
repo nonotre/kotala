@@ -1,4 +1,4 @@
-// Aba Cotações: quem foi consultado na rodada, a situação de cada um, a ligação
+// Compra › Cotando › Cotações: quem foi consultado na rodada, a situação de cada um, a ligação
 // por voz para quem não respondeu e as propostas como chegaram.
 
 import { Column, InlineNotification } from "@carbon/react";
@@ -106,11 +106,11 @@ function RodadasAnteriores({ i }: { i: ItemDoPedido }) {
 }
 
 function vazioDoItem(d: DadosPedido, i: ItemDoPedido): string {
-  if (["interpretando", "aguardando_confirmacao"].includes(d.pedido.estado)) return "A cotação sai depois que você confirmar o pedido.";
-  if (i.item.estado === "na_fila") return "A cotação deste item ainda não saiu: ele está na fila.";
-  if (i.item.estado === "buscando") return "Ninguém recebeu ainda. A cotação sai depois da busca.";
-  if (i.item.estado === "aguardando_recompra") return "Compra repetida: sem cotação nova até você escolher no Resumo.";
-  return "Nenhum fornecedor recebeu a cotação deste item.";
+  if (["interpretando", "aguardando_confirmacao"].includes(d.pedido.estado)) return "As solicitações de proposta saem depois que você confirmar a cotação.";
+  if (i.item.estado === "na_fila") return "A solicitação de proposta deste item ainda não saiu: ele está na fila.";
+  if (i.item.estado === "buscando") return "Ninguém recebeu ainda. A solicitação de proposta sai depois da busca.";
+  if (i.item.estado === "aguardando_recompra") return "Compra repetida: sem solicitação de proposta nova até você escolher na etapa Comparação.";
+  return "Nenhum fornecedor recebeu a solicitação de proposta deste item.";
 }
 
 export function AbaCotacoes({ d }: { d: DadosPedido }) {
@@ -147,7 +147,7 @@ export function AbaCotacoes({ d }: { d: DadosPedido }) {
       })}
       {!d.itens.length ? (
         <Column sm={4} md={8} lg={16}>
-          <EstadoVazio titulo="A cotação sai depois que você confirmar o pedido." proximoPasso="O pedido está no Resumo." acao={{ texto: "Ir para Resumo", href: `/pedidos/${d.pedido.id}`, tipo: "tertiary" }} />
+          <EstadoVazio titulo="As solicitações de proposta saem depois que você confirmar a cotação." proximoPasso="A confirmação fica na etapa Solicitada." acao={{ texto: "Ir para Solicitada", href: hrefAba(d.pedido.id, "solicitado"), tipo: "tertiary" }} />
         </Column>
       ) : null}
     </GradePagina>

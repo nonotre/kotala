@@ -47,19 +47,19 @@ function lerSituacao(f: Ficha): Situacao {
   if (f.bloqueadoEm) return { kind: "failed", frase: "Bloqueado.", apoio: `${f.motivoBloqueio ?? "Sem motivo registrado"}. Desde ${dataHora(f.bloqueadoEm)}. Não entra nas buscas nem na recompra.` };
   if (f.parouEm) return { kind: "failed", frase: "Pediu para parar.", apoio: `Desde ${dataHora(f.parouEm)}. Nada mais é enviado a este fornecedor, em nenhum canal.` };
   const aberta = f.cotacoes.find((c) => c.estadoItem === "cotando" && c.situacao === "aguardando" && c.rodada === c.rodadaAtual);
-  if (aberta) return { kind: "pending", frase: `Recebeu a cotação do pedido ${aberta.pedidoId}. Ainda não respondeu.`, apoio: aberta.enviadaEm ? `Enviada em ${dataHora(aberta.enviadaEm)}.` : undefined, cotacao: aberta };
+  if (aberta) return { kind: "pending", frase: `Recebeu a solicitação de proposta da cotação ${aberta.pedidoId}. Ainda não respondeu.`, apoio: aberta.enviadaEm ? `Enviada em ${dataHora(aberta.enviadaEm)}.` : undefined, cotacao: aberta };
   const respondendo = f.cotacoes.find((c) => c.estadoItem === "cotando" && c.situacao === "respondeu" && c.rodada === c.rodadaAtual);
-  if (respondendo) return { kind: "informative", frase: `Mandou proposta no pedido ${respondendo.pedidoId}.`, apoio: "A cotação ainda está aberta: o mapa sai quando o prazo terminar.", cotacao: respondendo };
+  if (respondendo) return { kind: "informative", frase: `Mandou proposta na cotação ${respondendo.pedidoId}.`, apoio: "O prazo das propostas ainda está aberto: o mapa sai quando ele terminar.", cotacao: respondendo };
   const ultima = f.cotacoes[0];
   if (ultima) {
-    if (ultima.escolhido) return { kind: "succeeded", frase: `A proposta dele foi a escolhida no pedido ${ultima.pedidoId}.`, cotacao: ultima };
+    if (ultima.escolhido) return { kind: "succeeded", frase: `A proposta dele foi a escolhida na cotação ${ultima.pedidoId}.`, cotacao: ultima };
     const sit = SITUACAO[ultima.situacao];
-    return { kind: sit?.kind ?? "normal", frase: `Última cotação, no pedido ${ultima.pedidoId}: ${(sit?.rotulo ?? ultima.situacao).toLowerCase()}.`, cotacao: ultima };
+    return { kind: sit?.kind ?? "normal", frase: `Última solicitação de proposta, na cotação ${ultima.pedidoId}: ${(sit?.rotulo ?? ultima.situacao).toLowerCase()}.`, cotacao: ultima };
   }
   const canal = estadoDoCanal({ ...f, canais: f.contatos.map((c) => (c.parouEm ? `${c.canal} (parou)` : c.canal)), canaisAtivos: f.contatos.filter((c) => !c.parouEm).length });
-  if (canal.peso === PESO_CANAL.ativo) return { kind: "not-started", frase: "Não recebeu nenhuma cotação ainda.", apoio: "A próxima chega no canal dele." };
-  if (canal.peso === PESO_CANAL.email) return { kind: "pending", frase: "Ainda não entrou: só tem o e-mail para o convite.", apoio: "Não recebe cotação até entrar pelo link do convite." };
-  return { kind: "not-started", frase: `${canal.rotulo}: não recebe cotação.`, apoio: "Entra como referência de preço. Para cotar com ele, mande o convite." };
+  if (canal.peso === PESO_CANAL.ativo) return { kind: "not-started", frase: "Não recebeu nenhuma solicitação de proposta ainda.", apoio: "A próxima chega no canal dele." };
+  if (canal.peso === PESO_CANAL.email) return { kind: "pending", frase: "Ainda não entrou: só tem o e-mail para o convite.", apoio: "Não recebe solicitação de proposta até entrar pelo link do convite." };
+  return { kind: "not-started", frase: `${canal.rotulo}: não recebe solicitação de proposta.`, apoio: "Entra como referência de preço. Para cotar com ele, mande o convite." };
 }
 
 function Agora({ f }: { f: Ficha }) {
@@ -67,12 +67,12 @@ function Agora({ f }: { f: Ficha }) {
   const c = sit.cotacao;
   return (
     <Bloco
-      titulo={c ? `Agora, no pedido ${c.pedidoId}` : "Agora"}
+      titulo={c ? `Agora, na cotação ${c.pedidoId}` : "Agora"}
       descricao={c ? `${quantidade(c.quantidade, c.unidade)} de ${c.item}` : undefined}
       acao={
         c ? (
-          <CarbonLink as={NextLink} href={`/pedidos/${c.pedidoId}#item-${c.itemId}`}>
-            Ver o pedido {c.pedidoId}
+          <CarbonLink as={NextLink} href={`/pedidos/${c.pedidoId}`}>
+            Ver a cotação {c.pedidoId}
           </CarbonLink>
         ) : undefined
       }
@@ -133,19 +133,19 @@ function CelulaProposta({ c }: { c: CotacaoDaFicha }) {
 function Cotacoes({ f }: { f: Ficha }) {
   return (
     <Bloco
-      titulo="Cotações e propostas"
-      descricao={f.cotacoes.length ? `${f.cotacoes.length} ${f.cotacoes.length === 1 ? "cotação enviada" : "cotações enviadas"}, da mais nova à mais antiga.${f.ofertasAvulsas ? ` E ${f.ofertasAvulsas} ${f.ofertasAvulsas === 1 ? "proposta" : "propostas"} sem cotação enviada.` : ""}` : undefined}
+      titulo="Solicitações e propostas"
+      descricao={f.cotacoes.length ? `${f.cotacoes.length} ${f.cotacoes.length === 1 ? "solicitação de proposta enviada" : "solicitações de proposta enviadas"}, da mais nova à mais antiga.${f.ofertasAvulsas ? ` E ${f.ofertasAvulsas} ${f.ofertasAvulsas === 1 ? "proposta" : "propostas"} sem solicitação enviada.` : ""}` : undefined}
     >
       <Tabela
-        rotulo="Cotações enviadas a este fornecedor"
-        vazio={f.ofertasAvulsas ? `Nenhuma cotação enviada. ${f.ofertasAvulsas} ${f.ofertasAvulsas === 1 ? "proposta veio" : "propostas vieram"} de outra forma.` : "Nenhuma cotação enviada a este fornecedor."}
-        colunas={["Pedido", "Item", "Situação", "Proposta", "Prazo e pagamento", "Nota", ""]}
+        rotulo="Solicitações de proposta enviadas a este fornecedor"
+        vazio={f.ofertasAvulsas ? `Nenhuma solicitação de proposta enviada. ${f.ofertasAvulsas} ${f.ofertasAvulsas === 1 ? "proposta veio" : "propostas vieram"} de outra forma.` : "Nenhuma solicitação de proposta enviada a este fornecedor."}
+        colunas={["Cotação", "Item", "Situação", "Proposta", "Prazo e pagamento", "Nota", ""]}
         destaque={f.cotacoes.flatMap((c, i) => (c.escolhido ? [i] : []))}
         linhas={f.cotacoes.map((c) => {
           const sit = SITUACAO[c.situacao] ?? { kind: "normal" as Kind, rotulo: c.situacao };
           return [
-            <CarbonLink key="p" as={NextLink} href={`/pedidos/${c.pedidoId}#item-${c.itemId}`}>
-              Pedido {c.pedidoId}
+            <CarbonLink key="p" as={NextLink} href={`/pedidos/${c.pedidoId}`}>
+              Cotação {c.pedidoId}
             </CarbonLink>,
             <span key="i" className={s.duasLinhas}>
               <span>
@@ -196,8 +196,8 @@ function Compras({ f }: { f: Ficha }) {
                 <span className={s.apoioCorpo}>{data(h.data)}</span>
                 {h.simulado ? <SeloSimulado texto="histórico simulado" /> : null}
                 {h.pedidoId ? (
-                  <CarbonLink as={NextLink} href={`/pedidos/${h.pedidoId}${h.itemId ? `#item-${h.itemId}` : ""}`}>
-                    Pedido {h.pedidoId}
+                  <CarbonLink as={NextLink} href={`/pedidos/${h.pedidoId}`}>
+                    Cotação {h.pedidoId}
                   </CarbonLink>
                 ) : null}
               </div>

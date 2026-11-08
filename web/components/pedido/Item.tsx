@@ -53,8 +53,8 @@ export function SecaoItem({ i, children, mostrarTitulo = true }: { i: ItemDoPedi
 export function IndiceItens({ itens }: { itens: ItemDoPedido[] }) {
   if (itens.length < 2) return null;
   return (
-    <nav aria-label="Itens deste pedido" className={s.indice}>
-      <span className={s.indiceRotulo}>{itens.length} itens neste pedido</span>
+    <nav aria-label="Itens desta cotação" className={s.indice}>
+      <span className={s.indiceRotulo}>{itens.length} itens nesta cotação</span>
       <ol className={s.indiceLista}>
         {itens.map((i) => (
           <li key={i.item.id} className={s.indiceItem}>
@@ -64,6 +64,24 @@ export function IndiceItens({ itens }: { itens: ItemDoPedido[] }) {
         ))}
       </ol>
     </nav>
+  );
+}
+
+/** Lista de frases com título, como o que o assistente considerou. Sem frase, nada. */
+export function ListaTextos({ titulo, itens, selo }: { titulo: string; itens: string[]; selo?: ReactNode }) {
+  if (!itens.length) return null;
+  return (
+    <div className={s.grupo}>
+      <div className={s.grupoTopo}>
+        <h3 className={s.grupoTitulo}>{titulo}</h3>
+        {selo}
+      </div>
+      <ul className={s.lista}>
+        {itens.map((t, n) => (
+          <li key={n}>{t}</li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

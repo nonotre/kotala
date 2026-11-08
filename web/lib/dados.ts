@@ -60,7 +60,7 @@ function etiquetasDo(
   const e: Etiqueta[] = [];
   if (p.urgencia === "obra_parada") e.push({ texto: "Obra parada", tipo: "urgente" });
   else if (p.urgencia === "urgente") e.push({ texto: "Urgente", tipo: "urgente" });
-  if (p.estado === "interpretando") e.push({ texto: "Lendo o pedido", tipo: "info" });
+  if (p.estado === "interpretando") e.push({ texto: "Lendo a cotação", tipo: "info" });
   else if (p.estado === "aguardando_confirmacao") e.push({ texto: "Aguardando você confirmar", tipo: "atencao" });
   else
     switch (i.estado) {
@@ -233,15 +233,6 @@ export async function listaFornecedores() {
 /** E3: conversa do chat web de um navegador: as 300 mensagens mais recentes, em ordem. */
 export async function conversaWeb(endereco: string) {
   const [c] = await db.select().from(contato).where(and(eq(contato.canal, "web"), eq(contato.endereco, endereco)));
-  return c ? mensagensDoContato(c.id) : [];
-}
-
-/** Frente 2, espelho do Telegram: a conversa do usuário com o bot do comprador, no mesmo formato do chat web. */
-export async function conversaTelegram(usuarioId: string) {
-  const [c] = await db
-    .select({ id: contato.id })
-    .from(contato)
-    .where(and(eq(contato.canal, "telegram"), eq(contato.papel, "comprador"), eq(contato.usuarioId, usuarioId)));
   return c ? mensagensDoContato(c.id) : [];
 }
 

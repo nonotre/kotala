@@ -45,7 +45,7 @@ const ESTADO: Record<string, { kind: Kind; rotulo: string }> = {
   na_fila: { kind: "not-started", rotulo: "Na fila" },
   buscando: { kind: "in-progress", rotulo: "Captando fornecedores" },
   aguardando_recompra: { kind: "informative", rotulo: "Repetir compra?" },
-  cotando: { kind: "in-progress", rotulo: "Cotando" },
+  cotando: { kind: "in-progress", rotulo: "Esperando propostas" },
   comparando: { kind: "pending", rotulo: "Montando o mapa" },
   aguardando_decisao: { kind: "informative", rotulo: "Aguardando sua decisão" },
   aprovado: { kind: "succeeded", rotulo: "Aprovado" },
@@ -74,9 +74,9 @@ function Detalhe({ i }: { i: ItemDaBase }) {
     <Bloco titulo={i.descricao} descricao={[i.codigo ? `Código ${i.codigo}` : null, i.unidade ? `Comprado por ${i.unidade}` : null, i.categoria].filter(Boolean).join(" · ") || undefined}>
       {i.cadastradoNoPedido ? (
         <p className={s.apoioCorpo}>
-          Não estava na base: o assistente cadastrou este item no{" "}
+          Não estava na base: o assistente cadastrou este item na{" "}
           <CarbonLink as={NextLink} href={`/pedidos/${i.cadastradoNoPedido}`} inline>
-            pedido {i.cadastradoNoPedido}
+            cotação {i.cadastradoNoPedido}
           </CarbonLink>
           .
         </p>
@@ -142,7 +142,7 @@ function Detalhe({ i }: { i: ItemDaBase }) {
                 <span className={s.apoio}>
                   {data(c.data)}
                   {c.frete !== null ? ` · frete ${brl(c.frete)}` : ""}
-                  {c.pedidoId ? ` · pedido ${c.pedidoId}` : ""}
+                  {c.pedidoId ? ` · cotação ${c.pedidoId}` : ""}
                 </span>
               </li>
             ))}
@@ -152,16 +152,16 @@ function Detalhe({ i }: { i: ItemDaBase }) {
         )}
       </section>
 
-      <section className={s.parte} aria-label="Pedidos">
-        <h3 className={s.subtitulo}>Pedidos</h3>
+      <section className={s.parte} aria-label="Cotações">
+        <h3 className={s.subtitulo}>Cotações</h3>
         {i.pedidos.length ? (
           <ul className={s.listaSimples}>
             {i.pedidos.map((p) => {
               const e = ESTADO[p.estado] ?? { kind: "normal" as Kind, rotulo: p.estado };
               return (
                 <li key={p.itemId} className={s.duasLinhas}>
-                  <CarbonLink as={NextLink} href={`/pedidos/${p.pedidoId}#item-${p.itemId}`}>
-                    Pedido {p.pedidoId}: {quantidade(p.quantidade, p.unidade)}
+                  <CarbonLink as={NextLink} href={`/pedidos/${p.pedidoId}`}>
+                    Cotação {p.pedidoId}: {quantidade(p.quantidade, p.unidade)}
                   </CarbonLink>
                   <IconIndicator kind={e.kind} label={`${e.rotulo} · ${dataHora(p.em)}`} size={16} />
                 </li>
@@ -169,12 +169,12 @@ function Detalhe({ i }: { i: ItemDaBase }) {
             })}
           </ul>
         ) : (
-          <EstadoVazio compacto titulo="Nenhum pedido deste item." />
+          <EstadoVazio compacto titulo="Nenhuma cotação deste item." />
         )}
       </section>
 
       <div className={s.acoes}>
-        <CarbonLink as={NextLink} href="/chat">
+        <CarbonLink as={NextLink} href="/">
           Pedir na conversa
         </CarbonLink>
       </div>
@@ -262,7 +262,7 @@ export function BaseItens({ itens, categorias, itemInicial, filtrosIniciais }: P
           <Column sm={4} md={8} lg={16} xlg={10}>
             <section className={s.achar} aria-label="Encontre o material">
               {itens.length === 0 ? (
-                <EstadoVazio titulo="Nenhum item ainda." proximoPasso="Os itens aparecem aqui depois do primeiro pedido." acao={{ texto: "Pedir na conversa", href: "/chat", tipo: "tertiary" }} />
+                <EstadoVazio titulo="Nenhum item ainda." proximoPasso="Os itens aparecem aqui depois da primeira cotação." acao={{ texto: "Pedir na conversa", href: "/", tipo: "tertiary" }} />
               ) : lista.length === 0 ? (
                 <EstadoVazio tamanho="sm" titulo="Nenhum item com essa busca ou categoria." proximoPasso="Confira a escrita, ou troque a categoria." acao={{ texto: "Limpar busca e categoria", aoClicar: limpar, tipo: "tertiary" }} />
               ) : (
@@ -356,9 +356,9 @@ export function BaseItens({ itens, categorias, itemInicial, filtrosIniciais }: P
               {atual ? (
                 <Detalhe i={atual} />
               ) : (
-                <Bloco titulo="Escolha o material" descricao="Marque um item na lista para ver a especificação, o que foi pago, a referência da internet e os pedidos.">
+                <Bloco titulo="Escolha o material" descricao="Marque um item na lista para ver a especificação, o que foi pago, a referência da internet e as cotações.">
                   <div className={s.acoes}>
-                    <CarbonLink as={NextLink} href="/chat">
+                    <CarbonLink as={NextLink} href="/">
                       Pedir na conversa
                     </CarbonLink>
                   </div>

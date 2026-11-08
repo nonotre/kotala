@@ -4,10 +4,10 @@ import type { TipoAviso } from "@/lib/avisos";
 
 /** O verbo diz o que o comprador vai fazer na tela de destino. Nunca "Aprovar": aprovar só com confirmação. */
 export const VERBO_DO_AVISO: Record<TipoAviso, string> = {
-  confirmar_pedido: "Conferir o pedido",
+  confirmar_pedido: "Conferir a cotação",
   decidir: "Ir para Decisão",
   recompra: "Repetir ou cotar",
-  sem_proposta: "Ver o pedido",
+  sem_proposta: "Ver a cotação",
 };
 
 export const ROTULO_CANAL: Record<string, string> = {
@@ -22,9 +22,9 @@ export const ROTULO_CANAL: Record<string, string> = {
 export const nomeDoCanal = (canal: string) => ROTULO_CANAL[canal] ?? canal;
 
 export const ESTADO_PEDIDO: Record<string, string> = {
-  interpretando: "Lendo o pedido",
+  interpretando: "Lendo a cotação",
   aguardando_confirmacao: "Aguardando sua confirmação",
   em_andamento: "Em andamento",
-  concluido: "Concluído",
-  cancelado: "Cancelado",
+  concluido: "Concluída",
+  cancelado: "Cancelada",
 };
