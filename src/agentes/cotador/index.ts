@@ -2,9 +2,19 @@
 // manda o lembrete (Q4), responde dúvidas com os dados do pedido e encerra a
 // cotação quando todos responderam ou o prazo venceu.
 
-import { textoNegociacao } from "../negociador/index.ts";
+import {
+  citarReferencia,
+  condicaoDaOferta,
+  marcaDe,
+  MAX_RODADAS,
+  TEXTO_PEDIDO_DESCONTO,
+  textoNegociacao,
+  unitarioDe,
+  validarTextoNegociacao,
+} from "../negociador/index.ts";
+import { aoProcurarPerguntas, aoVarrerFila, liberarFila, pedirAoFornecedor, type Pergunta } from "./cadencia.ts";
 import { quando, quantidade, quantidadeDe } from "../../texto.ts";
-import { and, asc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { EMPRESA, FRACAO_LEMBRETE, prazoRespostasMs } from "../../config.ts";
 import { db } from "../../nucleo/db/cliente.ts";
@@ -72,8 +82,9 @@ async function enviarCotacoes(m: MudancaItem) {
   const d = await dadosDoItem(m.itemPedidoId);
   if (!d) return;
 
-  // X3: rodada de negociação, só com os alvos escolhidos pelo Negociador. Quem não
-  // recebe a contraproposta mantém a proposta anterior no mapa.
+  // X3: rodada de negociação do botão, só com os alvos escolhidos pelo Negociador. Quem não
+  // recebe a contraproposta mantém a proposta anterior no mapa. U3: cada contraproposta
+  // passa pela cadência; quem tem pergunta pendente recebe depois (despacharPerguntas).
   if (m.evento === "negociar" && d.item.negociacao) {
     const plano = d.item.negociacao;
     const prazoMs = prazoRespostasMs(null, true);
@@ -82,6 +93,7 @@ async function enviarCotacoes(m: MudancaItem) {
       .update(itemPedido)
       .set({ prazoRespostasEm, lembreteEm: new Date(Date.now() + prazoMs * FRACAO_LEMBRETE) })
       .where(eq(itemPedido.id, m.itemPedidoId));
+    const dAtual = { ...d, item: { ...d.item, prazoRespostasEm } };
     await db
       .insert(cotacao)
       .values(plano.alvos.map((fornecedorId) => ({ itemPedidoId: m.itemPedidoId, fornecedorId, rodada: d.item.rodada })))
@@ -91,32 +103,37 @@ async function enviarCotacoes(m: MudancaItem) {
       .from(cotacao)
       .innerJoin(fornecedor, eq(fornecedor.id, cotacao.fornecedorId))
       .where(and(eq(cotacao.itemPedidoId, m.itemPedidoId), eq(cotacao.rodada, d.item.rodada), isNull(cotacao.enviadaEm)));
+    // S: o texto leva a descrição do comprador; confere uma vez antes de mandar a qualquer fornecedor.
+    const primeiro = alvos[0] ? (await perguntaDaRodada(dAtual, alvos[0].cotacao, alvos[0].nome, "")).texto : null;
+    if (primeiro && !(await liberarSaida(primeiro, { compradorId: d.pedido.compradorId, pedidoId: d.pedido.id, itemPedidoId: d.item.id, oQue: "a contraproposta" }))) {
+      await db.update(cotacao).set({ situacao: "encerrada" }).where(inArray(cotacao.id, alvos.map((a) => a.cotacao.id)));
+      await encerrarSeTodosResponderam(d.item.id);
+      return;
+    }
     let enviadas = 0;
+    let naFila = 0;
     for (const { cotacao: c, nome } of alvos) {
       const ct = await contatoAtivo(c.fornecedorId);
       if (!ct) {
         await db.update(cotacao).set({ situacao: "parou" }).where(eq(cotacao.id, c.id));
         continue;
       }
-      const texto = textoNegociacao(nome, d.item, plano, quando(prazoRespostasEm));
-      const r = await enviar(ct.id, texto, { pedidoId: d.pedido.id, itemPedidoId: d.item.id, tipo: "negociacao" });
-      await db
-        .update(cotacao)
-        .set(r.situacao === "enviada" ? { enviadaEm: new Date(), contatoId: ct.id } : { situacao: r.situacao === "bloqueada_parar" ? "parou" : "sem_resposta", contatoId: ct.id })
-        .where(eq(cotacao.id, c.id));
-      if (r.situacao === "enviada") enviadas++;
+      const r = await pedirAoFornecedor(ct.id, await perguntaDaRodada(dAtual, c, nome, ct.id));
+      if (r.enviada) enviadas++;
+      else if (r.pendente) naFila++;
     }
     await registrar(db, {
       agente: "Negociador",
-      acao: `Mandou contraproposta a ${enviadas} ${enviadas === 1 ? "fornecedor" : "fornecedores"} (rodada ${d.item.rodada}).`,
-      motivo: plano.motivo + (plano.referencia !== null ? ` Citou só a referência pública: R$ ${plano.referencia.toFixed(2).replace(".", ",")} por unidade.` : " Não citou nenhum valor."),
+      acao: `Mandou contraproposta a ${enviadas} ${enviadas === 1 ? "fornecedor" : "fornecedores"} (rodada ${d.item.rodada})${naFila ? `; ${naFila} na fila, esperando a resposta a outra pergunta` : ""}.`,
+      motivo: plano.motivo + (plano.referencia !== null ? " Referência pública só para quem está acima dela; nenhum valor de outro fornecedor." : " Não citou nenhum valor."),
       pedidoId: d.pedido.id,
       itemPedidoId: d.item.id,
       fornecedorIds: plano.alvos,
       dados: plano,
     });
-    await avisarComprador(d, `Voltei a ${enviadas} ${enviadas === 1 ? "fornecedor" : "fornecedores"} para negociar o preço de ${d.item.descricao}. Fecho as respostas ${quando(prazoRespostasEm)}; quem não responder mantém a proposta.`);
-    if (!enviadas) await encerrarSeTodosResponderam(d.item.id);
+    const total = enviadas + naFila;
+    await avisarComprador(d, `Voltei a ${total} ${total === 1 ? "fornecedor" : "fornecedores"} para negociar o preço de ${d.item.descricao}. Fecho as respostas ${quando(prazoRespostasEm)}; quem não responder mantém a proposta.`);
+    if (!total) await encerrarSeTodosResponderam(d.item.id);
     return;
   }
 
@@ -210,6 +227,88 @@ async function avisarComprador(d: Dados, texto: string) {
   await enviar(d.pedido.compradorId, `Pedido ${d.pedido.id}: ${texto}`, { pedidoId: d.pedido.id, itemPedidoId: d.item.id, tipo: "aviso" });
 }
 
+// ---------- Rodada do botão pela cadência (U3) ----------
+
+/**
+ * Contraproposta da rodada do botão a um alvo, montada do estado: referência pública só
+ * se o preço dele está acima dela, texto conferido pelo validador (senão, a frase mínima).
+ */
+async function perguntaDaRodada(d: Dados, c: typeof cotacao.$inferSelect, nome: string, contatoId: string): Promise<Pergunta> {
+  const plano = d.item.negociacao;
+  const [ultima] = await db
+    .select()
+    .from(oferta)
+    .where(and(eq(oferta.itemPedidoId, d.item.id), eq(oferta.fornecedorId, c.fornecedorId)))
+    .orderBy(desc(oferta.rodada), desc(oferta.criadoEm))
+    .limit(1);
+  const referencia = citarReferencia(ultima ? unitarioDe(condicaoDaOferta(ultima), Number(d.item.quantidade)) : null, plano?.referencia ?? null);
+  const montado = textoNegociacao(nome, d.item, { referencia }, d.item.prazoRespostasEm ? quando(d.item.prazoRespostasEm) : null, { ultima: d.item.rodada >= MAX_RODADAS });
+  const v = validarTextoNegociacao(montado, referencia !== null ? [referencia] : []);
+  const texto = v.ok ? montado : `Sobre a cotação ${d.item.id}: ${TEXTO_PEDIDO_DESCONTO}`;
+  return {
+    tipo: "negociacao",
+    itemPedidoId: d.item.id,
+    texto,
+    opcoes: { pedidoId: d.pedido.id, itemPedidoId: d.item.id, tipo: "negociacao" },
+    // Reserva antes de enviar: o varredor e o envio da rodada não mandam duas vezes.
+    reservar: async () =>
+      (await db.update(cotacao).set({ enviadaEm: new Date() }).where(and(eq(cotacao.id, c.id), isNull(cotacao.enviadaEm), eq(cotacao.situacao, "aguardando"))).returning({ id: cotacao.id })).length > 0,
+    marcar: async (r) => {
+      await db
+        .update(cotacao)
+        .set(r.situacao === "enviada" ? { contatoId } : { enviadaEm: null, situacao: r.situacao === "bloqueada_parar" ? "parou" : "sem_resposta", contatoId })
+        .where(eq(cotacao.id, c.id));
+      if (!v.ok) {
+        await registrar(db, {
+          agente: "Negociador",
+          acao: "Mandou a contraproposta com o texto mínimo.",
+          motivo: `O texto montado não passou no validador: ${v.motivos.join("; ")}.`,
+          pedidoId: d.pedido.id,
+          itemPedidoId: d.item.id,
+          fornecedorIds: [c.fornecedorId],
+        });
+      }
+    },
+  };
+}
+
+/** Cotações da rodada do botão que a cadência segurou (enviadaEm nulo), deste fornecedor. */
+async function rodadasSeguradas(filtro: { fornecedorId?: string }) {
+  return db
+    .select({ cotacao, nome: fornecedor.nome })
+    .from(cotacao)
+    .innerJoin(itemPedido, and(eq(itemPedido.id, cotacao.itemPedidoId), eq(itemPedido.rodada, cotacao.rodada)))
+    .innerJoin(fornecedor, eq(fornecedor.id, cotacao.fornecedorId))
+    .where(
+      and(
+        filtro.fornecedorId ? eq(cotacao.fornecedorId, filtro.fornecedorId) : undefined,
+        eq(cotacao.situacao, "aguardando"),
+        isNull(cotacao.enviadaEm),
+        eq(itemPedido.estado, "cotando"),
+        sql`(${itemPedido.negociacao}->>'rodada')::int = ${itemPedido.rodada}`,
+      ),
+    )
+    .orderBy(asc(cotacao.itemPedidoId));
+}
+
+async function perguntasDaRodadaDoBotao(contatoId: string, fornecedorId: string): Promise<Pergunta[]> {
+  const out: Pergunta[] = [];
+  for (const { cotacao: c, nome } of await rodadasSeguradas({ fornecedorId })) {
+    const d = await dadosDoItem(c.itemPedidoId);
+    if (d) out.push(await perguntaDaRodada(d, c, nome, contatoId));
+  }
+  return out;
+}
+
+async function contatosComRodadaSegurada(): Promise<string[]> {
+  const out: string[] = [];
+  for (const { cotacao: c } of await rodadasSeguradas({})) {
+    const ct = await contatoAtivo(c.fornecedorId);
+    if (ct) out.push(ct.id);
+  }
+  return out;
+}
+
 /** Cotação aberta deste fornecedor, a mais recente, para ligar a resposta ao pedido certo. */
 export async function cotacaoAbertaDo(fornecedorId: string) {
   const [l] = await db
@@ -250,8 +349,25 @@ export async function encerrarSeTodosResponderam(itemPedidoId: number) {
     .where(and(eq(cotacao.itemPedidoId, itemPedidoId), eq(cotacao.rodada, item.rodada), eq(cotacao.situacao, "aguardando")))
     .limit(1);
   if (aguardando) return;
-  // Proposta incompleta (sem prazo, pagamento ou validade) segue aberta até o prazo, para o
-  // fornecedor completar: é melhor a cotação atrasar do que fechar faltando dado.
+  // I1: pedido de desconto em aberto segura o fechamento até a janela vencer; depois, quem
+  // fecha é o varredor (fecharJanelasVencidas).
+  const [descontoAberto] = await db
+    .select({ id: oferta.id })
+    .from(oferta)
+    .where(
+      and(
+        eq(oferta.itemPedidoId, itemPedidoId),
+        eq(oferta.rodada, item.rodada),
+        sql`${oferta.extraido}->'negociacao'->>'pedidaEm' is not null`,
+        sql`${oferta.extraido}->'negociacao'->>'respondidaEm' is null`,
+        sql`(${oferta.extraido}->'negociacao'->>'janelaAte')::timestamptz > ${new Date().toISOString()}::timestamptz`,
+      ),
+    )
+    .limit(1);
+  if (descontoAberto) return;
+  // Proposta incompleta (sem prazo, pagamento ou validade) ou com preço ou item a confirmar
+  // (Q1) segue aberta até o prazo, para o fornecedor completar: é melhor a cotação atrasar
+  // do que fechar faltando dado.
   const incompletas = await db
     .select({ id: oferta.id })
     .from(oferta)
@@ -261,7 +377,12 @@ export async function encerrarSeTodosResponderam(itemPedidoId: number) {
         eq(oferta.itemPedidoId, itemPedidoId),
         eq(oferta.rodada, item.rodada),
         eq(cotacao.situacao, "respondeu"),
-        or(isNull(oferta.prazoDias), isNull(oferta.pagamento), isNull(oferta.validadeDias)),
+        or(
+          isNull(oferta.prazoDias),
+          isNull(oferta.pagamento),
+          isNull(oferta.validadeDias),
+          sql`jsonb_typeof(${oferta.extraido}->'aConfirmar') = 'array' and jsonb_array_length(${oferta.extraido}->'aConfirmar') > 0`,
+        ),
       ),
     )
     .limit(1);
@@ -274,6 +395,23 @@ export async function encerrarSeTodosResponderam(itemPedidoId: number) {
   } catch (erro) {
     if (!(erro instanceof TransicaoInvalida || erro instanceof TransicaoConcorrente)) throw erro;
   }
+}
+
+/** I1: itens com janela de desconto vencida e sem resposta: tenta fechar (tarefa do varredor). */
+async function fecharJanelasVencidas(agora: Date) {
+  const itens = await db
+    .selectDistinct({ id: itemPedido.id })
+    .from(itemPedido)
+    .innerJoin(oferta, and(eq(oferta.itemPedidoId, itemPedido.id), eq(oferta.rodada, itemPedido.rodada)))
+    .where(
+      and(
+        eq(itemPedido.estado, "cotando"),
+        sql`${oferta.extraido}->'negociacao'->>'pedidaEm' is not null`,
+        sql`${oferta.extraido}->'negociacao'->>'respondidaEm' is null`,
+        sql`(${oferta.extraido}->'negociacao'->>'janelaAte')::timestamptz <= ${agora.toISOString()}::timestamptz`,
+      ),
+    );
+  for (const { id } of itens) await encerrarSeTodosResponderam(id);
 }
 
 /** Ao encerrar: quem não respondeu sai como "sem resposta" e recebe o aviso. */
@@ -299,6 +437,36 @@ async function marcarSemResposta(m: MudancaItem) {
       pedidoId: m.pedidoId,
       itemPedidoId: m.itemPedidoId,
       fornecedorIds: sem.map((c) => c.fornecedorId),
+    });
+  }
+  // I1: quem não respondeu ao pedido de desconto mantém a proposta, sem aviso nem lembrete.
+  const semDesconto = await db
+    .select({ id: oferta.id, fornecedorId: oferta.fornecedorId, extraido: oferta.extraido })
+    .from(oferta)
+    .where(
+      and(
+        eq(oferta.itemPedidoId, m.itemPedidoId),
+        eq(oferta.rodada, item.rodada),
+        sql`${oferta.extraido}->'negociacao'->>'pedidaEm' is not null`,
+        sql`${oferta.extraido}->'negociacao'->>'respondidaEm' is null`,
+      ),
+    );
+  for (const o of semDesconto) {
+    const marca = marcaDe(o.extraido)!;
+    await db
+      .update(oferta)
+      .set({ extraido: { ...(o.extraido as Record<string, unknown>), negociacao: { ...marca, resultado: "sem_resposta" } } })
+      .where(eq(oferta.id, o.id));
+  }
+  if (semDesconto.length) {
+    await registrar(db, {
+      agente: "Negociador",
+      acao: `${semDesconto.length} ${semDesconto.length === 1 ? "fornecedor não respondeu" : "fornecedores não responderam"} ao pedido de desconto; mantida a proposta.`,
+      motivo: "A cotação fechou sem resposta ao pedido de desconto.",
+      pedidoId: m.pedidoId,
+      itemPedidoId: m.itemPedidoId,
+      fornecedorIds: semDesconto.map((o) => o.fornecedorId),
+      dados: { resultado: "sem_resposta" },
     });
   }
 }
@@ -384,6 +552,18 @@ export async function responderDuvida(cotacaoId: string, contatoId: string, duvi
     resposta = "Vou confirmar com o comprador e já te respondo.";
     precisaDoComprador = true;
   }
+  // S: a resposta é redigida pela IA e vai direto ao fornecedor; confere antes.
+  const liberada = await liberarSaida(resposta, {
+    compradorId: d.pedido.compradorId,
+    pedidoId: d.pedido.id,
+    itemPedidoId: d.item.id,
+    oQue: "a resposta à dúvida do fornecedor",
+    avisoComprador: (motivos) => `Pedido ${d.pedido.id}: não mandei a resposta automática a uma dúvida de fornecedor, porque ela tinha ${motivos}.`,
+  });
+  if (!liberada) {
+    resposta = "Vou confirmar com o comprador e já te respondo.";
+    precisaDoComprador = true;
+  }
   await enviar(contatoId, resposta, { itemPedidoId: d.item.id, tipo: "resposta" });
   if (precisaDoComprador) {
     const [f] = await db.select({ nome: fornecedor.nome }).from(fornecedor).where(eq(fornecedor.id, c.fornecedorId));
@@ -411,6 +591,11 @@ export function ligarCotador() {
   aoEntrarItem("cotando", enviarCotacoes);
   aoEntrarItem("comparando", marcarSemResposta);
   aoVarrer(enviarLembretes);
+  // I1 e U3: fecha quando as janelas de desconto vencem; libera a fila de perguntas.
+  aoVarrer(fecharJanelasVencidas);
+  aoProcurarPerguntas(perguntasDaRodadaDoBotao);
+  aoVarrerFila(contatosComRodadaSegurada);
+  aoVarrer(liberarFila);
 }
 
 /** Validade da dúvida pendente: depois disso, a mensagem do comprador volta a ser tratada como pedido. */

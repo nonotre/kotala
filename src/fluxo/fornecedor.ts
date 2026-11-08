@@ -5,6 +5,30 @@
 import { randomBytes } from "node:crypto";
 import { and, desc, eq, gte, isNotNull } from "drizzle-orm";
 import { cotacaoAbertaDo, encerrarSeTodosResponderam, reenviarCotacaoAberta, responderDuvida } from "../agentes/cotador/index.ts";
+import { despacharPerguntas, ETAPA_CATEGORIA_COTACAO } from "../agentes/cotador/cadencia.ts";
+import {
+  aplicarDesconto,
+  citarReferencia,
+  compraramAntes,
+  condicaoDaOferta,
+  descontoCondicional,
+  descontoPorUnidade,
+  deveNegociar,
+  escolherAlavancas,
+  jaPediuDesconto,
+  mantemFirme,
+  marcaDe,
+  montarNegociacao,
+  resultadoNegociacao,
+  TEXTO_MANTEVE,
+  unitarioDe,
+  vaiResponderDepois,
+  type CondicaoProposta,
+  type MarcaNegociacao,
+} from "../agentes/negociador/index.ts";
+import { referenciasDoItem } from "../agentes/busca/internet.ts";
+import { formatarBRL } from "../agentes/comparador/calculo.ts";
+import { liberarSaida } from "../agentes/guardrail/rastro.ts";
 import { emailValido, FONTE_CONVITE_MANUAL, linkConvite, normalizarEmail } from "../canais/email.ts";
 import { EMPRESA } from "../config.ts";
 import { extrair, type AlertaFornecedor, type Extracao } from "../agentes/extrator/index.ts";
@@ -208,6 +232,16 @@ async function concluirCadastro(contatoId: string, f: typeof fornecedor.$inferSe
 
 /** Texto durante o cadastro. Devolve false quando a mensagem não é resposta do cadastro (segue o fluxo normal). */
 async function etapaDoCadastro(contato: Contato, f: typeof fornecedor.$inferSelect, texto: string): Promise<boolean> {
+  // U5: pergunta de categoria feita depois da cotação. Só vira resposta o que claramente é
+  // categoria; preço, desconto ou "não temos" seguem para a cotação.
+  if (f.cadastroEtapa === ETAPA_CATEGORIA_COTACAO) {
+    const achadas = categoriasDoTexto(texto);
+    if (!achadas.length || /\d|\bn[aã]o\b|desconto|pre[cç]o|frete|prazo|proposta/i.test(texto)) return false;
+    const categorias = [...new Set([...f.categorias, ...achadas])];
+    await db.update(fornecedor).set({ categorias, cadastroEtapa: null }).where(eq(fornecedor.id, f.id));
+    await enviar(contato.id, `Anotei: ${categorias.join(", ")}. Obrigado! Vou mandar os pedidos dessas categorias.`);
+    return true;
+  }
   if (f.cadastroEtapa === "categorias") {
     const achadas = categoriasDoTexto(texto);
     if (!achadas.length) {
@@ -259,6 +293,12 @@ async function botaoDoCadastro(contato: Contato, dado: string) {
   if (dado === "cad:pronto") {
     if (!f.categorias.length) {
       await enviar(contato.id, "Marque pelo menos uma categoria, ou escreva o que vocês vendem.");
+      return;
+    }
+    // U5: pergunta feita depois da cotação; não abre o resto do cadastro.
+    if (f.cadastroEtapa === ETAPA_CATEGORIA_COTACAO) {
+      await db.update(fornecedor).set({ cadastroEtapa: null }).where(eq(fornecedor.id, f.id));
+      await enviar(contato.id, `Anotei: ${f.categorias.join(", ")}. Obrigado! Vou mandar os pedidos dessas categorias.`);
       return;
     }
     if (f.cnpj) return concluirCadastro(contato.id, f);
@@ -385,6 +425,9 @@ async function processarResposta(
   // Q1/Q2: se a proposta anterior ficou "a confirmar", esta mensagem é a resposta à pergunta.
   const [anterior] = await db.select().from(oferta).where(and(eq(oferta.cotacaoId, c.id), eq(oferta.rodada, c.rodada))).limit(1);
   const pendente = (anterior?.extraido ?? null) as { aConfirmar?: ("preco" | "item")[]; perguntaPendente?: string } | null;
+  // I1: com pedido de desconto aberto, o Extrator sabe que a mensagem responde a ele ("não consigo" não é recusa).
+  const marcaAberta = marcaDe(anterior?.extraido);
+  const descontoAberto = !!marcaAberta && !marcaAberta.respondidaEm;
 
   let e: Extracao;
   let modelo = "";
@@ -400,7 +443,7 @@ async function processarResposta(
       },
       { texto: entrada.texto, anexos },
       ctx,
-      pendente?.aConfirmar?.length ? pendente.perguntaPendente : null,
+      pendente?.aConfirmar?.length ? pendente.perguntaPendente : descontoAberto ? CONTEXTO_DESCONTO : null,
     );
     e = r.valor;
     modelo = r.modelo;
@@ -419,11 +462,20 @@ async function processarResposta(
     }
   }
 
-  // Mensagem que completa a proposta já mandada ("validade 10 dias", "frete grátis"):
-  // junta com a anterior em vez de trocar por uma proposta sem preço.
+  // Mensagem que completa a proposta já mandada ("validade 10 dias", "frete grátis", "faço 5% a menos"):
+  // junta com a anterior em vez de trocar por uma proposta sem preço. I1: desconto condicionado
+  // ("3% à vista") não muda o preço; o incondicional é aplicado em código.
+  const qtd = Number(l.item.quantidade);
+  const temDesconto = e.descontoPercentual !== null || e.descontoValor !== null;
+  const condicao = temDesconto ? descontoCondicional(entrada.texto) : null;
+  let marcaCarregada: MarcaNegociacao | null = marcaDe(anterior?.extraido);
   if (anterior && (e.classificacao === "proposta" || e.classificacao === "outro")) {
-    const completa = completarComAnterior(e, anterior);
-    if (completa) e = completa;
+    const completa = completarComAnterior(e, anterior, { quantidade: qtd, condicional: !!condicao, porUnidade: descontoPorUnidade(entrada.texto) });
+    if (completa) {
+      const { negociacao, ...resto } = completa;
+      e = resto;
+      marcaCarregada = negociacao ?? marcaCarregada;
+    }
   }
   const temPropostaAnterior = !!anterior && (anterior.precoUnitario !== null || anterior.totalProduto !== null);
   const anteriorAConfirmar = !!pendente?.aConfirmar?.length;
@@ -440,34 +492,57 @@ async function processarResposta(
       // Q1: preço ambíguo não vira número em silêncio: as colunas de preço ficam vazias (o número lido fica em `extraido`) até o fornecedor responder.
       const precoAConfirmar = !!e.aConfirmar?.includes("preco");
       const perguntaPendente = e.aConfirmar?.length ? perguntaDeConfirmacao(e, l.item) : undefined;
-      await db.transaction(async (tx) => {
+      const agora = new Date();
+      // I1: desconto condicionado em resposta ao pedido vai para o texto do pagamento, não para o preço.
+      if (condicao && marcaCarregada && !e.pagamento?.includes("não aplicado")) e = { ...e, pagamento: `${e.pagamento ? `${e.pagamento}; ` : ""}desconto condicionado: "${condicao}" (não aplicado ao total)` };
+      const depois: CondicaoProposta = {
+        precoUnitario: precoAConfirmar ? null : e.precoUnitario,
+        totalProduto: precoAConfirmar ? null : e.totalProduto,
+        frete: e.frete,
+        prazoDias: e.prazoDias,
+        pagamento: e.pagamento,
+        prazoPagamentoDias: e.prazoPagamentoDias,
+        impostosValor: e.impostosValor,
+      };
+      // I1: a marca do pedido de desconto passa de oferta em oferta (o delete+insert não apaga o "antes"),
+      // e o resultado é recalculado em código a cada proposta nova.
+      const negociacao: MarcaNegociacao | undefined = !marcaCarregada
+        ? undefined
+        : precoAConfirmar
+          ? { ...marcaCarregada, respondidaEm: marcaCarregada.respondidaEm ?? agora.toISOString() }
+          : resultadoNegociacao(marcaCarregada, depois, qtd, { agora, condicao, firme: marcaCarregada.firme });
+      const [nova] = await db.transaction(async (tx) => {
         await tx.delete(oferta).where(and(eq(oferta.cotacaoId, c.id), eq(oferta.rodada, c.rodada)));
-        await tx.insert(oferta).values({
-          itemPedidoId: l.item.id,
-          fornecedorId: c.fornecedorId,
-          cotacaoId: c.id,
-          rodada: c.rodada,
-          itemOferecido: e.itemOferecido ?? l.item.descricao,
-          itemExato: e.itemExato,
-          embalagem: e.embalagem,
-          quantidadeOfertada: e.quantidadeOfertada?.toString(),
-          unidadeOfertada: e.unidadeOfertada,
-          precoUnitario: precoAConfirmar ? undefined : e.precoUnitario?.toString(),
-          totalProduto: precoAConfirmar ? undefined : e.totalProduto?.toString(),
-          frete: e.frete?.toString(),
-          origemFrete: e.frete !== null ? "informado" : null,
-          prazoDias: e.prazoDias,
-          validadeDias: e.validadeDias,
-          pagamento: e.pagamento,
-          prazoPagamentoDias: e.prazoPagamentoDias,
-          impostosNaoInclusos: e.impostosNaoInclusos,
-          impostosValor: e.impostosValor?.toString(),
-          entregaNoLocal: e.entregaNoLocal,
-          formato: anexos.length ? ({ pdf: "pdf", foto: "foto", audio: "voz" } as const)[arquivos[0]!.tipo as "pdf" | "foto" | "audio"] : "texto",
-          mensagemId,
-          extraido: { ...e, modelo, ...(perguntaPendente ? { perguntaPendente } : {}) },
-        });
+        const linhas = await tx
+          .insert(oferta)
+          .values({
+            itemPedidoId: l.item.id,
+            fornecedorId: c.fornecedorId,
+            cotacaoId: c.id,
+            rodada: c.rodada,
+            itemOferecido: e.itemOferecido ?? l.item.descricao,
+            itemExato: e.itemExato,
+            embalagem: e.embalagem,
+            quantidadeOfertada: e.quantidadeOfertada?.toString(),
+            unidadeOfertada: e.unidadeOfertada,
+            precoUnitario: precoAConfirmar ? undefined : e.precoUnitario?.toString(),
+            totalProduto: precoAConfirmar ? undefined : e.totalProduto?.toString(),
+            frete: e.frete?.toString(),
+            origemFrete: e.frete !== null ? "informado" : null,
+            prazoDias: e.prazoDias,
+            validadeDias: e.validadeDias,
+            pagamento: e.pagamento,
+            prazoPagamentoDias: e.prazoPagamentoDias,
+            impostosNaoInclusos: e.impostosNaoInclusos,
+            impostosValor: e.impostosValor?.toString(),
+            entregaNoLocal: e.entregaNoLocal,
+            formato: anexos.length ? ({ pdf: "pdf", foto: "foto", audio: "voz" } as const)[arquivos[0]!.tipo as "pdf" | "foto" | "audio"] : "texto",
+            mensagemId,
+            extraido: { ...e, modelo, ...(perguntaPendente ? { perguntaPendente } : {}), ...(negociacao ? { negociacao } : {}) },
+          })
+          .returning();
         await tx.update(cotacao).set({ situacao: "respondeu", respondeuEm: new Date() }).where(eq(cotacao.id, c.id));
+        return linhas;
       });
       const faltam: string[] = [];
       if (e.prazoDias === null) faltam.push("prazo de entrega");
@@ -484,28 +559,105 @@ async function processarResposta(
         fornecedorIds: [c.fornecedorId],
         dados: { aderencia: e.aderencia, divergencias: e.divergencias, leituraPreco: e.leituraPreco, trechoPreco: e.trechoPreco, alertas: e.alertas },
       });
+      if (negociacao?.resultado) await registrarResultado(negociacao, c.fornecedorId, ctx);
       if (e.pedidoContato) {
         await enviar(l.pedido.compradorId, `Pedido ${l.pedido.id}: a proposta chegou, e o fornecedor também pediu para falar com uma pessoa.`, { ...ctx, tipo: "aviso" });
       }
+
+      // I1: pede desconto em toda proposta completa, uma vez por fornecedor e item, dentro desta mensagem.
+      // A marca é gravada antes de tentar fechar a cotação, para o fechamento esperar a janela.
+      let pedido: { marca: MarcaNegociacao; texto: string } | null = null;
+      if (nova && !negociacao) {
+        const decisao = deveNegociar({
+          temPreco: depois.precoUnitario !== null || depois.totalProduto !== null,
+          faltam: faltam.length,
+          aConfirmar: !!perguntaPendente,
+          pedidoContato: !!e.pedidoContato,
+          alertas: e.alertas.length,
+          // A rodada do botão já pediu preço melhor: não repete o pedido na mesma rodada.
+          jaPedido: l.item.negociacao?.rodada === c.rodada || (await jaPediuDesconto(c.fornecedorId, l.item.id)),
+          estadoItem: l.item.estado,
+          prazoRespostasEm: l.item.prazoRespostasEm,
+          inicio: c.enviadaEm ?? c.criadoEm,
+          agora,
+          itemExato: e.itemExato,
+          aceitaSimilar: l.item.aceitaSimilar,
+          prazoDias: e.prazoDias,
+          prazoMaxDias: l.pedido.prazoMaxDias,
+        });
+        if (decisao.ok) {
+          const [recompra, refs] = await Promise.all([compraramAntes(c.fornecedorId), referenciasDoItem(l.item.id)]);
+          const referencia = citarReferencia(unitarioDe(depois, qtd), refs.mediana);
+          const montado = montarNegociacao({
+            alavancas: escolherAlavancas({ recompra, quantidade: qtd, prazoPagamentoDias: e.prazoPagamentoDias, frete: l.pedido.modoEntrega === "retirada" ? null : e.frete, entregas: l.pedido.entregas }),
+            quantidade: l.item.quantidade,
+            unidade: l.item.unidade,
+            frete: e.frete,
+            referencia,
+            janelaAte: decisao.janelaAte,
+            agora,
+          });
+          if (!montado.validado) {
+            await registrar(db, { agente: "Negociador", acao: "Usou o texto mínimo no pedido de desconto.", motivo: `O texto montado não passou no validador: ${montado.motivos.join("; ")}.`, ...ctx, fornecedorIds: [c.fornecedorId] });
+          }
+          const marca: MarcaNegociacao = {
+            pedidaEm: agora.toISOString(),
+            janelaAte: decisao.janelaAte.toISOString(),
+            rodadaAuto: 1,
+            alavancas: montado.alavancas,
+            referenciaCitada: montado.validado ? referencia : null,
+            antes: depois,
+          };
+          await gravarExtraido(nova.id, { ...(nova.extraido as Record<string, unknown>), negociacao: marca });
+          pedido = { marca, texto: montado.texto };
+        }
+      }
+
       await encerrarSeTodosResponderam(l.item.id);
-      const [agora] = await db.select({ estado: itemPedido.estado }).from(itemPedido).where(eq(itemPedido.id, l.item.id));
-      const aberta = agora?.estado === "cotando";
+      const [agoraItem] = await db.select({ estado: itemPedido.estado }).from(itemPedido).where(eq(itemPedido.id, l.item.id));
+      const aberta = agoraItem?.estado === "cotando";
       const ate = l.item.prazoRespostasEm ? ` até ${quando(l.item.prazoRespostasEm).replace(/^(às|em) /, "")}` : "";
-      await enviar(
-        contatoId,
-        [
-          `Recebi sua proposta para a cotação ${l.item.id}. Obrigado!`,
-          perguntaPendente ?? "",
-          faltam.length ? `Para completar, me diga também: ${faltam.join("; ")}.` : "",
-          ressalva ?? "",
-          aberta
-            ? `Vou comparar com as outras propostas e aviso o resultado. Se quiser melhorar alguma condição (preço, frete, prazo ou pagamento), pode mandar por aqui${ate}.`
-            : "Vou comparar com as outras propostas e aviso o resultado. Se o comprador quiser negociar alguma condição, volto a falar com você por aqui.",
-        ]
-          .filter(Boolean)
-          .join(" "),
-        { ...ctx, tipo: (faltam.length || perguntaPendente) && aberta ? "completar_proposta" : "proposta_recebida" },
-      );
+      const recebi = negociacao?.resultado === "desconto" ? `Recebi sua proposta atualizada para a cotação ${l.item.id}. Obrigado pelo desconto!` : `Recebi sua proposta para a cotação ${l.item.id}. Obrigado!`;
+      const textoComum = [
+        recebi,
+        perguntaPendente ?? "",
+        faltam.length ? `Para completar, me diga também: ${faltam.join("; ")}.` : "",
+        ressalva ?? "",
+        aberta
+          ? `Vou comparar com as outras propostas e aviso o resultado. Se quiser melhorar alguma condição (preço, frete, prazo ou pagamento), pode mandar por aqui${ate}.`
+          : "Vou comparar com as outras propostas e aviso o resultado. Se o comprador quiser negociar alguma condição, volto a falar com você por aqui.",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      // S: o pedido de desconto passa pela conferência de saída; se não passar, vai só o recebimento.
+      const textoDesconto = pedido && aberta ? `${recebi}\n${pedido.texto}` : null;
+      const comDesconto =
+        !!textoDesconto &&
+        (await liberarSaida(textoDesconto, { compradorId: l.pedido.compradorId, ...ctx, oQue: "o pedido de desconto" }));
+      const completar = (faltam.length > 0 || !!perguntaPendente) && aberta;
+      const r = await enviar(contatoId, comDesconto ? textoDesconto! : textoComum, {
+        ...ctx,
+        tipo: comDesconto ? "negociacao" : completar ? "completar_proposta" : "proposta_recebida",
+      });
+      if (pedido && nova) {
+        if (comDesconto && r.situacao === "enviada") {
+          await registrar(db, {
+            agente: "Negociador",
+            acao: "Pediu desconto na mensagem de recebimento da proposta.",
+            motivo: `Uma vez por fornecedor e item; janela ${quando(new Date(pedido.marca.janelaAte))}. Alavancas: ${pedido.marca.alavancas.join(", ") || "nenhuma"}.${pedido.marca.referenciaCitada !== null ? ` Citou só a referência pública (${formatarBRL(pedido.marca.referenciaCitada)}).` : " Não citou valor de fora."}`,
+            ...ctx,
+            fornecedorIds: [c.fornecedorId],
+            dados: { alavancas: pedido.marca.alavancas, janelaAte: pedido.marca.janelaAte, referenciaCitada: pedido.marca.referenciaCitada },
+          });
+        } else {
+          // Não saiu: tira a marca, para a cotação não esperar uma janela que não existe.
+          await gravarExtraido(nova.id, nova.extraido as Record<string, unknown>);
+          await encerrarSeTodosResponderam(l.item.id);
+        }
+      }
+      // U3: a cobrança do que falta é pergunta aberta até a próxima mensagem do fornecedor.
+      if (completar && nova && r.situacao === "enviada") await gravarExtraido(nova.id, { ...(nova.extraido as Record<string, unknown>), pergunta: { tipo: "completar", em: new Date().toISOString() } });
+      await despacharPerguntas(contatoId);
       return;
     }
     case "duvida":
@@ -520,13 +672,17 @@ async function processarResposta(
       // Quem já mandou proposta e agora diz que não faz desconto ou que o preço é esse não está recusando o pedido.
       if (temPropostaAnterior) {
         await registrar(db, { agente: "Extrator", acao: "Fornecedor manteve a proposta anterior.", motivo: entrada.texto.slice(0, 200), ...ctx, fornecedorIds: [c.fornecedorId] });
-        await enviar(contatoId, ["Certo, mantenho a sua proposta anterior.", ressalva ?? ""].filter(Boolean).join(" "), { ...ctx, tipo: "resposta" });
+        const noDesconto = await manteveNoDesconto(anterior!, entrada.texto, qtd, c.fornecedorId, ctx);
+        await enviar(contatoId, [noDesconto ? TEXTO_MANTEVE : "Certo, mantenho a sua proposta anterior.", ressalva ?? ""].filter(Boolean).join(" "), { ...ctx, tipo: "resposta" });
+        if (noDesconto) await encerrarSeTodosResponderam(l.item.id);
+        await despacharPerguntas(contatoId);
         return;
       }
       await db.update(cotacao).set({ situacao: "encerrada", respondeuEm: new Date() }).where(eq(cotacao.id, c.id));
       await registrar(db, { agente: "Extrator", acao: "O fornecedor não atende este pedido.", motivo: entrada.texto.slice(0, 200), ...ctx, fornecedorIds: [c.fornecedorId] });
       await enviar(contatoId, "Obrigado por avisar!", ctx);
       await encerrarSeTodosResponderam(l.item.id);
+      await despacharPerguntas(contatoId);
       return;
     case "responsavel":
     case "suspeita":
@@ -534,14 +690,67 @@ async function processarResposta(
     case "fora_do_assunto":
       await situacaoDelicada(e.classificacao, c.fornecedorId, contatoId, entrada.texto, l, ctx);
       return;
-    default:
+    default: {
       // Resposta sem preço de quem já tem proposta ("não consigo desconto"): a proposta segue valendo.
       if (temPropostaAnterior) {
-        await enviar(contatoId, ["Certo, mantenho a sua proposta anterior.", ressalva ?? ""].filter(Boolean).join(" "), { ...ctx, tipo: "resposta" });
+        const marca = marcaDe(anterior!.extraido);
+        // I1: "vou ver com o gerente" no meio do pedido de desconto: sem resposta, a janela continua aberta.
+        if (marca && !marca.respondidaEm && !ressalva && vaiResponderDepois(entrada.texto)) {
+          await registrar(db, { agente: "Negociador", acao: "O fornecedor vai responder o desconto depois.", motivo: entrada.texto.slice(0, 200), ...ctx, fornecedorIds: [c.fornecedorId] });
+          return;
+        }
+        const noDesconto = await manteveNoDesconto(anterior!, entrada.texto, qtd, c.fornecedorId, ctx);
+        await enviar(contatoId, [noDesconto ? TEXTO_MANTEVE : "Certo, mantenho a sua proposta anterior.", ressalva ?? ""].filter(Boolean).join(" "), { ...ctx, tipo: "resposta" });
+        if (noDesconto) await encerrarSeTodosResponderam(l.item.id);
+        await despacharPerguntas(contatoId);
         return;
       }
       await enviar(contatoId, ressalva ?? "Não encontrei preço na sua mensagem. Pode mandar o preço unitário, o frete e o prazo de entrega?", ctx);
+    }
   }
+}
+
+/** Troca o `extraido` da oferta (a marca do desconto ou da pergunta mora nele). */
+async function gravarExtraido(ofertaId: string, extraido: Record<string, unknown>) {
+  await db.update(oferta).set({ extraido }).where(eq(oferta.id, ofertaId));
+}
+
+/** I1: "não consigo", "já está no limite" com pedido de desconto aberto: fecha a marca como "manteve". */
+async function manteveNoDesconto(
+  anterior: typeof oferta.$inferSelect,
+  texto: string,
+  qtd: number,
+  fornecedorId: string,
+  ctx: { pedidoId: number; itemPedidoId: number },
+): Promise<boolean> {
+  const marca = marcaDe(anterior.extraido);
+  if (!marca || marca.respondidaEm) return false;
+  const fechada = resultadoNegociacao(marca, condicaoDaOferta(anterior), qtd, { firme: mantemFirme(texto) });
+  await gravarExtraido(anterior.id, { ...(anterior.extraido as Record<string, unknown>), negociacao: fechada });
+  await registrarResultado(fechada, fornecedorId, ctx);
+  return true;
+}
+
+/** Registro do Negociador por resposta ao pedido de desconto (é o que o harness lê para as métricas). */
+async function registrarResultado(m: MarcaNegociacao, fornecedorId: string, ctx: { pedidoId: number; itemPedidoId: number }) {
+  const de = m.produtoAntes ?? null;
+  const para = m.produtoDepois ?? null;
+  const valores = de !== null && para !== null ? ` de ${formatarBRL(de)} para ${formatarBRL(para)}` : "";
+  const acao = {
+    desconto: `Desconto obtido: o produto foi${valores}${m.descontoFrete && m.descontoFrete > 0 ? ` e o frete baixou ${formatarBRL(m.descontoFrete)}` : ""}.`,
+    manteve: m.firme ? "O fornecedor manteve a proposta e disse que o preço está no limite." : "O fornecedor manteve a proposta.",
+    subiu: `O preço subiu depois do pedido de desconto${valores}.`,
+    condicional: `O fornecedor ofereceu desconto condicionado (não aplicado): ${m.condicao ?? ""}.`,
+    sem_resposta: "O fornecedor não respondeu ao pedido de desconto.",
+  }[m.resultado ?? "manteve"];
+  await registrar(db, {
+    agente: "Negociador",
+    acao,
+    motivo: "Resposta ao pedido automático de desconto; a conta é feita em código.",
+    ...ctx,
+    fornecedorIds: [fornecedorId],
+    dados: { antes: m.antes, depois: m.depois, descontoProduto: m.descontoProduto, descontoFrete: m.descontoFrete, resultado: m.resultado, condicao: m.condicao ?? null },
+  });
 }
 
 const RESSALVA: Record<AlertaFornecedor, string> = {
@@ -627,18 +836,35 @@ export function perguntaDeConfirmacao(e: Extracao, item: { id: number; descricao
 
 const numOuNull = (v: string | null) => (v === null ? null : Number(v));
 
-/** Junta a extração nova com a proposta anterior do mesmo fornecedor. null se a mensagem não traz nada de proposta. */
-export function completarComAnterior(e: Extracao, a: typeof oferta.$inferSelect): Extracao | null {
-  const trazAlgo = [e.precoUnitario, e.totalProduto, e.frete, e.prazoDias, e.validadeDias, e.pagamento, e.prazoPagamentoDias, e.impostosValor, e.impostosNaoInclusos, e.entregaNoLocal].some((v) => v !== null);
+/**
+ * Junta a extração nova com a proposta anterior do mesmo fornecedor. null se a mensagem não traz nada de proposta.
+ * I1: desconto sem preço novo ("faço 5% a menos", "tiro R$ 20") é aplicado aqui, em código, só se for
+ * incondicional; a marca do pedido de desconto (`extraido.negociacao`) vai junto.
+ */
+export function completarComAnterior(
+  e: Extracao,
+  a: typeof oferta.$inferSelect,
+  contexto: { quantidade?: number; condicional?: boolean; porUnidade?: boolean } = {},
+): (Extracao & { negociacao?: MarcaNegociacao }) | null {
+  const temDesconto = e.descontoPercentual !== null || e.descontoValor !== null;
+  const trazAlgo = temDesconto || [e.precoUnitario, e.totalProduto, e.frete, e.prazoDias, e.validadeDias, e.pagamento, e.prazoPagamentoDias, e.impostosValor, e.impostosNaoInclusos, e.entregaNoLocal].some((v) => v !== null);
   if (!trazAlgo) return null;
   const novoPreco = e.precoUnitario !== null || e.totalProduto !== null;
+  let precoUnitario = novoPreco ? e.precoUnitario : numOuNull(a.precoUnitario);
+  let totalProduto = novoPreco ? e.totalProduto : numOuNull(a.totalProduto);
+  if (!novoPreco && temDesconto && !contexto.condicional) {
+    const aplicado = aplicarDesconto({ precoUnitario, totalProduto }, e, contexto.quantidade ?? null, contexto.porUnidade);
+    if (aplicado) ({ precoUnitario, totalProduto } = aplicado);
+  }
+  const marca = marcaDe(a.extraido);
   return {
     ...e,
+    ...(marca ? { negociacao: marca } : {}),
     classificacao: "proposta",
     itemOferecido: e.itemOferecido ?? a.itemOferecido,
     itemExato: novoPreco ? e.itemExato : a.itemExato,
-    precoUnitario: novoPreco ? e.precoUnitario : numOuNull(a.precoUnitario),
-    totalProduto: novoPreco ? e.totalProduto : numOuNull(a.totalProduto),
+    precoUnitario,
+    totalProduto,
     quantidadeOfertada: e.quantidadeOfertada ?? numOuNull(a.quantidadeOfertada),
     unidadeOfertada: e.unidadeOfertada ?? a.unidadeOfertada,
     embalagem: e.embalagem ?? a.embalagem,
@@ -694,6 +920,10 @@ async function situacaoDelicada(
     dados: { tipo, texto: texto.slice(0, 500) },
   });
 }
+
+/** Contexto do Extrator quando a mensagem responde ao pedido de desconto (sem valores: a conta é do código). */
+const CONTEXTO_DESCONTO =
+  "Pedi desconto sobre a proposta que ele já mandou (\"Por gentileza, conseguiria desconto na cotação?\"). Se ele der um percentual ou valor de desconto sem preço novo, preencha descontoPercentual ou descontoValor e deixe o preço null; \"não consigo\" ou \"mantenho\" é classificacao outro.";
 
 const SIM_PRECO = /^(sim|s|confirmo|confirmado|confirmamos|isso|correto|é isso|e isso|exato|pode ser|esse mesmo|é esse)\b/i;
 const NAO_PRECO = /^(n[aã]o|errei|me enganei|errado|corrigindo|na verdade)\b/i;
