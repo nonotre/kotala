@@ -71,7 +71,7 @@ test("texto do mapa: a confirmar à parte, pagamento preferido, aviso de atualiz
   assert.match(t, /^Pedido 7 · 10 resmas de Papel A4\nMapa atualizado: F9 saiu\.\nMapa de cotação: 2 propostas válidas de 4 recebidas \(3 fornecedores consultados e 1 loja online\)\./);
   assert.match(t, /Busca automática: consultei mais 2/);
   assert.match(t, /Pagamento preferido: boleto 28 dias\./);
-  assert.match(t, /Total estimado R\$\s340,00: produto R\$\s320,00 \+ frete a calcular no site/);
+  assert.match(t, /Unitário R\$\s\d+,\d{2} · total estimado R\$\s340,00\n   \(produto R\$\s320,00 \+ frete a calcular no site/);
   assert.match(t, /A confirmar com o fornecedor \(fora do ranking até responder\):\n- F\d+: Preço a confirmar/);
   assert.match(t, /Fora da comparação:\n- F\d+: Preço sem nota fiscal/);
   assert.match(t, /pagamento: boleto 28 dias/);

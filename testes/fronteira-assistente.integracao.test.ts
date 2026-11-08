@@ -17,7 +17,9 @@ test("fora do chat web, link relativo vira texto e botão de link sai; ação co
     { rotulo: "Abrir o pedido 12", dado: "link:/pedidos/12" },
     { rotulo: "Confirmar", dado: "pedido:12:confirmar" },
   ]);
-  assert.equal(r.texto, "O Pedido 12 está em cotação. Veja [o site](https://exemplo.com).");
+  assert.equal(r.texto, 'O Pedido 12 está em cotação. Veja <a href="https://exemplo.com">o site</a>.');
+  assert.equal(r.formato, "html");
+  assert.equal(paraCanalSemTelas("**Total** R$ 10 <x>", []).texto, "<b>Total</b> R$ 10 &lt;x&gt;");
   assert.deepEqual(r.botoes, [{ rotulo: "Confirmar", dado: "pedido:12:confirmar" }]);
   assert.equal(paraCanalSemTelas("ok", [{ rotulo: "Ver", dado: "link:/avisos" }]).botoes, undefined);
 });

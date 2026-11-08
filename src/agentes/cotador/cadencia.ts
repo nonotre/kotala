@@ -11,7 +11,7 @@
 // qualquer pergunta nova.
 
 import { and, desc, eq, gte, inArray, isNotNull, isNull, sql } from "drizzle-orm";
-import { prazoRespostasMs } from "../../config.ts";
+import { ESPERA_MIN_DESCONTO_MS, prazoRespostasMs } from "../../config.ts";
 import { db } from "../../nucleo/db/cliente.ts";
 import { contato, cotacao, evento, fornecedor, itemPedido, mensagem, oferta } from "../../nucleo/db/schema.ts";
 import { enviar, type OpcoesEnvio, type ResultadoEnvio } from "../../nucleo/mensagens/index.ts";
@@ -40,8 +40,10 @@ export const perguntaDe = (extraido: unknown): MarcaPergunta | null => {
 };
 
 /** A pergunta aberta mais recente que o contato ainda não respondeu, ou null. Função pura. */
-export function pendenteEntre(abertas: readonly PerguntaAberta[], ultimaEntrada: Date | null, agora: Date, esperaMax: number): PerguntaAberta | null {
-  const vivas = abertas.filter((a) => (!ultimaEntrada || a.desde.getTime() > ultimaEntrada.getTime()) && agora.getTime() - a.desde.getTime() < esperaMax);
+export function pendenteEntre(abertas: readonly PerguntaAberta[], ultimaEntrada: Date | null, agora: Date, esperaMax: number, esperaMinDesconto = 0): PerguntaAberta | null {
+  // Ester: o pedido de desconto segura a fila por pelo menos esperaMinDesconto (ou até o fornecedor responder).
+  const espera = (a: PerguntaAberta) => (a.tipo === "desconto" ? Math.max(esperaMax, esperaMinDesconto) : esperaMax);
+  const vivas = abertas.filter((a) => (!ultimaEntrada || a.desde.getTime() > ultimaEntrada.getTime()) && agora.getTime() - a.desde.getTime() < espera(a));
   return vivas.sort((a, b) => b.desde.getTime() - a.desde.getTime())[0] ?? null;
 }
 
@@ -103,7 +105,7 @@ export async function perguntaPendente(contatoId: string, agora = new Date()): P
     .from(mensagem)
     .where(and(eq(mensagem.contatoId, contatoId), eq(mensagem.direcao, "entrada"), eq(mensagem.situacao, "recebida")));
   const abertas = await perguntasAbertas(contatoId, ct?.fornecedorId ?? null, agora);
-  return pendenteEntre(abertas, data(ent?.em), agora, esperaMaxMs());
+  return pendenteEntre(abertas, data(ent?.em), agora, esperaMaxMs(), ESPERA_MIN_DESCONTO_MS());
 }
 
 // ---------- Perguntas prontas e envio ----------

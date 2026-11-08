@@ -27,6 +27,9 @@ test("pergunta pendente: aberta depois da última mensagem do contato e ainda n�
   assert.equal(cad.pendenteEntre(abertas, min(1), min(6), 75_000)?.tipo, "desconto");
   // Fornecedor mudo: a pendência vence e a fila anda.
   assert.equal(cad.pendenteEntre(abertas, min(1), min(7), 75_000), null);
+  // Ester: o pedido de desconto segura a fila por pelo menos o mínimo (5 min), mesmo com espera menor.
+  assert.equal(cad.pendenteEntre(abertas, min(1), min(7), 75_000, 300_000)?.tipo, "desconto");
+  assert.equal(cad.pendenteEntre(abertas, min(1), min(10.5), 75_000, 300_000), null);
 });
 
 const p = (tipo: Parameters<typeof cad.escolherEnvio>[0][number]["tipo"], itemPedidoId: number | null, linha?: string) => ({ tipo, itemPedidoId, texto: `${tipo} ${itemPedidoId}`, linha });

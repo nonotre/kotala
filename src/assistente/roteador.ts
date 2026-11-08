@@ -17,13 +17,18 @@ import { mensagem, pedido } from "../nucleo/db/schema.ts";
 import { aoReceber, enviar, type MensagemRecebida } from "../nucleo/mensagens/index.ts";
 import { registrar } from "../nucleo/registro.ts";
 import { responder } from "./agente.ts";
+import { escaparHtml } from "../texto.ts";
 import { PREFIXO_LINK, type MensagemHistorico } from "./tipos.ts";
 
 /** Os mesmos "sim" que o fluxo do comprador aceita como confirmação (fluxo/comprador.ts). */
 const CONFIRMACAO = /^(sim|ok|okay|confirm[oa]|confirmado|pode( seguir| cotar)?|isso|certo|fechado|beleza|blz|manda)[!.\s]*$/i;
 
-/** Canais em que o Assistente atende tudo. No Telegram, ele responde só as consultas que o Interpretador classifica (responderConsulta). */
-const CANAIS_DO_ASSISTENTE = new Set(["web"]);
+/**
+ * Canais em que o Assistente atende tudo (perguntas, pedidos sobre a cotação, negociar, cotar com mais),
+ * com a triagem dos guardrails antes. No Telegram (revisão da Ester, que testa por lá), a resposta sai sem
+ * links de tela. Nos outros canais, ele só responde as consultas que o Interpretador classifica.
+ */
+const CANAIS_DO_ASSISTENTE = new Set(["web", "telegram"]);
 
 /** Vai direto ao fluxo, sem gastar IA: botão, anexo, comando, ou "sim" com pedido em "confirma?". */
 async function vaiDiretoAoFluxo({ contato, entrada }: MensagemRecebida): Promise<boolean> {
@@ -90,7 +95,8 @@ async function atender(m: MensagemRecebida) {
   if (r.tipo === "encaminhar") return aoMensagemDoComprador(m, { naoEhRespostaFornecedor: NAO_RESPONDE_FORNECEDOR.has(r.motivo) });
   await garantirAvisoPrivacidade(m.contato);
   if (t.dadoPessoal.length) await enviar(m.contato.id, TEXTO_DADO_PESSOAL);
-  await enviar(m.contato.id, r.texto, { botoes: r.botoes.length ? r.botoes : undefined });
+  const saida = m.entrada.canal === "web" ? { texto: r.texto, botoes: r.botoes.length ? r.botoes : undefined } : paraCanalSemTelas(r.texto, r.botoes);
+  await enviar(m.contato.id, saida.texto, { botoes: saida.botoes, formato: saida.formato });
   await registrar(db, {
     agente: "Assistente",
     acao: `Respondeu no chat${r.ferramentas.length ? ` consultando ${[...new Set(r.ferramentas.map((f) => f.nome))].join(", ")}` : ""}.`,
@@ -104,9 +110,15 @@ async function atender(m: MensagemRecebida) {
  * sai. Botões de ação (o mesmo `dado` do fluxo) continuam valendo no Telegram.
  */
 export function paraCanalSemTelas(texto: string, botoes: { rotulo: string; dado: string }[]): RespostaConsulta {
-  const limpo = texto.replace(/\[([^\]]+)\]\((\/[^)\s]*)\)/g, "$1");
+  const semLinks = texto.replace(/\[([^\]]+)\]\((\/[^)\s]*)\)/g, "$1");
+  // O Markdown leve do Assistente vira o HTML que o Telegram entende (negrito, itálico, código), com o resto escapado.
+  const comHtml = escaparHtml(semLinks)
+    .replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
+    .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, "$1<i>$2</i>")
+    .replace(/`([^`\n]+)`/g, "<code>$1</code>")
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s"]+)\)/g, '<a href="$2">$1</a>');
   const acoes = botoes.filter((b) => !b.dado.startsWith(PREFIXO_LINK));
-  return { texto: limpo, botoes: acoes.length ? acoes : undefined };
+  return { texto: comHtml, botoes: acoes.length ? acoes : undefined, formato: "html" };
 }
 
 /** Consulta classificada pelo Interpretador (Telegram e outros canais): o Assistente responde, sem encaminhar de volta. */

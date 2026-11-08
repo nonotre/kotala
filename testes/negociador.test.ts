@@ -71,11 +71,11 @@ const situacao = (s: Partial<Situacao> = {}): Situacao => ({
   ...s,
 });
 
-test("pede desconto em proposta completa, com janela de 25% do prazo sem passar do prazo", () => {
+test("pede desconto em proposta completa, com janela de 25% do prazo e no mínimo 5 min, sem passar do prazo", () => {
   const r = n.deveNegociar(situacao());
   assert.ok(r.ok);
-  // Demo de 15 min: 3 min 45 s.
-  assert.equal(r.ok && r.janelaAte.getTime() - min(2).getTime(), 225_000);
+  // Demo de 15 min: 25% seriam 3 min 45 s; a Ester pediu pelo menos 5 min (revisaodochat.md).
+  assert.equal(r.ok && r.janelaAte.getTime() - min(2).getTime(), 300_000);
   const fim = n.deveNegociar(situacao({ agora: min(13) }));
   assert.ok(fim.ok && fim.janelaAte.getTime() === min(15).getTime());
 });

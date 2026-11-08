@@ -10,6 +10,7 @@ import { formatarBRL, ultimoMapa, type Linha } from "../agentes/comparador/index
 import { contatoAtivo } from "../agentes/cotador/index.ts";
 import { EMPRESA } from "../config.ts";
 import { db } from "../nucleo/db/cliente.ts";
+import { registrar } from "../nucleo/registro.ts";
 import { contato, cotacao, fornecedor, historicoCompra, itemPedido, oferta, pedido, usuario } from "../nucleo/db/schema.ts";
 import { enviar, type Botao, type Contato } from "../nucleo/mensagens/index.ts";
 import {
@@ -42,7 +43,7 @@ const nomeComSelo = (l: Linha) => `${l.oferta.fornecedorNome}${l.oferta.simulado
 // ---------- Botões do comprador: item:<id>:<acao>[:<ofertaId>] ----------
 
 export async function aoBotaoDoComprador(contato: Contato, dado: string): Promise<boolean> {
-  const m = /^item:(\d+):(aprovar|confirmar|outras|reprovar|buscar|voltar|motivos|negociar|excluir|cancelar|repetir|repetir_ok|cotar_novo)(?::([0-9a-f-]{36}|[a-z_]+))?$/.exec(dado);
+  const m = /^item:(\d+):(aprovar|confirmar|outras|reprovar|buscar|ampliar|voltar|motivos|negociar|excluir|cancelar|repetir|repetir_ok|cotar_novo)(?::([0-9a-f-]{36}|[a-z_]+))?$/.exec(dado);
   if (!m) return false;
   const itemPedidoId = Number(m[1]);
   const acao = m[2]!;
@@ -50,6 +51,20 @@ export async function aoBotaoDoComprador(contato: Contato, dado: string): Promis
   const d = await dados(itemPedidoId);
   if (!d || d.pedido.compradorId !== contato.id) return true;
   const ctx = { pedidoId: d.pedido.id, itemPedidoId };
+  // Ester (revisaodochat.md): "cote com mais fornecedores" com a cotação aberta amplia a busca na mesma rodada.
+  if (acao === "ampliar") {
+    if (d.item.estado !== "cotando") {
+      await enviar(contato.id, `Pedido ${d.pedido.id}: a cotação de ${d.item.descricao} não está mais aberta. Se o mapa já saiu, use "Cotar com mais fornecedores" nele.`, ctx);
+      return true;
+    }
+    const { ampliarBusca } = await import("../agentes/cotador/index.ts");
+    await registrar(db, { agente: "Comprador", acao: "Pediu para cotar com mais fornecedores.", motivo: "Pedido do comprador com a cotação aberta.", ...ctx });
+    const r = await ampliarBusca(itemPedidoId, { prioridade: true });
+    if (r.resultado !== "ampliou") {
+      await enviar(contato.id, `Pedido ${d.pedido.id}: não achei fornecedor novo para ${d.item.descricao} agora (ou já usei as consultas extras desta rodada). Sigo com quem foi consultado.`, ctx);
+    }
+    return true;
+  }
   // X2: repetir ou cotar de novo só valem quando o item espera essa escolha.
   if (acao === "repetir" || acao === "repetir_ok" || acao === "cotar_novo") {
     if (d.item.estado !== "aguardando_recompra") {

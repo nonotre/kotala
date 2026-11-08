@@ -42,7 +42,10 @@ const ACOES = [
   "cancelar_pedido",
   "aprovar_oferta",
   "escolher_outra_proposta",
-  // Negociar, buscar mais e cotar de novo mandam mensagem a fornecedores: só pelo menu de motivos de "reprovar", como no fluxo.
+  // Negociar e buscar mais mandam mensagem a fornecedores: só quando o comprador pede (Ester, revisaodochat.md),
+  // sempre como botão, e nada sai antes do toque. "Cotar de novo com todos" continua no menu de "reprovar".
+  "negociar",
+  "cotar_com_mais_fornecedores",
   "reprovar",
   "desistir_do_item",
   "repetir_compra",
@@ -79,6 +82,8 @@ async function montarAcao(e: EstadoTurno, a: { acao: Acao; pedidoId: number; ite
     if (item.estado !== "aguardando_recompra") return { ok: false, erro: `O item ${iid} não está esperando a escolha de repetir a compra.` };
     return { ok: true, botao: a.acao === "repetir_compra" ? { rotulo: "Repetir a última compra", dado: `item:${iid}:repetir` } : { rotulo: "Cotar de novo", dado: `item:${iid}:cotar_novo` } };
   }
+  // Com a cotação aberta, "cote com mais fornecedores" amplia a busca na mesma rodada.
+  if (a.acao === "cotar_com_mais_fornecedores" && item.estado === "cotando") return { ok: true, botao: { rotulo: "Consultar mais fornecedores agora", dado: `item:${iid}:ampliar` } };
   if (item.estado !== "aguardando_decisao") return { ok: false, erro: `O item ${iid} não está esperando decisão (estado: ${item.estado}).` };
   switch (a.acao) {
     case "aprovar_oferta": {
@@ -91,6 +96,10 @@ async function montarAcao(e: EstadoTurno, a: { acao: Acao; pedidoId: number; ite
     }
     case "escolher_outra_proposta":
       return { ok: true, botao: { rotulo: "Escolher outra proposta", dado: `item:${iid}:outras` } };
+    case "negociar":
+      return { ok: true, botao: { rotulo: "Negociar o preço com os fornecedores", dado: `item:${iid}:negociar` } };
+    case "cotar_com_mais_fornecedores":
+      return { ok: true, botao: { rotulo: "Cotar com mais fornecedores", dado: `item:${iid}:buscar` } };
     case "reprovar":
       return { ok: true, botao: { rotulo: "Reprovar ou negociar (escolher o motivo)", dado: `item:${iid}:motivos` } };
     case "desistir_do_item":
@@ -193,7 +202,7 @@ function ferramentas(e: EstadoTurno) {
     }),
     propor_acao: tool({
       description:
-        "Mostra ao comprador um botão de ação do fluxo. Nada acontece até ele tocar; aprovar ainda pede confirmação. Ações de item exigem pedidoId e itemId; aprovar_oferta exige também ofertaId (do mapa_cotacao).",
+        "Mostra ao comprador um botão de ação do fluxo. Nada acontece até ele tocar; aprovar ainda pede confirmação. Ações de item exigem pedidoId e itemId; aprovar_oferta exige também ofertaId (do mapa_cotacao). negociar e cotar_com_mais_fornecedores: só quando o comprador pedir.",
       inputSchema: z.object({ acao: z.enum(ACOES), pedidoId: z.number().int(), itemId: z.number().int().optional(), ofertaId: z.string().optional() }),
       execute: medir("propor_acao", async (a: { acao: Acao; pedidoId: number; itemId?: number; ofertaId?: string }) => {
         if (e.botoesAcao.length >= MAX_ACOES) return { erro: `No máximo ${MAX_ACOES} botões de ação por resposta.` };

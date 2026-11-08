@@ -225,7 +225,9 @@ export function linhaMapa(l: Linha, i: number, verificacoes: Map<string, Verific
   const total = l.origemFrete === "a_calcular" ? "Total estimado" : "Total";
   const partes = [
     `${i + 1}. ${nomeComSelo(o)}`,
-    `   ${total} ${formatarBRL(l.custo!)}: produto ${formatarBRL(l.produto!)} + ${textoFrete(l)}${l.impostos ? ` + impostos ${formatarBRL(l.impostos)}` : ""}`,
+    // Ester (revisaodochat.md): unitário e total de cada fornecedor, para comparar de uma vez.
+    `   Unitário ${l.precoUnitarioEfetivo !== null ? formatarBRL(l.precoUnitarioEfetivo) : "não informado"} · ${total.toLowerCase()} ${formatarBRL(l.custo!)}`,
+    `   (produto ${formatarBRL(l.produto!)} + ${textoFrete(l)}${l.impostos ? ` + impostos ${formatarBRL(l.impostos)}` : ""})`,
     `   Entrega em ${dias(o.prazoDias!)} · pagamento: ${o.pagamento ?? "não informado"} · nota ${formatarNota(l.nota!)}`,
   ];
   const v = verificacoes.get(o.fornecedorId);

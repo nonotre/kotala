@@ -23,8 +23,8 @@ export const EMPRESA = {
 /** R13: condição de pagamento padrão da empresa, dita ao fornecedor. "À vista" quer dizer no recebimento. */
 export const PAGAMENTO_PADRAO = "à vista, no recebimento da mercadoria (contra a nota fiscal)";
 
-/** Q4: quanto tempo os fornecedores têm para responder na demo (5 minutos: dá tempo de uma pessoa responder). */
-export const PRAZO_RESPOSTAS_SEG = () => num(process.env.PRAZO_RESPOSTAS_SEG, 300);
+/** Q4: quanto tempo os fornecedores têm para responder na demo (15 minutos, pedido da Ester). */
+export const PRAZO_RESPOSTAS_SEG = () => num(process.env.PRAZO_RESPOSTAS_SEG, 900);
 /**
  * "demo" usa PRAZO_RESPOSTAS_SEG. "real" segue a regra da área de compras: 3 a 4 dias para
  * compras menores e 5 a 7 para maiores (usa o começo de cada faixa; a cotação fecha antes
@@ -75,3 +75,6 @@ export const MAX_PRORROGACOES = () => num(process.env.MAX_PRORROGACOES, 2);
 export const ESPERA_PERGUNTA_FRACAO = 0.25;
 /** G: nicho da empresa (ids de src/dominio/categorias.json); só escolhe exemplos e jargão, nunca limita pedidos. */
 export const EMPRESA_NICHO = () => (process.env.EMPRESA_NICHO ?? "geral").split(",").map((s) => s.trim()).filter(Boolean);
+
+/** Ester (revisaodochat.md): depois do pedido de desconto, nada mais sai ao fornecedor por pelo menos este tempo (ou até ele responder). */
+export const ESPERA_MIN_DESCONTO_MS = () => num(process.env.ESPERA_MIN_DESCONTO_SEG, 300) * 1000;

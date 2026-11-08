@@ -2,6 +2,15 @@
 
 Registro curto das decisões que mudam o escopo ou o desenho. A mais nova fica no topo.
 
+## 08/11/2026 · Revisão do chat da Ester (revisaodochat.md)
+
+**Situação:** implementado no `main` (sem teste com a IA real de ponta a ponta).
+
+- 15 min de cotação como padrão da demo (`PRAZO_RESPOSTAS_SEG`, padrão 900).
+- Mapa ao comprador com unitário e total de cada fornecedor na mesma linha.
+- O Assistente atende também no Telegram (com a triagem dos guardrails antes, sem links de tela): negociar e cotar com mais fornecedores quando o comprador pede (botões; com a cotação aberta, "cotar com mais" amplia a busca na mesma rodada), dados da proposta e histórico de compras nas respostas.
+- Pedido de desconto em mensagem própria, depois do recebimento da proposta, e nunca junto de outra pergunta: com proposta incompleta, ele espera o fornecedor completar. Depois dele, a fila de perguntas espera pelo menos 5 min (`ESPERA_MIN_DESCONTO_SEG`) ou a resposta do fornecedor. Isso ajusta a R13 abaixo, que juntava o desconto à pergunta do que falta.
+
 ## 08/11/2026 · Prazo sem 3 propostas, dados da empresa, pagamento e alteração de valor
 
 **Situação:** R14b, R11 e R13 implementados na branch `sim-fornecedor`; R3b anotada (a negociação de prazo ainda não existe). Respostas do dono às perguntas 1 a 4 de [frente-3-simulador.md](frente-3-simulador.md#7-perguntas-que-ainda-ficaram).

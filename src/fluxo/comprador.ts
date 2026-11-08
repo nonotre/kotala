@@ -73,7 +73,7 @@ export async function garantirAvisoPrivacidade(contato: Pick<MensagemRecebida["c
 }
 
 /** Resposta de uma consulta ("como está o pedido 12?"): texto e, se houver, botões do fluxo. */
-export type RespostaConsulta = { texto: string; botoes?: Botao[] };
+export type RespostaConsulta = { texto: string; botoes?: Botao[]; formato?: "html" };
 type RespondedorConsulta = (c: { contatoId: string; canal: Canal; texto: string }) => Promise<RespostaConsulta | null>;
 let respondedorConsulta: RespondedorConsulta | null = null;
 
@@ -747,14 +747,16 @@ async function responderClasse(
   }
   let resposta = respostaDaClasse({ classe, subtipo: i.subtipo, vez, empresa: EMPRESA.nome, comOutrosItens: c.d.outrosItens > 0 });
   let botoesConsulta: Botao[] | undefined;
+  let formato: "html" | undefined;
   if (classe === "consulta") {
     const r = await responderConsulta(contatoId, texto);
     resposta = r?.texto ?? (await textoConsulta(contatoId, texto, resposta));
     botoesConsulta = r?.botoes;
+    formato = r?.formato;
   }
   if (opcoes.enviarResposta !== false && resposta) {
     const botoes = classe === "proibido" ? [{ rotulo: ROTULO_CONTESTAR, dado: `g:${ev.id}:contestar` }] : botoesConsulta;
-    await enviar(contatoId, resposta, { pedidoId: opcoes.pedidoId, botoes });
+    await enviar(contatoId, resposta, { pedidoId: opcoes.pedidoId, botoes, formato });
   }
   return resposta;
 }

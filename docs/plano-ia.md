@@ -64,7 +64,7 @@ Legenda: **feito** = resolvido no `main` (rodada de 07/11 ou junção da rodada 
 | "Obrigado! Aviso se for escolhida." fechava a negociação; validade não pedida; 1 minuto para responder; lojas online fora; "Pedido 11" sem nome; frase exagerada | Liria | feito | — |
 | 3ª correção cancelava o pedido com 0 unidades | Liria | feito | — |
 | PARAR do fornecedor deve valer só para a cotação; sair de vez com "Encerrar contato" (`erros_chat.md`) | Liria | feito | — |
-| Revisão do chat (`revisaodochat.md`): mapa com unitário e total, negociar e cotar com mais quando o comprador pedir, dados da proposta e histórico nas respostas, desconto em mensagem separada com 5 min de espera | Ester | em andamento | — |
+| Revisão do chat (`revisaodochat.md`): mapa com unitário e total, negociar e cotar com mais quando o comprador pedir, dados da proposta e histórico nas respostas, desconto em mensagem separada com 5 min de espera | Ester | feito (ver decisoes.md, 08/11) | — |
 
 ## G · Generalista: funcionar para qualquer compra
 

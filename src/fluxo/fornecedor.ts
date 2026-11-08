@@ -597,8 +597,9 @@ async function processarResposta(
       // I1: pede desconto em toda proposta completa, uma vez por fornecedor e item, dentro desta mensagem.
       // A marca é gravada antes de tentar fechar a cotação, para o fechamento esperar a janela.
       let pedido: { marca: MarcaNegociacao; texto: string } | null = null;
-      if (nova && !negociacao) {
-        // R13: pede desconto em qualquer ocasião, inclusive com proposta incompleta (vai junto da pergunta do que falta).
+      // R13: pede desconto em qualquer ocasião. Ester (revisaodochat.md): em mensagem separada, nunca junto de
+      // outra pergunta; com proposta incompleta, o desconto espera o fornecedor completar e sai depois, sozinho.
+      if (nova && !negociacao && !faltam.length && !perguntaPendente) {
         const decisao = deveNegociar({
           temPreco: depois.precoUnitario !== null || depois.totalProduto !== null,
           aConfirmar: !!perguntaPendente,
@@ -654,34 +655,38 @@ async function processarResposta(
       const aberta = agoraItem?.estado === "cotando";
       const ate = l.item.prazoRespostasEm ? ` até ${quando(l.item.prazoRespostasEm).replace(/^(às|em) /, "")}` : "";
       const recebi = negociacao?.resultado === "desconto" ? `Recebi sua proposta atualizada para a cotação ${l.item.id}. Obrigado pelo desconto!` : `Recebi sua proposta para a cotação ${l.item.id}. Obrigado!`;
+      // S: o pedido de desconto passa pela conferência de saída; se não passar, vai só o recebimento.
+      const textoDesconto = pedido && aberta ? pedido.texto : null;
+      const comDesconto =
+        !!textoDesconto &&
+        (await liberarSaida(textoDesconto, { compradorId: l.pedido.compradorId, ...ctx, oQue: "o pedido de desconto" }));
       const textoComum = [
         recebi,
         perguntaPendente ?? "",
         faltam.length ? `Para completar, me diga também: ${faltam.join("; ")}.` : "",
         ressalva ?? "",
-        aberta
-          ? `Vou comparar com as outras propostas e aviso o resultado. Se quiser melhorar alguma condição (preço, frete, prazo ou pagamento), pode mandar por aqui${ate}.`
-          : "Vou comparar com as outras propostas e aviso o resultado. Se o comprador quiser negociar alguma condição, volto a falar com você por aqui.",
+        // Com o pedido de desconto logo abaixo, o convite a melhorar a proposta seria repetido.
+        comDesconto
+          ? ""
+          : aberta
+            ? `Vou comparar com as outras propostas e aviso o resultado. Se quiser melhorar alguma condição (preço, frete, prazo ou pagamento), pode mandar por aqui${ate}.`
+            : "Vou comparar com as outras propostas e aviso o resultado. Se o comprador quiser negociar alguma condição, volto a falar com você por aqui.",
       ]
         .filter(Boolean)
         .join(" ");
-      // S: o pedido de desconto passa pela conferência de saída; se não passar, vai só o recebimento.
-      // R13: com proposta incompleta, a pergunta do que falta vai na mesma mensagem.
-      const textoDesconto = pedido && aberta ? [recebi, faltam.length ? `Para completar, me diga também: ${faltam.join("; ")}.` : "", pedido.texto].filter(Boolean).join("\n") : null;
-      const comDesconto =
-        !!textoDesconto &&
-        (await liberarSaida(textoDesconto, { compradorId: l.pedido.compradorId, ...ctx, oQue: "o pedido de desconto" }));
       const completar = (faltam.length > 0 || !!perguntaPendente) && aberta;
-      const r = await enviar(contatoId, comDesconto ? textoDesconto! : textoComum, {
+      const recebimento = await enviar(contatoId, textoComum, {
         ...ctx,
         // Com proposta incompleta, o que falta vem primeiro (o simulador completa a proposta por este tipo).
-        tipo: completar ? "completar_proposta" : comDesconto ? "negociacao" : "proposta_recebida",
+        tipo: completar ? "completar_proposta" : "proposta_recebida",
       });
+      // Ester: o desconto em mensagem própria, depois do recebimento.
+      const r = comDesconto ? await enviar(contatoId, textoDesconto!, { ...ctx, tipo: "negociacao" }) : { situacao: "falhou" as const };
       if (pedido && nova) {
         if (comDesconto && r.situacao === "enviada") {
           await registrar(db, {
             agente: "Negociador",
-            acao: "Pediu desconto na mensagem de recebimento da proposta.",
+            acao: "Pediu desconto ao fornecedor, em mensagem separada do recebimento da proposta.",
             motivo: `Uma vez por fornecedor e item; janela ${quando(new Date(pedido.marca.janelaAte))}. Alavancas: ${pedido.marca.alavancas.join(", ") || "nenhuma"}.${pedido.marca.referenciaCitada !== null ? ` Citou só a referência pública (${formatarBRL(pedido.marca.referenciaCitada)}).` : " Não citou valor de fora."}`,
             ...ctx,
             fornecedorIds: [c.fornecedorId],
@@ -693,11 +698,10 @@ async function processarResposta(
           await encerrarSeTodosResponderam(l.item.id);
         }
       }
-      // U3: a cobrança do que falta é pergunta aberta até a próxima mensagem do fornecedor.
-      // A marca do desconto, se saiu na mesma mensagem, continua junto.
-      if (completar && nova && r.situacao === "enviada") {
-        const comMarca = comDesconto && pedido ? { negociacao: pedido.marca } : {};
-        await gravarExtraido(nova.id, { ...(nova.extraido as Record<string, unknown>), ...comMarca, pergunta: { tipo: "completar", em: new Date().toISOString() } });
+      // U3: a cobrança do que falta é pergunta aberta até a próxima mensagem do fornecedor
+      // (com ela pendente, o desconto nunca sai junto: ver acima).
+      if (completar && nova && recebimento.situacao === "enviada") {
+        await gravarExtraido(nova.id, { ...(nova.extraido as Record<string, unknown>), pergunta: { tipo: "completar", em: new Date().toISOString() } });
       }
       await despacharPerguntas(contatoId);
       return;

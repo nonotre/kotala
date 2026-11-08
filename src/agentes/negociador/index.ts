@@ -25,7 +25,7 @@ export const MAX_RODADAS = 3;
 /** Quantos fornecedores no máximo recebem a contraproposta do botão. */
 const MAX_ALVOS = 3;
 // Regras em src/config.ts; reexportadas para quem já importava daqui.
-import { NEGOCIACAO_ESPERA_FRACAO, PAGAMENTO_PADRAO } from "../../config.ts";
+import { ESPERA_MIN_DESCONTO_MS, NEGOCIACAO_ESPERA_FRACAO, PAGAMENTO_PADRAO } from "../../config.ts";
 export { NEGOCIACAO_ESPERA_FRACAO };
 /** Alavancas por mensagem, no máximo: mensagem curta. */
 export const MAX_ALAVANCAS = 2;
@@ -195,7 +195,9 @@ export type SituacaoDesconto = {
 /** Até quando o fornecedor tem para responder ao desconto: 25% do prazo, sem passar do prazo. */
 export function janelaDoDesconto(prazoRespostasEm: Date, inicio: Date, agora: Date): Date {
   const prazo = Math.max(0, prazoRespostasEm.getTime() - inicio.getTime());
-  return new Date(Math.min(prazoRespostasEm.getTime(), agora.getTime() + prazo * NEGOCIACAO_ESPERA_FRACAO));
+  // Ester: pelo menos 5 min para a negativa ou a proposta revisada, sem passar do prazo.
+  const espera = Math.max(prazo * NEGOCIACAO_ESPERA_FRACAO, ESPERA_MIN_DESCONTO_MS());
+  return new Date(Math.min(prazoRespostasEm.getTime(), agora.getTime() + espera));
 }
 
 /**
