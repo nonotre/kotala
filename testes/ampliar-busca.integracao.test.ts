@@ -177,3 +177,23 @@ test("candidatosNovos: fora quem já foi consultado (qualquer situação) e quem
   const novos = await mod!.candidatosNovos(await itemDe(id));
   assert.deepEqual(novos.map((x) => x.fornecedorId), [d!]);
 });
+
+test("todos responderam antes do prazo, com menos de 3 válidas: amplia em vez de fechar", { skip: pular }, async () => {
+  const [a, ...resto] = await fornecedores(3);
+  const id = await itemCotando([a!]);
+  // Prazo ainda aberto: é o fechamento antecipado, não o varredor.
+  await mod!.db.update(mod!.schema.itemPedido).set({ prazoRespostasEm: new Date(Date.now() + 600_000) }).where(eq(mod!.schema.itemPedido.id, id));
+  await proposta(id, a!);
+
+  await mod!.encerrarSeTodosResponderam(id);
+  const item = await itemDe(id);
+  assert.equal(item.estado, "cotando");
+  const novas = (await cotacoesDo(id)).filter((c) => resto.includes(c.fornecedorId));
+  assert.equal(novas.length, 2);
+
+  // As novas respondem sem completar 3 válidas e acabaram os candidatos: agora fecha.
+  for (const f of resto) await proposta(id, f, { prazoDias: null });
+  await mod!.db.update(mod!.schema.itemPedido).set({ prazoRespostasEm: new Date(Date.now() - 1000) }).where(eq(mod!.schema.itemPedido.id, id));
+  await mod!.encerrarSeTodosResponderam(id);
+  assert.equal((await itemDe(id)).estado, "comparando");
+});
