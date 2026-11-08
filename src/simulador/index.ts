@@ -28,6 +28,11 @@ import {
   type ItemPedido,
   type Persona,
 } from "./personas.ts";
+import { instalarTravaDeRede, semRedeLigado } from "./rede.ts";
+
+// 3.1: SIM_SEM_REDE=1 liga a trava de rede em quem usa o simulador (`npm run simular`):
+// só o banco local e o Gemini passam; Serper, VTEX, páginas e verificação falham alto.
+if (semRedeLigado()) instalarTravaDeRede({ permitirGemini: true });
 
 const personaPorChave = new Map(TODAS_PERSONAS.map((p) => [p.chave, p]));
 /** Quem já perguntou antes de cotar, por item. */
