@@ -33,7 +33,7 @@ test("lerExtraido: alertas, divergências, preço a confirmar e a marca do desco
   assert.deepEqual(l.negociacao, { resultado: "condicional", descontoFrete: 0, condicao: "3% no pix" });
   // Marca sem pedidaEm não vale (mesmo critério de marcaDe); extraido vazio não quebra.
   assert.equal(lerExtraido({ negociacao: { resultado: "manteve" } }).negociacao, null);
-  assert.deepEqual(lerExtraido(null), { alertasConduta: [], divergencias: [], aConfirmar: [], precoLido: null, negociacao: null });
+  assert.deepEqual(lerExtraido(null), { alertasConduta: [], divergencias: [], aConfirmar: [], precoLido: null, aumento: null, negociacao: null });
 });
 
 test("frete no texto: informado, estimado, a calcular no site e retirada", () => {

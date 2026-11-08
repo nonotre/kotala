@@ -1,5 +1,5 @@
 "use client";
-// Uma conversa de outro comprador, só para ler: o espelho do Telegram ou o chat web de outro navegador.
+// Uma conversa só para ler: o espelho do Telegram (o seu, ligado à conta, ou de outro comprador) ou o chat web de outra pessoa.
 // Sem campo de envio e sem botões que façam algo: os botões que o assistente ofereceu aparecem como rótulos.
 // Tudo vem do banco, por /api/conversas/<id>, consultado a cada 2 s. Lista simples, e não o chat da Carbon:
 // nada de shadow root, de estado global nem de envio para esconder.
@@ -102,13 +102,15 @@ type Props = {
   voltar?: ReactNode;
   /** O caminho até a lista de conversas: no painel do Início, abre a lista ali; na tela inteira, o endereço sem `c`. */
   verConversas: { href?: string; aoClicar?: () => void };
-  /** A conversa deste navegador, com o resto do endereço (vista, filtro) como está. */
+  /** O Telegram ligado à conta de quem entrou (Frente 2): o espelho dele, com "Continuar no Telegram". */
+  seu?: boolean;
+  /** A conversa de quem entrou, com o resto do endereço (vista, filtro) como está. */
   hrefDeste: string;
   /** No painel do Início: ao abrir a conversa deste navegador, o foco vai para ela. */
   aoIrParaDeste?: () => void;
 };
 
-export function ConversaLeitura({ contatoId, linkTelegram, voltar, verConversas, hrefDeste, aoIrParaDeste }: Props) {
+export function ConversaLeitura({ contatoId, linkTelegram, seu = false, voltar, verConversas, hrefDeste, aoIrParaDeste }: Props) {
   const [estado, setEstado] = useState<Estado>({ tipo: "carregando" });
   const [novas, setNovas] = useState(false);
   const rolagem = useRef<HTMLDivElement>(null);
@@ -196,7 +198,7 @@ export function ConversaLeitura({ contatoId, linkTelegram, voltar, verConversas,
         {voltar}
         <div className={s.painelTitulos}>
           {conversa ? <h2 className={s.painelTitulo}>{conversa.contato.nome}</h2> : <SkeletonText heading width="40%" />}
-          {conversa ? <p className={s.painelContexto}>{telegram ? "Telegram · só leitura" : "Chat web de outro navegador · só leitura"}</p> : null}
+          {conversa ? <p className={s.painelContexto}>{telegram ? (seu ? "Seu Telegram · só leitura" : "Telegram · só leitura") : "Chat web de outra pessoa · só leitura"}</p> : null}
         </div>
       </header>
 
@@ -241,21 +243,23 @@ export function ConversaLeitura({ contatoId, linkTelegram, voltar, verConversas,
             <>
               <p className={s.rodapeTexto}>
                 {linkTelegram
-                  ? "Só leitura: o comprador responde no Telegram. O botão abre o bot, não esta conversa."
+                  ? seu
+                    ? "Só leitura: você responde no Telegram. O botão abre o bot."
+                    : "Só leitura: o comprador responde no Telegram. O botão abre o bot, não esta conversa."
                   : "Só leitura. O link para o bot não está disponível: falta TELEGRAM_TOKEN_COMPRADOR ou o Telegram não respondeu."}
               </p>
               {linkTelegram ? (
                 <LinkExterno href={linkTelegram} botao="primary" tamanho="md">
-                  Abrir no Telegram
+                  {seu ? "Continuar no Telegram" : "Abrir no Telegram"}
                 </LinkExterno>
               ) : null}
             </>
           ) : (
             <p className={s.rodapeTexto}>
-              Só leitura: esta conversa é de outro navegador. Para escrever, use{" "}
+              Só leitura: esta conversa é de outra pessoa. Para escrever, use{" "}
               {/* Sem rolar a página: no Início, a lista de cotações fica onde estava. */}
               <CarbonLink as={NextLink} href={hrefDeste} scroll={false} onClick={aoIrParaDeste} inline>
-                a conversa deste navegador
+                a sua conversa
               </CarbonLink>
               .
             </p>

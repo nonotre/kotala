@@ -81,6 +81,8 @@ export type OfertaComparavel = {
   produtoAnterior?: number | null;
   /** I1: como ficou o pedido automático de desconto. */
   negociacao?: NegociacaoDaOferta | null;
+  /** R3b: o fornecedor aumentou a proposta nesta rodada ("produto de R$ A para R$ B"). */
+  aumento?: string | null;
   /** S: alertas do guardrail na mensagem do fornecedor (ids de ALERTAS do Extrator). */
   alertasConduta?: string[];
   /** Q2: o que difere do pedido, como o Extrator escreveu. */
@@ -308,6 +310,7 @@ export function comparar(item: ItemComparado, ofertas: OfertaComparavel[], refer
     // Conduta primeiro: é o que o comprador mais precisa ver.
     for (const a of conduta) if (a in ATENCAO_CONDUTA) alertas.push(ATENCAO_CONDUTA[a]!);
     alertas.push(...neg.alertas);
+    if (o.aumento) alertas.push(`Subiu: ${o.aumento}`);
     if (origemFrete === "estimado") alertas.push("Frete não informado: valor estimado");
     if (origemFrete === "a_calcular") alertas.push("Frete a calcular no site: a estimativa serve só para comparar");
     if (o.prazoPagamentoDias === 0 && !o.conhecido) alertas.push("Pagamento antecipado com fornecedor novo");

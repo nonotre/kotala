@@ -589,7 +589,15 @@ async function processarResposta(
       if (negociacao?.resultado) await registrarResultado(negociacao, c.fornecedorId, ctx);
       // R3b: preço ou frete maior que na proposta anterior entra no mapa (vale a mais recente),
       // mas o comprador fica sabendo agora; nada é aceito sem a aprovação dele no mapa.
-      if (anterior && temPropostaAnterior && !precoAConfirmar) await avisarAumento(anterior, depois, qtd, c.fornecedorId, l, ctx);
+      if (anterior && temPropostaAnterior && !precoAConfirmar) {
+        const aumento = await avisarAumento(anterior, depois, qtd, c.fornecedorId, l, ctx);
+        // O mapa marca a subida na linha do fornecedor ("Subiu: produto de A para B").
+        if (aumento && nova) {
+          // A cópia local também, para as próximas gravações do extraido (marca do desconto, pergunta) não apagarem a subida.
+          nova.extraido = { ...(nova.extraido as Record<string, unknown>), aumento };
+          await gravarExtraido(nova.id, nova.extraido as Record<string, unknown>);
+        }
+      }
       if (e.pedidoContato) {
         await enviar(l.pedido.compradorId, `Pedido ${l.pedido.id}: a proposta chegou, e o fornecedor também pediu para falar com uma pessoa.`, { ...ctx, tipo: "aviso" });
       }
@@ -631,6 +639,7 @@ async function processarResposta(
             unidade: l.item.unidade,
             frete: e.frete,
             referencia,
+            pagamentoPreferido: l.pedido.pagamentoPreferido,
             janelaAte: decisao.janelaAte,
             agora,
           });
@@ -793,7 +802,7 @@ async function avisarAumento(
   const mudancas: string[] = [];
   if (pa !== null && pd !== null && pd - pa >= 0.01) mudancas.push(`produto de ${formatarBRL(pa)} para ${formatarBRL(pd)}`);
   if (antes.frete !== null && depois.frete !== null && depois.frete - antes.frete >= 0.01) mudancas.push(`frete de ${formatarBRL(antes.frete)} para ${formatarBRL(depois.frete)}`);
-  if (!mudancas.length) return;
+  if (!mudancas.length) return null;
   const [f] = await db.select({ nome: fornecedor.nome }).from(fornecedor).where(eq(fornecedor.id, fornecedorId));
   const nome = f?.nome ?? "Um fornecedor";
   await enviar(l.pedido.compradorId, `Pedido ${l.pedido.id}: ${nome} mudou a proposta de ${l.item.descricao}: ${mudancas.join(" e ")}. O valor novo vai para o mapa; só vale se você aprovar essa proposta.`, { ...ctx, tipo: "aviso" });
@@ -805,6 +814,7 @@ async function avisarAumento(
     fornecedorIds: [fornecedorId],
     dados: { tipo: "alteracao_valor", antes, depois },
   });
+  return mudancas.join(" e ");
 }
 
 /** Troca o `extraido` da oferta (a marca do desconto ou da pergunta mora nele). */
@@ -861,6 +871,11 @@ export const RESSALVA: Record<AlertaFornecedor, string> = {
   produto_controlado: "Por aqui eu só trato da cotação pedida. Se tiver proposta ou dúvida sobre ela, é só mandar.",
   link_suspeito: "Não abro links nem arquivos desconhecidos. Pode mandar a proposta em texto ou PDF?",
 };
+/** A ressalva do alerta; a de pagamento por fora cita a forma do comprador, se ele pediu uma (R13). */
+export function ressalvaDe(a: AlertaFornecedor, pagamentoPreferido?: string | null): string {
+  if (a === "pagamento_por_fora" && pagamentoPreferido?.trim()) return `O pagamento é feito só para a empresa do CNPJ da proposta, ${pagamentoPreferido.trim()}.`;
+  return RESSALVA[a];
+}
 /** Alertas que impedem a proposta de entrar: o preço não vira proposta limpa. */
 export const ALERTAS_BLOQUEANTES: AlertaFornecedor[] = ["sem_nota", "item_irregular", "produto_controlado"];
 export const AVISO_COMPRADOR: Record<AlertaFornecedor, string | null> = {
@@ -914,10 +929,10 @@ async function tratarAlertas(
   }
   const bloqueante = alertas.find((a) => ALERTAS_BLOQUEANTES.includes(a));
   if (bloqueante) {
-    await enviar(contatoId, RESSALVA[bloqueante], { ...ctx, tipo: "resposta" });
+    await enviar(contatoId, ressalvaDe(bloqueante, l.pedido.pagamentoPreferido), { ...ctx, tipo: "resposta" });
     return "bloqueada";
   }
-  return alertas.map((a) => RESSALVA[a]).join(" ");
+  return alertas.map((a) => ressalvaDe(a, l.pedido.pagamentoPreferido)).join(" ");
 }
 
 /** Pergunta única ao fornecedor sobre o que ficou a confirmar (preço unitário ou total; item que diverge). */

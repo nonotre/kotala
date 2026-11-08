@@ -11,7 +11,7 @@
 import { cache } from "react";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../../src/nucleo/db/cliente.ts";
-import { contato, evento, fornecedor, itemPedido, mensagem } from "../../src/nucleo/db/schema.ts";
+import { contato, cotacao, evento, fornecedor, itemPedido, mensagem } from "../../src/nucleo/db/schema.ts";
 import { quantidadeDe } from "../../src/texto.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -68,7 +68,7 @@ async function contatoSimulado(id: string) {
 export const chatSimulado = cache(async (id: string) => {
   const c = await contatoSimulado(id);
   if (!c) return null;
-  const [recentes, estado] = await Promise.all([
+  const [recentes, estado, ligacoes] = await Promise.all([
     db
       .select({
         id: mensagem.id,
@@ -86,6 +86,12 @@ export const chatSimulado = cache(async (id: string) => {
       .orderBy(desc(mensagem.criadoEm))
       .limit(300),
     assumidos([c.id]),
+    // X5: cotações abertas a este fornecedor, ainda sem resposta (a mesma regra de ligacaoAberta): dá para ligar por voz.
+    db
+      .select({ cotacaoId: cotacao.id, pedidoId: itemPedido.pedidoId, descricao: itemPedido.descricao })
+      .from(cotacao)
+      .innerJoin(itemPedido, and(eq(itemPedido.id, cotacao.itemPedidoId), eq(itemPedido.rodada, cotacao.rodada)))
+      .where(and(eq(cotacao.fornecedorId, c.fornecedorId), eq(cotacao.situacao, "aguardando"), eq(itemPedido.estado, "cotando"))),
   ]);
   const mensagens: MensagemSimulada[] = recentes.reverse().map((m) => ({
     ...m,
@@ -97,6 +103,7 @@ export const chatSimulado = cache(async (id: string) => {
     chave: c.endereco,
     fornecedor: { id: c.fornecedorId, nome: c.nome },
     automatico: !estado.get(c.id),
+    ligacoes,
     mensagens,
   };
 });

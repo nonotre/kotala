@@ -307,6 +307,9 @@ export function proximoPasso(d: DadosPedido): ProximoPasso {
   if (duvida?.item.duvidaPendente) {
     return { quem: "comprador", texto: `Dúvida pendente de ${duvida.item.duvidaPendente.fornecedor} sobre ${duvida.item.descricao}.`, botao: ir("cotacoes", duvida.item.id) };
   }
+  // R14b: o prazo acabou com menos de 3 propostas e a escolha é do comprador.
+  const prazo = itens.find((i) => i.perguntaPrazo);
+  if (prazo) return { quem: "comprador", texto: `Prazo encerrado com menos de 3 propostas em ${prazo.item.descricao}: encerrar ou estender.`, botao: ir("cotacoes", prazo.item.id, "Encerrar ou estender") };
   const decidir = com("aguardando_decisao");
   if (decidir) return { quem: "comprador", texto: `Aprovação pendente: ${decidir.item.descricao}.`, botao: ir("decisao", decidir.item.id) };
   const recompra = com("aguardando_recompra");

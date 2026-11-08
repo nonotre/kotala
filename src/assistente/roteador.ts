@@ -10,6 +10,7 @@
 import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { triagem, TEXTO_DADO_PESSOAL } from "../agentes/guardrail/index.ts";
 import { insistenciaDo } from "../agentes/guardrail/rastro.ts";
+import { escolhaEscrita, itemComPerguntaDePrazo } from "../agentes/cotador/prazo.ts";
 import { aoMensagemDoComprador, definirRespondedorDeConsulta, garantirAvisoPrivacidade, type RespostaConsulta } from "../fluxo/comprador.ts";
 import { aoMensagemDoFornecedor } from "../fluxo/fornecedor.ts";
 import { db } from "../nucleo/db/cliente.ts";
@@ -34,6 +35,8 @@ const CANAIS_DO_ASSISTENTE = new Set(["web", "telegram"]);
 async function vaiDiretoAoFluxo({ contato, entrada }: MensagemRecebida): Promise<boolean> {
   const texto = entrada.texto.trim();
   if (entrada.botao || entrada.anexos?.length || !texto || texto.startsWith("/")) return true;
+  // R14b: resposta escrita à pergunta do prazo ("pode estender"): o fluxo trata como o botão.
+  if (escolhaEscrita(texto) && (await itemComPerguntaDePrazo(contato.id)) !== null) return true;
   if (!CONFIRMACAO.test(texto)) return false;
   const [p] = await db
     .select({ id: pedido.id })
@@ -72,7 +75,7 @@ async function eDoGuardrail(contatoId: string, t: ReturnType<typeof triagem>): P
 }
 
 /** Motivos do Assistente que garantem que a mensagem não é resposta à dúvida de um fornecedor. */
-const NAO_RESPONDE_FORNECEDOR = new Set(["pedido_novo", "correcao", "confirmacao"]);
+const NAO_RESPONDE_FORNECEDOR = new Set(["pedido_novo", "correcao", "confirmacao", "fora_do_escopo"]);
 
 async function atender(m: MensagemRecebida) {
   if (await vaiDiretoAoFluxo(m)) return aoMensagemDoComprador(m);

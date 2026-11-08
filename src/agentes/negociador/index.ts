@@ -293,6 +293,8 @@ export type ContextoDesconto = {
   frete: number | null;
   /** Já filtrada por citarReferencia. */
   referencia: number | null;
+  /** R13: a forma que o comprador pediu, citada no lugar do padrão da empresa (alavanca "antecipado"). */
+  pagamentoPreferido?: string | null;
   janelaAte: Date;
   agora?: Date;
 };
@@ -304,7 +306,9 @@ function fraseAlavanca(a: Alavanca, c: ContextoDesconto): string {
     case "volume":
       return `Se a compra for fechada com vocês, a quantidade é de ${quantidade(c.quantidade, c.unidade)} de uma vez: há desconto por volume?`;
     case "antecipado":
-      return `Nosso padrão é pagar ${PAGAMENTO_PADRAO}, e não antecipado. Conseguem atender com o pagamento no recebimento?`;
+      return c.pagamentoPreferido?.trim()
+        ? `Nossa forma de pagamento é ${c.pagamentoPreferido.trim()}, e não antecipado. Conseguem atender nessa condição?`
+        : `Nosso padrão é pagar ${PAGAMENTO_PADRAO}, e não antecipado. Conseguem atender com o pagamento no recebimento?`;
     case "pagamento":
       return `Nosso padrão é pagamento ${PAGAMENTO_PADRAO}: há desconto para essa condição?`;
     case "frete":

@@ -62,3 +62,14 @@ test("pedido de compra: quem compra (só o nome) e a preferência de pagamento s
   });
   assert.doesNotMatch(igual, /preferida/);
 });
+
+test("R13: com a forma do comprador, a alavanca de antecipado e a ressalva de pagamento por fora citam essa forma", async () => {
+  const base = { alavancas: ["antecipado" as const], quantidade: "40", unidade: "saco", frete: null, referencia: null, janelaAte: new Date("2026-11-08T14:00:00Z"), agora: new Date("2026-11-08T13:00:00Z") };
+  assert.match(n.montarNegociacao(base).texto, /Nosso padrão é pagar à vista, no recebimento/);
+  const comPix = n.montarNegociacao({ ...base, pagamentoPreferido: "pix" });
+  assert.ok(comPix.validado);
+  assert.match(comPix.texto, /Nossa forma de pagamento é pix, e não antecipado/);
+  const { ressalvaDe } = await import("../src/fluxo/fornecedor.ts");
+  assert.match(ressalvaDe("pagamento_por_fora", "boleto 28 dias"), /CNPJ da proposta, boleto 28 dias\./);
+  assert.match(ressalvaDe("pagamento_por_fora", null), /à vista, no recebimento/);
+});

@@ -106,3 +106,13 @@ test("escolher atributo antes de confirmar e depois corrigir: a correção recri
   await registrar(db, { agente: "Comprador", acao: "Informou Carga: 6 kg no item 1.", motivo: "teste", pedidoId: ped.id, dados: { ordem: 1 } });
   await m!.o.definirItens(db, ped.id, [{ descricao: "Extintor ABC 6 kg", quantidade: 2, unidade: "unidade" }]);
 });
+
+test("R14b: resposta escrita à pergunta do prazo", async () => {
+  const { escolhaEscrita } = await import("../src/agentes/cotador/prazo.ts");
+  assert.equal(escolhaEscrita("pode estender"), "estender");
+  assert.equal(escolhaEscrita("prorroga mais um pouco"), "estender");
+  assert.equal(escolhaEscrita("encerra e me manda as opções"), "encerrar");
+  assert.equal(escolhaEscrita("pode fechar com o que tem"), "encerrar");
+  assert.equal(escolhaEscrita("preciso de 10 sacos de cimento"), null);
+  assert.equal(escolhaEscrita("estende ou encerra, tanto faz"), null);
+});

@@ -322,6 +322,7 @@ export async function registrarCotacaoPorVoz(cotacaoId: string, args: ArgsRegist
         unidade: item.unidade,
         frete: e.frete,
         referencia,
+        pagamentoPreferido: ped.pagamentoPreferido,
         janelaAte: decisao.janelaAte,
         agora,
       });
@@ -351,7 +352,7 @@ export async function registrarCotacaoPorVoz(cotacaoId: string, args: ArgsRegist
   if (nova && negociacao && !marca) await db.update(oferta).set({ extraido: { ...extraidoBase, negociacao } }).where(eq(oferta.id, nova.id));
   await encerrarSeNinguemDeve(item.id);
   const [agoraItem] = await db.select({ estado: itemPedido.estado }).from(itemPedido).where(eq(itemPedido.id, item.id));
-  const ressalvas = e.alertas.map((a) => f.RESSALVA[a]).join(" ");
+  const ressalvas = e.alertas.map((a) => f.ressalvaDe(a, l.pedido.pagamentoPreferido)).join(" ");
   const resposta = respostaAoRegistrar({
     aConfirmar: confirmacaoFalada(e, { descricao: item.descricao, unidade: item.unidade, quantidade: qtd }),
     faltam,

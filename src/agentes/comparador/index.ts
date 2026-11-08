@@ -39,6 +39,7 @@ type ExtraidoLido = {
   precoUnitario?: unknown;
   totalProduto?: unknown;
   negociacao?: Partial<MarcaNegociacao>;
+  aumento?: unknown;
 };
 const textos = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && !!x.trim()) : []);
 const numero = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
@@ -49,7 +50,7 @@ function marcaDoExtraido(extraido: unknown): Partial<MarcaNegociacao> | null {
   return m && typeof m.pedidaEm === "string" ? m : null;
 }
 
-export function lerExtraido(extraido: unknown): Pick<OfertaComparavel, "alertasConduta" | "divergencias" | "aConfirmar" | "precoLido" | "negociacao"> {
+export function lerExtraido(extraido: unknown): Pick<OfertaComparavel, "alertasConduta" | "divergencias" | "aConfirmar" | "precoLido" | "negociacao" | "aumento"> {
   const e = (extraido ?? {}) as ExtraidoLido;
   const marca = marcaDoExtraido(extraido);
   const aConfirmar = textos(e.aConfirmar).filter((x): x is "preco" | "item" => x === "preco" || x === "item");
@@ -58,6 +59,7 @@ export function lerExtraido(extraido: unknown): Pick<OfertaComparavel, "alertasC
     divergencias: textos(e.divergencias),
     aConfirmar,
     precoLido: aConfirmar.includes("preco") ? (numero(e.precoUnitario) ?? numero(e.totalProduto)) : null,
+    aumento: typeof e.aumento === "string" && e.aumento.trim() ? e.aumento : null,
     negociacao: marca
       ? {
           resultado: marca.resultado ?? null,

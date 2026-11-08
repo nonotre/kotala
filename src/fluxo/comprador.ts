@@ -7,7 +7,7 @@
 
 import { cadastrarItensNovos } from "../agentes/interpretador/catalogo.ts";
 import { repassarRespostaDoComprador } from "../agentes/cotador/index.ts";
-import { aoBotaoDoPrazo } from "../agentes/cotador/prazo.ts";
+import { aoBotaoDoPrazo, respostaEscritaDoPrazo } from "../agentes/cotador/prazo.ts";
 import { casarComBase, especificacaoEmTexto, itemDaBase, rotuloOpcao } from "../agentes/interpretador/base-itens.ts";
 import { and, asc, desc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
 import { lerAnexoDoComprador, textoDoPedidoComAnexo, type LeituraAnexo } from "../agentes/interpretador/anexos.ts";
@@ -1054,6 +1054,9 @@ export async function aoMensagemDoComprador({ contato, mensagemId, entrada }: Me
   }
 
   // Dúvida de fornecedor esperando o comprador: esta mensagem é a resposta.
+  // R14b: "pode estender" ou "encerra" escrito, com a pergunta do prazo aberta, vale como o botão.
+  if (await respostaEscritaDoPrazo(contato, texto)) return;
+
   if (!opcoes.naoEhRespostaFornecedor && (await repassarRespostaDoComprador(contato.id, texto))) return;
 
   const achado = await pedidoPendente(contato.id);

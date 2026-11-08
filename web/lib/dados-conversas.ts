@@ -118,7 +118,15 @@ export async function listaConversas(meuEndereco?: string): Promise<ListaConvers
     });
   }
 
-  // O Telegram ligado à conta (o espelho) vem primeiro na lista dele.
+  // O Telegram ligado à conta (o espelho) aparece mesmo antes da primeira mensagem, e vem primeiro na lista dele.
+  if (meu && ehUuid(meu) && !saida.telegram.some((i) => i.seu)) {
+    const ligados = await db
+      .select({ id: contato.id, nome: contato.nome, endereco: contato.endereco, nomeUsuario: usuario.nome })
+      .from(contato)
+      .innerJoin(usuario, eq(usuario.id, contato.usuarioId))
+      .where(and(eq(contato.canal, "telegram"), eq(contato.papel, "comprador"), eq(contato.usuarioId, meu)));
+    for (const t of ligados) saida.telegram.push({ contatoId: t.id, canal: "telegram", nome: nomeDo(t), meu: false, seu: true, trecho: null, ultimaEm: null });
+  }
   saida.telegram.sort((a, b) => Number(b.seu) - Number(a.seu));
 
   // A de quem entrou sem mensagens ainda (o contato pode existir, com nome, ou nem existir).
@@ -137,8 +145,9 @@ export async function listaConversas(meuEndereco?: string): Promise<ListaConvers
 export async function conversaDoContato(contatoId: string): Promise<ConversaAberta | null> {
   if (!ehUuid(contatoId)) return null;
   const [c] = await db
-    .select({ id: contato.id, canal: contato.canal, nome: contato.nome, endereco: contato.endereco })
+    .select({ id: contato.id, canal: contato.canal, nome: contato.nome, endereco: contato.endereco, nomeUsuario: usuario.nome })
     .from(contato)
+    .leftJoin(usuario, eq(usuario.id, contato.usuarioId))
     .where(and(eq(contato.id, contatoId), eq(contato.papel, "comprador"), inArray(contato.canal, [...CANAIS_CONVERSA])));
   if (!c) return null;
   // Pega do fim para o começo e desvira: numa conversa longa, as mais novas não podem ficar de fora.

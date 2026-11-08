@@ -10,6 +10,7 @@ import { Tabela } from "@/components/Tabela";
 import type { DadosPedido, ItemDoPedido } from "@/lib/dados-pedido";
 import { brl, dataHora, hora } from "@/lib/formato";
 import { LinkExterno } from "@/components/LinkExterno";
+import { BotaoAcao } from "@/components/BotaoAcao";
 import { chatDoFornecedor, Fornecedor, IndiceItens, SecaoItem, textoDias } from "./Item";
 import { StatusCotacao } from "./Status";
 import { FORMATO_OFERTA, hrefAba } from "./textos";
@@ -126,6 +127,24 @@ export function AbaCotacoes({ d }: { d: DadosPedido }) {
             <SecaoItem i={i}>
               {duvida ? (
                 <InlineNotification kind="info" lowContrast hideCloseButton title={`${duvida.fornecedor} perguntou:`} subtitle={`${duvida.pergunta} Só você sabe responder: a próxima mensagem que você mandar ao assistente vai para ele.`} statusIconDescription="Informação" />
+              ) : null}
+              {i.perguntaPrazo ? (
+                // R14b: a mesma pergunta que o assistente mandou na conversa, com os mesmos botões.
+                <InlineNotification
+                  kind="warning"
+                  lowContrast
+                  hideCloseButton
+                  title="O prazo acabou com menos de 3 propostas válidas."
+                  subtitle="Encerre e veja as opções que chegaram, ou estenda o prazo: a cotação ganha prioridade e o assistente procura mais fornecedores."
+                  statusIconDescription="Aviso"
+                >
+                  <span className={s.acoesPrazo}>
+                    <BotaoAcao dado={`item:${i.item.id}:prazo_encerrar`} rotulo="Encerrar e ver as opções" kind="secondary" size="sm" />
+                    <BotaoAcao dado={`item:${i.item.id}:prazo_estender`} rotulo="Estender o prazo" kind="primary" size="sm" />
+                  </span>
+                </InlineNotification>
+              ) : i.prioridade && i.item.estado === "cotando" ? (
+                <InlineNotification kind="info" lowContrast hideCloseButton title="Cotação com prioridade." subtitle="Você estendeu o prazo: o assistente perguntou o motivo a quem não respondeu e procura mais fornecedores." statusIconDescription="Informação" />
               ) : null}
               {i.item.estado === "sem_proposta" ? (
                 <InlineNotification kind="warning" lowContrast hideCloseButton title="Sem proposta válida." subtitle="Nenhum fornecedor mandou proposta que passasse nas regras." statusIconDescription="Aviso">

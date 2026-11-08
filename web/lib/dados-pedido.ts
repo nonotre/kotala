@@ -8,9 +8,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { cache } from "react";
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../../src/nucleo/db/cliente.ts";
-import { cotacao, fornecedor, itemCatalogo, mapaCotacao, oferta } from "../../src/nucleo/db/schema.ts";
+import { cotacao, evento, fornecedor, itemCatalogo, mapaCotacao, oferta } from "../../src/nucleo/db/schema.ts";
 import { colunaDoItem, FINAIS_ITEM } from "../../src/nucleo/orquestrador/estados.ts";
 import { detalhePedido, type Comparacao } from "./dados";
 import { contatosSimulados } from "./dados-simulado";
@@ -147,6 +147,29 @@ export const pedidoCompleto = cache(async (id: number) => {
     };
   });
 
+  // R14b: a pergunta do prazo (encerrar ou estender) e a prioridade, lidas dos eventos da rodada atual,
+  // com a mesma regra de src/agentes/cotador/prazo.ts (situacaoDoPrazo). Sem importar aquele módulo: ele
+  // puxa a busca e o simulador, que o build das telas não carrega.
+  const doPrazo = ids.length
+    ? await db
+        .select({ itemPedidoId: evento.itemPedidoId, dados: evento.dados, criadoEm: evento.criadoEm })
+        .from(evento)
+        .where(and(inArray(evento.itemPedidoId, ids), sql`${evento.dados}->>'tipo' in ('prazo_pergunta', 'prazo_resposta')`))
+        .orderBy(desc(evento.criadoEm))
+    : [];
+  const itensComPrazo = itens.map((i) => {
+    const daRodada = doPrazo
+      .filter((e) => e.itemPedidoId === i.item.id && Number((e.dados as { rodada?: unknown })?.rodada) === i.item.rodada)
+      .map((e) => e.dados as { tipo: string; escolha?: string });
+    return {
+      ...i,
+      /** R14b: o prazo venceu com menos de 3 propostas e o comprador ainda não escolheu encerrar ou estender. */
+      perguntaPrazo: i.item.estado === "cotando" && daRodada[0]?.tipo === "prazo_pergunta",
+      /** R14b: o comprador estendeu o prazo nesta rodada (cotação com prioridade). */
+      prioridade: daRodada.some((x) => x.tipo === "prazo_resposta" && x.escolha === "estender"),
+    };
+  });
+
   // Quando o comprador confirmou ou cancelou, pela transição do pedido na linha do tempo (a última vale).
   const transicoes = d.linhaDoTempo.filter((e) => e.tipo === "evento" && e.deEstado && ESTADOS_SO_DO_PEDIDO.includes(e.deEstado));
   const ultima = (para: string, de?: string) => transicoes.findLast((e) => e.tipo === "evento" && e.paraEstado === para && (!de || e.deEstado === de))?.em ?? null;
@@ -156,7 +179,7 @@ export const pedidoCompleto = cache(async (id: number) => {
   return {
     pedido: d.pedido,
     dono: d.dono,
-    itens,
+    itens: itensComPrazo,
     linhaDoTempo: d.linhaDoTempo,
     fornecedores,
     confirmadoEm,

@@ -225,8 +225,8 @@ function ferramentas(e: EstadoTurno) {
     }),
     // Sem execute: chamar esta ferramenta encerra o turno e a mensagem vai ao fluxo de pedidos.
     encaminhar_ao_fluxo: tool({
-      description: "Entrega a mensagem ao fluxo de pedidos: pedido novo de material, correção ou confirmação do pedido em confirmação, resposta a dúvida de fornecedor.",
-      inputSchema: z.object({ motivo: z.enum(["pedido_novo", "correcao", "confirmacao", "resposta_fornecedor"]) }),
+      description: "Entrega a mensagem ao fluxo de pedidos: pedido novo de material, correção ou confirmação do pedido em confirmação, resposta a dúvida de fornecedor, ou assunto fora de compras (fora_do_escopo: o guardrail responde e conta a insistência).",
+      inputSchema: z.object({ motivo: z.enum(["pedido_novo", "correcao", "confirmacao", "resposta_fornecedor", "fora_do_escopo"]) }),
     }),
   };
 }

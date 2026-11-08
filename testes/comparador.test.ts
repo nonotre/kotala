@@ -185,3 +185,9 @@ test("Q6: o que mudou entre o mapa e o refeito", () => {
   assert.deepEqual(mudancasDoMapa(antes, depois), ["C entrou na comparação", "B saiu", "agora na frente: A"]);
   assert.deepEqual(mudancasDoMapa(antes, antes), []);
 });
+
+test("R3b: proposta que subiu aparece em Atenção no mapa", async () => {
+  const { lerExtraido } = await import("../src/agentes/comparador/index.ts");
+  assert.equal(lerExtraido({ aumento: "produto de R$ 40,00 para R$ 45,00" }).aumento, "produto de R$ 40,00 para R$ 45,00");
+  assert.equal(lerExtraido({}).aumento, null);
+});

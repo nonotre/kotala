@@ -210,6 +210,7 @@ export function TelaConversas({ linkTelegram, compacto = false }: Props) {
         <ConversaLeitura
           contatoId={c ?? ""}
           linkTelegram={linkTelegram}
+          seu={!!lista?.telegram.some((i) => i.contatoId === c && i.seu)}
           voltar={voltar}
           verConversas={compacto ? { aoClicar: abrirLista } : { href: hrefCom(null) }}
           hrefDeste={hrefMeu}

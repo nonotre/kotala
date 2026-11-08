@@ -159,6 +159,12 @@ export function ChatSimulado({ chat, item }: { chat: Chat; item: ItemChat | null
           <div>
             <h1 className={s.nome}>Kotala</h1>
             <p className={s.subtitulo}>bot de cotações · conversa com {chat.fornecedor.nome}</p>
+            {/* X5: o mesmo papel por voz, enquanto a cotação estiver aberta e sem resposta deste fornecedor. */}
+            {chat.ligacoes.map((l) => (
+              <p key={l.cotacaoId} className={s.subtitulo}>
+                <Link href={`/voz/${l.cotacaoId}`}>Ligar por voz: cotação {l.pedidoId}, {l.descricao}</Link>
+              </p>
+            ))}
           </div>
         </div>
         <div className={s.modo}>

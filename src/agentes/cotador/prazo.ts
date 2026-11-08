@@ -29,7 +29,7 @@
 import { and, desc, eq, isNotNull, lte, sql } from "drizzle-orm";
 import { ESPERA_RESPOSTA_PRAZO_FRACAO, FRACAO_LEMBRETE, MAX_PRORROGACOES, prazoRespostasMs } from "../../config.ts";
 import { db } from "../../nucleo/db/cliente.ts";
-import { cotacao, evento, fornecedor, itemPedido } from "../../nucleo/db/schema.ts";
+import { cotacao, evento, fornecedor, itemPedido, pedido } from "../../nucleo/db/schema.ts";
 import { enviar, type Botao, type Contato } from "../../nucleo/mensagens/index.ts";
 import { avancarItem, TransicaoConcorrente, TransicaoInvalida } from "../../nucleo/orquestrador/index.ts";
 import { registrar, type Agente } from "../../nucleo/registro.ts";
@@ -389,4 +389,40 @@ export async function verificarVencidos(agora: Date) {
   for (const { id } of vencidos) {
     await verificarFaltaDePropostas(id, "venceu").catch((e) => console.error("[prazo]", id, e));
   }
+}
+
+// ---------- Resposta escrita à pergunta do prazo ----------
+
+const ESTENDER = /\b(estend\w*|prorrog\w*|mais tempo|esper[ae] mais|aguard[ae] mais|d[aá] mais prazo)\b/i;
+const ENCERRAR = /\b(encerr\w*|pode fechar|fecha(r)? (a cota[cç][aã]o|agora|com)|ver as op[cç][oõ]es|segue com o que tem|manda o mapa)\b/i;
+
+/** "Pode estender" ou "encerra e me manda as opções", escrito em vez de tocar no botão. Puro. */
+export function escolhaEscrita(texto: string): "encerrar" | "estender" | null {
+  const t = texto.trim();
+  if (!t || t.length > 120) return null;
+  const est = ESTENDER.test(t);
+  const enc = ENCERRAR.test(t);
+  if (est === enc) return null; // nenhum ou os dois: não arrisca
+  return est ? "estender" : "encerrar";
+}
+
+/** O único item do comprador com a pergunta do prazo aberta, ou null (nenhum, ou mais de um: aí só o botão decide). */
+export async function itemComPerguntaDePrazo(contatoId: string): Promise<number | null> {
+  const itens = await db
+    .select({ id: itemPedido.id, rodada: itemPedido.rodada })
+    .from(itemPedido)
+    .innerJoin(pedido, eq(pedido.id, itemPedido.pedidoId))
+    .where(and(eq(pedido.compradorId, contatoId), eq(itemPedido.estado, "cotando")));
+  const abertos: number[] = [];
+  for (const i of itens) if ((await situacaoDoPrazo(i.id, i.rodada)).aberta) abertos.push(i.id);
+  return abertos.length === 1 ? abertos[0]! : null;
+}
+
+/** Trata a resposta escrita como o toque no botão. Devolve true quando tratou. */
+export async function respostaEscritaDoPrazo(contato: Pick<Contato, "id">, texto: string): Promise<boolean> {
+  const escolha = escolhaEscrita(texto);
+  if (!escolha) return false;
+  const itemId = await itemComPerguntaDePrazo(contato.id);
+  if (itemId === null) return false;
+  return aoBotaoDoPrazo(contato, `item:${itemId}:prazo_${escolha}`);
 }
