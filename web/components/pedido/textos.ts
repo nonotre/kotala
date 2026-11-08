@@ -216,10 +216,10 @@ export function navegacaoDoPedido(d: DadosPedido): NavegacaoPedido {
   return { pedidoId: p.id, hrefCompra: daVez.href, vistasPedido: [aba("resumo"), aba("historico")], etapas };
 }
 
-/** "Cotação 14: 5 unidades de Extintor", "Cotação 14: 3 itens" ou só "Cotação 14". */
+/** "Cotação 14: Extintor ABC 6 kg", "Cotação 14: 3 itens" ou só "Cotação 14". Sem quantidade no título (Liria, interface.md). */
 export function tituloPedido(d: DadosPedido) {
   const { pedido: p, itens } = d;
-  if (itens.length === 1) return `Cotação ${p.id}: ${quantidade(itens[0]!.item.quantidade, itens[0]!.item.unidade)} de ${itens[0]!.item.descricao}`;
+  if (itens.length === 1) return `Cotação ${p.id}: ${itens[0]!.item.descricao}`;
   if (itens.length > 1) return `Cotação ${p.id}: ${itens.length} itens`;
   return `Cotação ${p.id}`;
 }
@@ -246,19 +246,19 @@ export function progressoDoPedido(d: DadosPedido): Progresso {
   const atual = terminou ? COLUNAS.length : vez ? COLUNAS.indexOf(vez.coluna) : p.estado === "cancelado" ? ondeParou : 0;
 
   const solicitado =
-    p.estado === "interpretando" ? "Lendo a cotação" : p.estado === "aguardando_confirmacao" ? "Falta confirmar" : p.estado === "cancelado" && atual === 0 ? "Cancelada" : "Você confirmou";
+    p.estado === "interpretando" ? "Lendo a cotação" : p.estado === "aguardando_confirmacao" ? "" : p.estado === "cancelado" && atual === 0 ? "Cancelada" : "Você confirmou";
 
   const consultados = itens.reduce((t, i) => t + i.cotacoes.length, 0);
   const respostas = itens.reduce((t, i) => t + i.cotacoes.filter((c) => c.cotacao.situacao === "respondeu").length, 0);
   const cotando =
-    consultados > 0 ? (respostas === 1 ? `1 de ${consultados} respondeu` : `${respostas} de ${consultados} responderam`) : atual >= 1 ? (vez?.item.estado === "buscando" ? "Procurando fornecedores" : "Sem proposta nova") : "Ainda não começou";
+    consultados > 0 ? (respostas === 1 ? `1 de ${consultados} respondeu` : `${respostas} de ${consultados} responderam`) : atual >= 1 ? (vez?.item.estado === "buscando" ? "Procurando fornecedores" : "Sem proposta nova") : "";
 
   const validas = itens.reduce((t, i) => t + (i.mapa?.comparacao.validas.length ?? 0), 0);
   const comparando =
     vez?.item.estado === "aguardando_recompra"
       ? "Compra repetida: falta escolher"
       : atual < 2 && !itens.some((i) => i.mapa)
-        ? "Ainda não começou"
+        ? ""
         : validas === 0
           ? "Nenhuma proposta válida"
           : validas === 1
@@ -279,7 +279,7 @@ export function progressoDoPedido(d: DadosPedido): Progresso {
           ? "Você aprovou"
           : aDecidir
             ? "Falta a sua aprovação"
-            : "Só com a sua aprovação";
+            : "";
 
   const apoio = [solicitado, cotando, comparando, decidido];
   const nome = p.estado === "cancelado" ? "Cotação cancelada" : terminou ? "Cotação concluída" : `Etapa: ${ROTULO_COLUNA[COLUNAS[atual]!]}`;
@@ -297,36 +297,36 @@ export function proximoPasso(d: DadosPedido): ProximoPasso {
   const { pedido: p, itens } = d;
   const ir = (aba: AbaId, itemId?: number, texto = `Ir para ${ROTULO_ABA[aba]}`) => ({ texto, href: hrefAba(p.id, aba, itemId), aba });
 
-  if (p.estado === "interpretando") return { quem: "sistema", texto: "O assistente está lendo a cotação.", botao: null };
-  if (p.estado === "aguardando_confirmacao") return { quem: "comprador", texto: "Confira o que o assistente entendeu e confirme a cotação.", botao: ir("solicitado", undefined, "Conferir e confirmar") };
+  if (p.estado === "interpretando") return { quem: "sistema", texto: "Leitura da cotação em andamento.", botao: null };
+  if (p.estado === "aguardando_confirmacao") return { quem: "comprador", texto: "Confirmação pendente: revise a leitura e confirme a cotação.", botao: ir("solicitado", undefined, "Conferir e confirmar") };
   if (p.estado === "cancelado") return { quem: "cancelado", texto: p.motivoCancelamento ? `Cotação cancelada: ${p.motivoCancelamento}` : "Cotação cancelada.", botao: null };
 
   const com = (estado: string) => itens.find((i) => i.item.estado === estado);
   // Dúvida só pede resposta enquanto a cotação está aberta (o assistente só repassa nesses estados).
   const duvida = itens.find((i) => i.item.duvidaPendente && (i.item.estado === "cotando" || i.item.estado === "buscando"));
   if (duvida?.item.duvidaPendente) {
-    return { quem: "comprador", texto: `${duvida.item.duvidaPendente.fornecedor} tem uma dúvida sobre ${duvida.item.descricao}.`, botao: ir("cotacoes", duvida.item.id) };
+    return { quem: "comprador", texto: `Dúvida pendente de ${duvida.item.duvidaPendente.fornecedor} sobre ${duvida.item.descricao}.`, botao: ir("cotacoes", duvida.item.id) };
   }
   const decidir = com("aguardando_decisao");
-  if (decidir) return { quem: "comprador", texto: `Decida a compra de ${decidir.item.descricao}.`, botao: ir("decisao", decidir.item.id) };
+  if (decidir) return { quem: "comprador", texto: `Aprovação pendente: ${decidir.item.descricao}.`, botao: ir("decisao", decidir.item.id) };
   const recompra = com("aguardando_recompra");
-  if (recompra) return { quem: "comprador", texto: `Repita a compra de ${recompra.item.descricao} ou cote de novo.`, botao: ir("comparacao", recompra.item.id, "Repetir ou cotar de novo") };
+  if (recompra) return { quem: "comprador", texto: `Recompra disponível para ${recompra.item.descricao}: repetir ou cotar novamente.`, botao: ir("comparacao", recompra.item.id, "Repetir ou cotar de novo") };
   const cotando = com("cotando");
   if (cotando) {
     const r = cotando.cotacoes.filter((c) => c.cotacao.situacao === "respondeu").length;
     const prazo = cotando.item.prazoRespostasEm ? `, respostas até ${hora(cotando.item.prazoRespostasEm)}` : "";
-    return { quem: "fornecedor", texto: `Esperando propostas para ${cotando.item.descricao}: ${r} de ${cotando.cotacoes.length}${prazo}.`, botao: ir("cotacoes", cotando.item.id) };
+    return { quem: "fornecedor", texto: `Aguardando propostas de ${cotando.item.descricao}: ${r} de ${cotando.cotacoes.length}${prazo}.`, botao: ir("cotacoes", cotando.item.id) };
   }
   const buscando = com("buscando");
-  if (buscando) return { quem: "sistema", texto: `Procurando fornecedores para ${buscando.item.descricao}.`, botao: ir("busca", buscando.item.id) };
+  if (buscando) return { quem: "sistema", texto: `Busca de fornecedores em andamento: ${buscando.item.descricao}.`, botao: ir("busca", buscando.item.id) };
   const comparando = com("comparando");
-  if (comparando) return { quem: "sistema", texto: `Montando o mapa de ${comparando.item.descricao}.`, botao: null };
+  if (comparando) return { quem: "sistema", texto: `Mapa de cotações em preparação: ${comparando.item.descricao}.`, botao: null };
   const enviado = com("pedido_enviado") ?? com("aprovado");
   if (enviado) {
     const nome = enviado.escolhido?.nome ?? "o fornecedor";
-    return { quem: "fornecedor", texto: `Esperando ${nome} confirmar ${enviado.item.descricao}.`, botao: ir("decisao", enviado.item.id) };
+    return { quem: "fornecedor", texto: `Aguardando a confirmação de ${nome}: ${enviado.item.descricao}.`, botao: ir("decisao", enviado.item.id) };
   }
   const fila = com("na_fila");
-  if (fila) return { quem: "sistema", texto: `${fila.item.descricao} está na fila.`, botao: null };
+  if (fila) return { quem: "sistema", texto: `Na fila: ${fila.item.descricao}.`, botao: null };
   return { quem: "fim", texto: p.estado === "concluido" ? "Cotação concluída: todos os itens terminaram." : "Nada pendente nesta cotação.", botao: null };
 }

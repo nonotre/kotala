@@ -17,7 +17,8 @@ const TEXTO_PASSO: Record<string, string> = {
 };
 const traduzirPasso = (id: string) => TEXTO_PASSO[id] ?? id;
 
-const AINDA_NAO = "Ainda não começou";
+// Liria (interface.md): sem subtítulo quando a etapa ainda não começou.
+const AINDA_NAO = "";
 
 type Props = {
   coluna: Coluna;
@@ -34,7 +35,7 @@ export function ProgressoPedido({ coluna, estadoPedido, estadoItem, respostas, v
   const atual = fechado ? COLUNAS.length : COLUNAS.indexOf(coluna);
 
   const solicitado =
-    estadoPedido === "interpretando" ? "Lendo a cotação" : estadoPedido === "aguardando_confirmacao" ? "Falta confirmar" : estadoItem === "na_fila" ? "Na fila" : "Você confirmou";
+    estadoPedido === "interpretando" ? "Lendo a cotação" : estadoPedido === "aguardando_confirmacao" ? "" : estadoItem === "na_fila" ? "Na fila" : "Você confirmou";
   const cotando =
     respostas && respostas.consultados > 0
       ? respostas.respostas === 1
@@ -68,7 +69,7 @@ export function ProgressoPedido({ coluna, estadoPedido, estadoItem, respostas, v
             ? "Sem proposta válida"
             : estadoItem === "aguardando_decisao"
               ? "Falta a sua aprovação"
-              : "Só com a sua aprovação";
+              : "";
   const apoio = [solicitado, cotando, comparando, decidido];
   const nome = fechado ? "Compra fechada" : `Etapa: ${ROTULO_COLUNA[coluna]}`;
   return (

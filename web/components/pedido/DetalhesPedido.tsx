@@ -7,6 +7,8 @@ import type { DadosPedido } from "@/lib/dados-pedido";
 import { dataHora } from "@/lib/formato";
 import { textoPrazo, Urgencia } from "./CabecalhoPedido";
 import { TrocarResponsavel } from "./TrocarResponsavel";
+import { BotaoLink } from "./BotaoLink";
+import { hrefAba } from "./rotas";
 import { Campos } from "./Item";
 import { StatusPedido } from "./Status";
 import { tituloPedido } from "./textos";
@@ -56,6 +58,9 @@ export function TabelaItens({ d, rotulo }: { d: DadosPedido; rotulo: string }) {
 export function DetalhesPedido({ d }: { d: DadosPedido }) {
   const { pedido: p } = d;
   const retirada = p.modoEntrega === "retirada";
+  // Liria (interface.md): os fornecedores consultados no alto e, no fim, um botão para o mapa.
+  const consultados = [...new Set(d.itens.flatMap((i) => i.cotacoesTodas.map((c) => c.nome)))];
+  const temMapa = d.itens.some((i) => i.mapa);
   return (
     <Bloco titulo="Detalhes da cotação">
       <Campos
@@ -66,6 +71,7 @@ export function DetalhesPedido({ d }: { d: DadosPedido }) {
           ["Situação", <StatusPedido key="s" estado={p.estado} />],
           // Frente 2: o responsável é quem pediu, ou quem foi posto no lugar dele.
           ["Responsável", <TrocarResponsavel key="r" pedidoId={p.id} responsavelId={p.responsavelId} dono={d.dono} semRotulo />],
+          ["Fornecedores consultados", consultados.length ? `${consultados.length}: ${consultados.join(", ")}` : "Nenhum ainda"],
         ]}
       />
       <div className={s.grupo}>
@@ -96,6 +102,13 @@ export function DetalhesPedido({ d }: { d: DadosPedido }) {
           ]}
         />
       </div>
+      {temMapa ? (
+        <div className={s.grupo}>
+          <BotaoLink href={hrefAba(p.id, "comparacao")} kind="primary">
+            Ver o mapa de cotações
+          </BotaoLink>
+        </div>
+      ) : null}
     </Bloco>
   );
 }

@@ -21,7 +21,7 @@ function ConteudoEtapa({ e }: { e: Etapa }) {
       <span className={s.etapaTexto}>
         <span className={s.etapaRotulo}>{e.rotulo}</span>
         <span className={s.somenteLeitor}>, {e.invalida ? "cancelada aqui" : TEXTO_ESTADO[e.estado].toLowerCase()}. </span>
-        <span className={s.etapaApoio}>{e.apoio}</span>
+        {e.apoio ? <span className={s.etapaApoio}>{e.apoio}</span> : null}
       </span>
     </>
   );

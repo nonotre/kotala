@@ -43,8 +43,9 @@
   inline-size: spacing.$spacing-06;
 }
 
+// O botão fica logo depois do texto, à esquerda (Liria, interface.md), e não empurrado para a borda.
 .faixaTexto {
-  flex: 1;
+  flex: 0 1 auto;
   min-inline-size: 0;
   margin: 0;
 }

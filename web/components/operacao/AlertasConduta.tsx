@@ -48,7 +48,7 @@ const rotulo = <T extends string>(mapa: Record<string, { texto: string; cor: Cor
 const linkPedido = (id: number | null) =>
   id ? (
     <CarbonLink as={NextLink} href={`/pedidos/${id}`}>
-      Pedido {id}
+      Cotação {id}
     </CarbonLink>
   ) : (
     <span className={s.apoio}>Sem pedido</span>
@@ -65,7 +65,7 @@ export function AlertasConduta({ dados }: { dados: Conduta }) {
     <Pagina>
       <CabecalhoPagina
         titulo="Alertas de conduta"
-        contexto={`Pedidos barrados pelos guardrails e fornecedores com sinal de risco na resposta.${graves ? ` ${graves === 1 ? "1 alerta grave" : `${graves} alertas graves`} de fornecedor ainda não bloqueado.` : ""}`}
+        contexto={`Solicitações barradas pelos guardrails e fornecedores com sinal de risco na resposta.${graves ? ` ${graves === 1 ? "1 alerta grave" : `${graves} alertas graves`} de fornecedor ainda não bloqueado.` : ""}`}
       />
       <CorpoPagina>
         <GradePagina>
@@ -78,7 +78,7 @@ export function AlertasConduta({ dados }: { dados: Conduta }) {
               <Tabela
                 rotulo="Alertas de fornecedor"
                 vazio="Nenhum alerta de fornecedor até agora."
-                colunas={["Quando", "Fornecedor", "Alerta", "Pedido e item", "Ação"]}
+                colunas={["Quando", "Fornecedor", "Alerta", "Cotação e item", "Ação"]}
                 linhas={dados.fornecedor.map((a) => {
                   const r = rotulo(ALERTA, a.alerta);
                   return [
@@ -119,7 +119,7 @@ export function AlertasConduta({ dados }: { dados: Conduta }) {
               <Tabela
                 rotulo="Casos dos guardrails"
                 vazio="Nenhum caso dos guardrails até agora."
-                colunas={["Quando", "Quem", "Caso", "O que o assistente fez", "Pedido"]}
+                colunas={["Quando", "Quem", "Caso", "O que o assistente fez", "Cotação"]}
                 linhas={dados.comprador.map((c) => {
                   const r = rotulo(CLASSE, c.classe);
                   return [

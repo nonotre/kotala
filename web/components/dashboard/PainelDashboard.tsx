@@ -290,7 +290,7 @@ export function PainelDashboard({ dados }: { dados: Dashboard }) {
             <Bloco titulo="Trabalho feito pelo assistente" descricao="Em todo o período, sem os filtros acima." plano>
               <div className={s.cards}>
                 <Tile className={s.kpi}>
-                  <span className={s.kpiRotulo}>Pedidos de cotação enviados</span>
+                  <span className={s.kpiRotulo}>Solicitações de proposta enviadas</span>
                   <strong className={s.kpiValor}>{dados.trabalho.cotacoes}</strong>
                   <span className={s.kpiNota}>Pedidos de preço mandados aos fornecedores.</span>
                 </Tile>
@@ -367,7 +367,7 @@ function TabelaPedidos({ pedidos, abrir }: { pedidos: LinhaPedido[]; abrir: (id:
       <Table size="md" aria-label="Pedidos: mapa de cotação contra compra">
         <TableHead>
           <TableRow>
-            <TableHeader>Pedido</TableHeader>
+            <TableHeader>Cotação</TableHeader>
             <TableHeader>Categoria(s)</TableHeader>
             <TableHeader>Preço médio do mapa</TableHeader>
             <TableHeader>Preço da compra</TableHeader>
@@ -382,7 +382,7 @@ function TabelaPedidos({ pedidos, abrir }: { pedidos: LinhaPedido[]; abrir: (id:
                 <TableCell>
                   <span className={s.pedido}>
                     <CarbonLink as={NextLink} href={`/pedidos/${p.id}`} onClick={(e: MouseEvent) => e.stopPropagation()}>
-                      Pedido {p.id}
+                      Cotação {p.id}
                     </CarbonLink>
                     {p.simulado ? <SeloSimulado /> : null}
                   </span>
