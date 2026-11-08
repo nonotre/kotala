@@ -1,21 +1,15 @@
-// Início: cotações e conversas lado a lado. Só tokens do Carbon.
+// Início: as cotações, na largura toda. Só tokens do Carbon.
 @use '@carbon/react/scss/theme';
 @use '@carbon/react/scss/spacing';
 @use '@carbon/react/scss/type';
 @use '@carbon/react/scss/breakpoint';
 
-// Abaixo de lg as conversas descem para baixo das cotações; a partir de lg são uma coluna fixa à direita.
+// As cotações ocupam a largura toda (as conversas são a tela Conversar, /chat).
 .layout {
   display: flex;
   flex: 1;
   flex-direction: column;
   min-inline-size: 0;
-
-  @include breakpoint.breakpoint(lg) {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) calc(#{spacing.$spacing-13} * 2.4); /* stylelint-disable-line carbon/layout-use */
-    align-items: start;
-  }
 }
 
 .principal {
@@ -47,25 +41,5 @@
   // Abaixo de md, a troca Quadro | Lista ocupa a linha toda, abaixo do título.
   @include breakpoint.breakpoint-down(md) {
     inline-size: 100%;
-  }
-}
-
-// Coluna das conversas: grudada abaixo do Header, com a altura da janela. Quem rola é o que está dentro
-// (a lista, ou as mensagens), para o campo de envio e o "← Conversas" ficarem sempre à vista.
-.conversas {
-  display: flex;
-  flex-direction: column;
-  min-block-size: 0;
-  overflow: hidden;
-  background: theme.$layer-01;
-  border-block-start: 1px solid theme.$border-subtle-01;
-  block-size: calc(#{spacing.$spacing-13} * 4); /* stylelint-disable-line carbon/layout-use */
-
-  @include breakpoint.breakpoint(lg) {
-    position: sticky;
-    inset-block-start: spacing.$spacing-09;
-    block-size: calc(100vh - #{spacing.$spacing-09});
-    border-block-start: 0;
-    border-inline-start: 1px solid theme.$border-subtle-01;
   }
 }

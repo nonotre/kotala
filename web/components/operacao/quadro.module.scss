@@ -39,8 +39,8 @@
 }
 
 // ---------- Raias ----------
-// A partir de lg as 4 raias ficam lado a lado, cada uma com largura mínima estreita: no Início, ao lado do
-// chat, a área é pequena e o quadro rola na horizontal; em Pedidos, com a tela toda, elas se repartem.
+// A partir de lg as 4 raias ficam lado a lado e repartem a largura toda da tela (o chat saiu do Início);
+// só numa janela estreita demais o quadro rola na horizontal.
 .raiasRolagem {
   min-inline-size: 0;
 
@@ -65,7 +65,7 @@
     grid-auto-flow: column;
     grid-template-columns: none;
     grid-auto-columns: minmax(calc(#{spacing.$spacing-13} + #{spacing.$spacing-06}), 1fr); /* stylelint-disable-line carbon/layout-use */
-    gap: spacing.$spacing-03;
+    gap: spacing.$spacing-05;
   }
 
   @include breakpoint.breakpoint-down(md) {
