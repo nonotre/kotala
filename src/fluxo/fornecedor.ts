@@ -19,6 +19,7 @@ import {
   mantemFirme,
   marcaDe,
   montarNegociacao,
+  preferenciaNaoAtendida,
   resultadoNegociacao,
   TEXTO_MANTEVE,
   unitarioDe,
@@ -588,12 +589,14 @@ async function processarResposta(
         if (decisao.ok) {
           const [recompra, refs] = await Promise.all([compraramAntes(c.fornecedorId), referenciasDoItem(l.item.id)]);
           const referencia = citarReferencia(unitarioDe(depois, qtd), refs.mediana);
+          const pagamentoPreferido = preferenciaNaoAtendida(l.pedido.pagamentoPreferido, e.pagamento);
           const montado = montarNegociacao({
-            alavancas: escolherAlavancas({ recompra, quantidade: qtd, prazoPagamentoDias: e.prazoPagamentoDias, frete: l.pedido.modoEntrega === "retirada" ? null : e.frete, entregas: l.pedido.entregas }),
+            alavancas: escolherAlavancas({ recompra, quantidade: qtd, prazoPagamentoDias: e.prazoPagamentoDias, frete: l.pedido.modoEntrega === "retirada" ? null : e.frete, entregas: l.pedido.entregas, pagamentoPreferido }),
             quantidade: l.item.quantidade,
             unidade: l.item.unidade,
             frete: e.frete,
             referencia,
+            pagamentoPreferido,
             janelaAte: decisao.janelaAte,
             agora,
           });

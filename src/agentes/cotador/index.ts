@@ -69,6 +69,8 @@ export function htmlCotacao(d: Dados, nomeFornecedor: string): Html {
   if (p.janelaRecebimento) entrega.push(`Recebimento: ${p.janelaRecebimento}`);
   if (p.prazoTexto) entrega.push(`Prazo desejado: ${p.prazoTexto}`);
   if (p.entregas) entrega.push(`Entregas: ${p.entregas} (aceitamos entrega em partes, se ajudar)`);
+  // U1: preferência do comprador; não é exigência, a proposta pode vir em outra condição.
+  if (p.pagamentoPreferido?.trim()) entrega.push(`Pagamento preferido: ${p.pagamentoPreferido.trim()} (se puder, cote nessa condição; se não, diga a sua)`);
 
   const partes: (string | Html)[] = [
     `Olá, ${nomeFornecedor}! Sou o assistente automatizado de compras da ${EMPRESA.nome} (CNPJ ${EMPRESA.cnpj}).`,

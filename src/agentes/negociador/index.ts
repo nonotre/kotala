@@ -223,15 +223,29 @@ export function escolherAlavancas(f: {
   prazoPagamentoDias: number | null;
   frete: number | null;
   entregas: string | null;
+  /** U1: forma que o comprador prefere e a proposta ainda não oferece (ver preferenciaNaoAtendida). */
+  pagamentoPreferido?: string | null;
 }): Alavanca[] {
   const todas: [Alavanca, boolean][] = [
     ["recompra", f.recompra],
     ["volume", f.quantidade > 1],
-    ["pagamento", f.prazoPagamentoDias === null || f.prazoPagamentoDias < PRAZO_PAGAMENTO_PADRAO()],
+    ["pagamento", !!f.pagamentoPreferido || f.prazoPagamentoDias === null || f.prazoPagamentoDias < PRAZO_PAGAMENTO_PADRAO()],
     ["frete", f.frete !== null && f.frete > 0],
     ["entregas", !!f.entregas?.trim()],
   ];
   return todas.filter(([, v]) => v).map(([a]) => a).slice(0, MAX_ALAVANCAS);
+}
+
+/**
+ * U1: a preferência de pagamento do comprador vira alavanca só quando a proposta ainda não
+ * a oferece ("pix" contra "boleto 28 dias"). Devolve a preferência a citar, ou null.
+ */
+export function preferenciaNaoAtendida(preferido: string | null | undefined, pagamentoProposta: string | null | undefined): string | null {
+  const p = preferido?.trim();
+  if (!p) return null;
+  const norma = (t: string) => semAcento(t).replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+  if (pagamentoProposta && norma(pagamentoProposta).includes(norma(p))) return null;
+  return p.slice(0, 60);
 }
 
 /** A referência pública só entra quando o preço do fornecedor está acima dela: citar abaixo induz a subir. */
@@ -249,6 +263,8 @@ export type ContextoDesconto = {
   frete: number | null;
   /** Já filtrada por citarReferencia. */
   referencia: number | null;
+  /** U1: preferência de pagamento ainda não atendida (preferenciaNaoAtendida); muda a frase da alavanca. */
+  pagamentoPreferido?: string | null;
   janelaAte: Date;
   agora?: Date;
 };
@@ -260,7 +276,10 @@ function fraseAlavanca(a: Alavanca, c: ContextoDesconto): string {
     case "volume":
       return `Se a compra for fechada com vocês, a quantidade é de ${quantidade(c.quantidade, c.unidade)} de uma vez: há desconto por volume?`;
     case "pagamento":
-      return "Há desconto para pagamento à vista, ou prazo maior no boleto?";
+      // Pergunta, nunca promessa: "pagamos à vista" é palavra proibida no validador.
+      return c.pagamentoPreferido
+        ? `Nossa forma de pagamento preferida é ${c.pagamentoPreferido}: há desconto nessa condição?`
+        : "Há desconto para pagamento à vista, ou prazo maior no boleto?";
     case "frete":
       return `O frete de ${formatarBRL(c.frete ?? 0)} pode ser reduzido ou incluído no preço?`;
     case "entregas":
