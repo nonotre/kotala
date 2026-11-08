@@ -31,10 +31,10 @@ async function vaiDiretoAoFluxo({ contato, entrada }: MensagemRecebida): Promise
   return !!p;
 }
 
-/** Últimas mensagens da conversa, só texto; toque em botão vira "(tocou em: ...)" quando dá para saber. */
+/** Últimas mensagens da conversa, só texto. O toque em botão não guarda o rótulo no banco, então vira "(tocou num botão)". */
 async function historico(contatoId: string, atualId: string): Promise<MensagemHistorico[]> {
   const linhas = await db
-    .select({ direcao: mensagem.direcao, texto: mensagem.texto, botoes: mensagem.botoes })
+    .select({ direcao: mensagem.direcao, texto: mensagem.texto, botoes: mensagem.botoes, anexos: mensagem.anexos })
     .from(mensagem)
     .where(and(eq(mensagem.contatoId, contatoId), ne(mensagem.id, atualId)))
     .orderBy(desc(mensagem.criadoEm))
@@ -42,12 +42,15 @@ async function historico(contatoId: string, atualId: string): Promise<MensagemHi
   return linhas
     .reverse()
     .map((m): MensagemHistorico => {
-      if (m.direcao === "entrada") return { papel: "comprador", texto: m.texto || "(tocou num botão)" };
+      if (m.direcao === "entrada") return { papel: "comprador", texto: m.texto || (m.anexos?.length ? "(mandou um anexo)" : "(tocou num botão)") };
       const botoes = m.botoes?.length ? `\n[botões oferecidos: ${m.botoes.map((b) => b.rotulo).join(" | ")}]` : "";
       return { papel: "assistente", texto: `${m.texto}${botoes}` };
     })
     .filter((m) => m.texto.trim());
 }
+
+const PERGUNTA = /\?\s*$|^(o que|qual|quais|quanto|quantos|quando|onde|como|por ?que|quem|tem|existe|cad[eê]|me (mostra|diz|fala))\b/i;
+const parecePergunta = (texto: string) => PERGUNTA.test(texto.trim());
 
 async function atender(m: MensagemRecebida) {
   if (await vaiDiretoAoFluxo(m)) return aoMensagemDoComprador(m);
@@ -55,8 +58,13 @@ async function atender(m: MensagemRecebida) {
   try {
     r = await responder({ ctx: { contatoId: m.contato.id, agora: new Date() }, texto: m.entrada.texto.trim(), historico: await historico(m.contato.id, m.mensagemId) });
   } catch (erro) {
-    // IA fora do ar ou erro do Assistente: o fluxo de hoje continua atendendo como antes.
     console.error("[assistente]", erro);
+    // Pergunta não pode ir ao fluxo: viraria pedido novo ou correção do pedido aberto. O resto (provável
+    // pedido) segue para o fluxo de hoje, que atende como antes do Assistente.
+    if (parecePergunta(m.entrada.texto)) {
+      await enviar(m.contato.id, "Tive um problema para consultar isso agora. Pode perguntar de novo em instantes?");
+      return;
+    }
     return aoMensagemDoComprador(m);
   }
   if (r.tipo === "encaminhar") return aoMensagemDoComprador(m);

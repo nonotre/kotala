@@ -6,10 +6,11 @@
 import { generateText, hasToolCall, isStepCount, tool, type ModelMessage } from "ai";
 import { z } from "zod";
 import { formatarBRL } from "../agentes/comparador/index.ts";
+import { timeoutMs } from "../nucleo/ia/config.ts";
 import { executarAgente } from "../nucleo/ia/index.ts";
 import { INSTRUCOES, regrasDeCompra, textoDoCartao } from "./instrucoes.ts";
 import { botaoLink, type Botao, type CartaoEstado, type ChamadaFerramenta, type Consultas, type ContextoAssistente, type EntradaAssistente, type OpcoesAssistente, type RespostaAssistente } from "./tipos.ts";
-import { coletar, validarResposta } from "./validador.ts";
+import { citadosPeloComprador, coletar, linkInternoValido, validarResposta, type Conhecidos } from "./validador.ts";
 
 const MAX_PASSOS = 6;
 const MAX_ACOES = 4;
@@ -41,10 +42,8 @@ const ACOES = [
   "cancelar_pedido",
   "aprovar_oferta",
   "escolher_outra_proposta",
+  // Negociar, buscar mais e cotar de novo mandam mensagem a fornecedores: só pelo menu de motivos de "reprovar", como no fluxo.
   "reprovar",
-  "negociar",
-  "buscar_mais_fornecedores",
-  "cotar_de_novo",
   "desistir_do_item",
   "repetir_compra",
   "cotar_em_vez_de_repetir",
@@ -57,7 +56,9 @@ async function montarAcao(e: EstadoTurno, a: { acao: Acao; pedidoId: number; ite
   if (!d) return { ok: false, erro: `Pedido ${a.pedidoId} não existe.` };
   e.dados.push(d);
   if (!d.daConversa) {
-    if (e.botoesLink.length < MAX_LINKS) e.botoesLink.push(botaoLink(`Abrir o pedido ${d.pedidoId}`, a.itemId ? `/pedidos/${d.pedidoId}/decisao#item-${a.itemId}` : d.href));
+    const doItem = d.itens.find((i) => i.itemId === a.itemId);
+    const href = doItem ? `/pedidos/${d.pedidoId}/decisao#item-${doItem.itemId}` : d.href;
+    if (e.botoesLink.length < MAX_LINKS && !e.botoesLink.some((b) => b.dado.endsWith(href))) e.botoesLink.push(botaoLink(`Abrir o pedido ${d.pedidoId}`, href));
     return { ok: false, erro: "Este pedido é de outro comprador, então o botão não vale aqui. Já pus o botão que abre a tela do pedido, onde ele pode decidir com confirmação. Explique isso ao comprador em linguagem simples." };
   }
   const id = d.pedidoId;
@@ -66,7 +67,9 @@ async function montarAcao(e: EstadoTurno, a: { acao: Acao; pedidoId: number; ite
     return { ok: true, botao: a.acao === "confirmar_pedido" ? { rotulo: `Confirmar o pedido ${id}`, dado: `pedido:${id}:confirmar` } : { rotulo: `Corrigir o pedido ${id}`, dado: `pedido:${id}:corrigir` } };
   }
   if (a.acao === "cancelar_pedido") {
-    if (["cancelado", "concluido"].includes(d.estado)) return { ok: false, erro: `O pedido ${id} já terminou.` };
+    // Depois de confirmado, cancelar o pedido inteiro pode cortar item já comprado sem avisar o fornecedor:
+    // aí só pela tela, item por item (desistir_do_item no mapa).
+    if (!["interpretando", "aguardando_confirmacao"].includes(d.estado)) return { ok: false, erro: `O pedido ${id} já está em cotação ou terminou: cancelar o pedido inteiro só antes de confirmar. Para um item esperando decisão, use desistir_do_item; para o resto, mande o link da tela do pedido.` };
     return { ok: true, botao: { rotulo: `Cancelar o pedido ${id}`, dado: `pedido:${id}:cancelar` } };
   }
   const item = d.itens.find((i) => i.itemId === a.itemId);
@@ -89,13 +92,7 @@ async function montarAcao(e: EstadoTurno, a: { acao: Acao; pedidoId: number; ite
     case "escolher_outra_proposta":
       return { ok: true, botao: { rotulo: "Escolher outra proposta", dado: `item:${iid}:outras` } };
     case "reprovar":
-      return { ok: true, botao: { rotulo: "Reprovar (dizer o motivo)", dado: `item:${iid}:motivos` } };
-    case "negociar":
-      return { ok: true, botao: { rotulo: "Preço alto: negociar", dado: `item:${iid}:negociar` } };
-    case "buscar_mais_fornecedores":
-      return { ok: true, botao: { rotulo: "Buscar mais fornecedores", dado: `item:${iid}:buscar` } };
-    case "cotar_de_novo":
-      return { ok: true, botao: { rotulo: "Cotar de novo com todos", dado: `item:${iid}:reprovar` } };
+      return { ok: true, botao: { rotulo: "Reprovar ou negociar (escolher o motivo)", dado: `item:${iid}:motivos` } };
     case "desistir_do_item":
       return { ok: true, botao: { rotulo: "Desistir deste item", dado: `item:${iid}:cancelar` } };
   }
@@ -257,6 +254,8 @@ async function turno(entrada: EntradaAssistente, cartao: CartaoEstado, consultas
         prepareStep: ({ stepNumber }) => (stepNumber >= MAX_PASSOS - 1 ? { toolChoice: "none" as const } : {}),
         providerOptions: { google: { thinkingConfig: { thinkingLevel: "low" } } },
         maxRetries: 1,
+        // Turno com vários passos: um pouco mais que uma chamada simples; travou, passa ao próximo modelo.
+        timeout: { totalMs: Math.round(timeoutMs() * 1.5) },
       });
       const encaminhar = g.steps.flatMap((s) => s.toolCalls).find((t) => t.toolName === "encaminhar_ao_fluxo");
       const valor: ResultadoTurno = {
@@ -289,8 +288,8 @@ function linkDoAssunto(e: EstadoTurno): Botao | null {
 }
 
 /** Texto seguro quando a resposta não passou na conferência nem no modelo forte. */
-function textoSeguro(e: EstadoTurno): { texto: string; botoes: Botao[] } {
-  const links = [...e.botoesLink];
+function textoSeguro(e: EstadoTurno, c: Conhecidos): { texto: string; botoes: Botao[] } {
+  const links = e.botoesLink.filter((b) => linkInternoValido(b.dado.slice(b.dado.indexOf(":") + 1), c));
   for (const d of e.dados.flat()) {
     if (links.length >= MAX_LINKS) break;
     const x = d as { href?: unknown; pedidoId?: unknown };
@@ -325,15 +324,25 @@ export async function responder(entrada: EntradaAssistente, opcoes: OpcoesAssist
       if (link) r.e.botoesLink.push(link);
     }
     const botoes = [...r.e.botoesAcao, ...r.e.botoesLink];
-    // O histórico também é fonte: o mapa e a aprovação que o fluxo mandou trazem subtotal e valor final.
-    const v = validarResposta(valor.texto || "Não entendi. Pode dizer de outro jeito?", botoes, coletar([...r.e.dados, ...entrada.historico.map((m) => m.texto), entrada.texto]));
+    // As falas do sistema no histórico também são fonte (o mapa e a aprovação trazem subtotal e valor final).
+    // Do comprador, só os números de pedido que ele citou: valor dito por ele não vira verdade.
+    const conhecidos = coletar([...r.e.dados, ...entrada.historico.filter((m) => m.papel === "assistente").map((m) => m.texto)]);
+    citadosPeloComprador(conhecidos, [...entrada.historico.filter((m) => m.papel === "comprador").map((m) => m.texto), entrada.texto]);
+    const v = validarResposta(valor.texto || "Não entendi. Pode dizer de outro jeito?", botoes, conhecidos);
     // Reprovou no modelo rápido: uma segunda chance no forte.
     if (!v.ok && !forte && !opcoes.semEscalar && tentativa === 0) {
       forte = true;
-      r = await turno(entrada, cartao, consultas, true, modelosDe(true));
+      try {
+        r = await turno(entrada, cartao, consultas, true, modelosDe(true));
+      } catch (erro) {
+        // Forte sem cota ou fora do ar: fica com a resposta do rápido, que cai no texto seguro abaixo.
+        console.error("[assistente] modelo forte falhou", erro);
+        const s2 = textoSeguro(r.e, conhecidos);
+        return { tipo: "resposta", texto: s2.texto, botoes: s2.botoes, ferramentas: r.e.chamadas, modelo: r.modelo, escalou: true, validacao: { ok: false, problemas: v.problemas }, tokens, ms: Math.round(performance.now() - t0) };
+      }
       continue;
     }
-    const seguro = v.ok ? null : textoSeguro(r.e);
+    const seguro = v.ok ? null : textoSeguro(r.e, conhecidos);
     return {
       tipo: "resposta",
       texto: seguro?.texto ?? v.texto,

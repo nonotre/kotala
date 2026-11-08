@@ -6,6 +6,7 @@
 // não pode depender das telas.
 
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, ne, notInArray, or, sql, type SQL } from "drizzle-orm";
+import { JANELA_CONFIRMACAO_MIN } from "../config.ts";
 import { db } from "../nucleo/db/cliente.ts";
 import { cotacao, evento, fornecedor, historicoCompra, itemPedido, mapaCotacao, pedido, referenciaPreco } from "../nucleo/db/schema.ts";
 import { colunaDoItem, FINAIS_PEDIDO } from "../nucleo/orquestrador/estados.ts";
@@ -49,7 +50,11 @@ const MOTIVO_MAXIMO = 400;
 const PALAVRAS_MAXIMAS = 6;
 const ECONOMIA_DIAS_PADRAO = 30;
 const ECONOMIA_DIAS_MAXIMO = 365;
-/** Igual a web/lib/avisos.ts: sem proposta só avisa por este tempo. */
+/**
+ * Sem proposta só avisa por este tempo. Decisão e recompra não vencem: ficam enquanto o pedido
+ * estiver de pé. A tela de avisos (web/lib/avisos.ts) ainda aplica a janela a todos os tipos;
+ * isso é assunto da Frente 1.
+ */
 const SEM_PROPOSTA_DIAS = 7;
 /**
  * Igual a VALIDADE_DUVIDA_MS de src/agentes/cotador/index.ts (que não exporta): depois disso,
@@ -207,7 +212,7 @@ function condicaoDePalavra(palavra: string): SQL {
 
 // ---------- Pendências ----------
 
-/** Mesma semântica de web/lib/avisos.ts (listarAvisos), para todos os compradores. */
+/** Parecida com web/lib/avisos.ts (listarAvisos), para todos os compradores, mas só `sem_proposta` some após SEM_PROPOSTA_DIAS. */
 async function listarPendencias(ctx: ContextoAssistente): Promise<Pendencia[]> {
   const desde = new Date(ctx.agora.getTime() - SEM_PROPOSTA_DIAS * 86_400_000);
   const emConfirmacao = await db.select().from(pedido).where(eq(pedido.estado, "aguardando_confirmacao")).orderBy(desc(pedido.atualizadoEm));
@@ -215,7 +220,7 @@ async function listarPendencias(ctx: ContextoAssistente): Promise<Pendencia[]> {
     .select({ item: itemPedido, urgencia: pedido.urgencia, compradorId: pedido.compradorId })
     .from(itemPedido)
     .innerJoin(pedido, eq(pedido.id, itemPedido.pedidoId))
-    .where(and(ne(pedido.estado, "cancelado"), inArray(itemPedido.estado, ["aguardando_decisao", "aguardando_recompra", "sem_proposta"]), gte(itemPedido.atualizadoEm, desde)))
+    .where(and(ne(pedido.estado, "cancelado"), or(inArray(itemPedido.estado, ["aguardando_decisao", "aguardando_recompra"]), and(eq(itemPedido.estado, "sem_proposta"), gte(itemPedido.atualizadoEm, desde)))))
     .orderBy(desc(itemPedido.atualizadoEm));
 
   const lista: Pendencia[] = emConfirmacao.map((p) => ({
@@ -243,14 +248,22 @@ async function listarPendencias(ctx: ContextoAssistente): Promise<Pendencia[]> {
 
 // ---------- Cartão de estado ----------
 
+/**
+ * Mesma regra de pedidoPendente (src/fluxo/comprador.ts): o pedido mais novo ainda antes da
+ * confirmação ("interpretando" ou "confirma?"), e só dentro da janela desde a última atividade
+ * (a mudança mais recente ou o lembrete). Fora dela o fluxo abriria pedido novo, então o
+ * assistente não pode encaminhar a mensagem como correção.
+ */
 async function pedidoEmConfirmacaoDaConversa(ctx: ContextoAssistente): Promise<CartaoEstado["pedidoEmConfirmacao"]> {
   const [p] = await db
     .select()
     .from(pedido)
-    .where(and(eq(pedido.compradorId, ctx.contatoId), eq(pedido.estado, "aguardando_confirmacao")))
-    .orderBy(desc(pedido.atualizadoEm), desc(pedido.id))
+    .where(and(eq(pedido.compradorId, ctx.contatoId), inArray(pedido.estado, ["interpretando", "aguardando_confirmacao"])))
+    .orderBy(desc(pedido.id))
     .limit(1);
   if (!p) return null;
+  const ultimaAtividade = Math.max(p.atualizadoEm.getTime(), p.lembreteConfirmacaoEm?.getTime() ?? 0);
+  if (ctx.agora.getTime() - ultimaAtividade > JANELA_CONFIRMACAO_MIN() * 60_000) return null;
   const itens = (await itensPorPedido([p.id])).get(p.id) ?? [];
   return { pedidoId: p.id, nome: nomePedido(p, itens) };
 }
@@ -489,14 +502,17 @@ export const consultasDoBanco: Consultas = {
           .filter((f) => ativo(f) && f.categorias.some((c) => chaveCategoria(c) === categoria))
           .sort((a, b) => pontosDe(b) - pontosDe(a) || Number(a.origem === "simulado") - Number(b.origem === "simulado") || a.nome.localeCompare(b.nome))
           .slice(0, BUSCA_MAXIMA);
+      } else if (palavras.length) {
+        linhas = await consulta.limit(BUSCA_PADRAO);
       } else {
-        linhas = await consulta.limit(
-          // Sem nome ("qual é o mais confiável?"): pega mais e ordena pela confiança abaixo.
-          palavras.length ? BUSCA_PADRAO : 100,
-        );
-        if (!palavras.length) {
-          linhas = linhas.filter((f) => f.bloqueadoEm === null).sort((a, b) => pontosDe(b) - pontosDe(a)).slice(0, BUSCA_PADRAO);
-        }
+        // Sem nome ("qual é o mais confiável?"): sem bloqueados nem quem pediu PARAR, como na categoria.
+        // A confiança manda, já no SQL e antes do limite; sem pontos (simulado) fica por último.
+        linhas = await db
+          .select()
+          .from(fornecedor)
+          .where(and(isNull(fornecedor.bloqueadoEm), isNull(fornecedor.parouEm)))
+          .orderBy(sql`(${fornecedor.verificacao}->>'pontos')::numeric desc nulls last`, asc(fornecedor.origem), asc(fornecedor.nome))
+          .limit(BUSCA_PADRAO);
       }
     }
     if (!linhas.length) return [];

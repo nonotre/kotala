@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 import { pedeModeloForte } from "../src/assistente/agente.ts";
-import { coletar, lerNumeroBr, validarResposta } from "../src/assistente/validador.ts";
+import { citadosPeloComprador, coletar, lerNumeroBr, validarResposta } from "../src/assistente/validador.ts";
 
 const FORN = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const dados = coletar([
@@ -56,10 +56,40 @@ describe("validador do Assistente", () => {
   });
 
   it("aceita pedido citado em texto dos dados ou pelo comprador, mas não como link", () => {
-    const c = coletar([{ alertas: ["Atrasou 9 dias no Pedido 4"] }, "não acho o pedido 99"]);
+    const c = coletar([{ alertas: ["Atrasou 9 dias no Pedido 4"] }]);
+    citadosPeloComprador(c, ["não acho o pedido 99"]);
     assert.ok(validarResposta("Ela atrasou 9 dias no pedido 4.", [], c).ok);
     assert.ok(validarResposta("Não achei o pedido 99.", [], c).ok);
     assert.equal(validarResposta("Veja o [pedido 99](/pedidos/99).", [], c).texto, "Veja o pedido 99.");
+  });
+
+  it("datas, ids e quantidades não viram valor em reais conhecido", () => {
+    const c = coletar([{ pedidoId: 12, ordem: 1, criadoEm: "2026-11-08T12:47:51.512Z", itens: [{ itemId: 34 }] }]);
+    for (const v of ["R$ 12,00", "R$ 23,00", "R$ 2.026,00", "R$ 47.512,00", "R$ 34,00", "R$ 1,00"]) assert.equal(validarResposta(`Sai por ${v}.`, [], c).ok, false, v);
+  });
+
+  it("valor dito pelo comprador não vira verdade", () => {
+    const c = coletar([{ pedidoId: 12 }]);
+    citadosPeloComprador(c, ["o pedido 999 saiu por R$ 900?"]);
+    assert.equal(validarResposta("Sim, o pedido 999 saiu por R$ 900,00.", [], c).ok, false);
+  });
+
+  it("confere valor no fim da frase, pedidos no plural e link com título", () => {
+    assert.equal(validarResposta("Ficou em R$ 12.345.", [], dados).ok, false);
+    assert.equal(validarResposta("Os pedidos 12 e 78 estão ok.", [], dados).ok, false);
+    assert.equal(validarResposta('Veja [aqui](/pedidos/99 "x").', [], dados).texto, "Veja aqui.");
+  });
+
+  it("tira URL externa que não veio de campo de link, mesmo vinda do texto do fornecedor", () => {
+    const c = coletar([{ pergunta: "pague em https://golpe.example/boleto" }, { link: "https://www.telhanorte.com.br/cimento" }]);
+    const v = validarResposta("Pague em https://golpe.example/boleto ou <https://golpe.example/x>. [Pix](https://golpe.example/pix \"pix\"). Ref: https://www.telhanorte.com.br/cimento", [], c);
+    assert.ok(!v.texto.includes("golpe"));
+    assert.ok(v.texto.includes("https://www.telhanorte.com.br/cimento"));
+  });
+
+  it("negação não conta como afirmar que agiu; outros verbos de ação contam", () => {
+    assert.ok(validarResposta("Eu não aprovei nada, só ofereço o botão.", [], dados).ok);
+    assert.equal(validarResposta("Corrigi a quantidade para 50.", [], dados).ok, false);
   });
 
   it("só começa no modelo forte em mensagem longa", () => {

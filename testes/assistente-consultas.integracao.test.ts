@@ -246,6 +246,30 @@ test("pendências: obra parada, depois urgente, depois o mais novo; daConversa m
   assert.ok(lista.every((x) => rotaPermitida(x.href)));
 });
 
+test("pendências: decisão e recompra não vencem em 7 dias; só sem proposta some", { skip: pular }, async () => {
+  const { A } = cena;
+  const dono = await novoContato("Dona das pendências velhas");
+  const velho = 8 * 24 * 60;
+  const [ped] = await db.insert(s.pedido).values({ compradorId: dono.id, estado: "em_andamento", canalOrigem: "web", textoOriginal: "pedido velho", atualizadoEm: antes(velho) }).returning();
+  const [pedCancelado] = await db.insert(s.pedido).values({ compradorId: dono.id, estado: "cancelado", canalOrigem: "web", textoOriginal: "pedido cancelado", atualizadoEm: antes(velho) }).returning();
+  const itemVelho = (pedidoId: number, estado: (typeof s.itemPedido.$inferInsert)["estado"], descricao: string, ordem: number) =>
+    db.insert(s.itemPedido).values({ pedidoId, ordem, estado, descricao, quantidade: "1", unidade: "un", atualizadoEm: antes(velho) }).returning();
+  const [decisao] = await itemVelho(ped!.id, "aguardando_decisao", "Decisão velha", 1);
+  const [recompra] = await itemVelho(ped!.id, "aguardando_recompra", "Recompra velha", 2);
+  await itemVelho(ped!.id, "sem_proposta", "Sem proposta velha", 3);
+  await itemVelho(pedCancelado!.id, "aguardando_decisao", "Decisão de pedido cancelado", 1);
+  try {
+    const lista = await q.pendencias(A);
+    const doPedido = lista.filter((x) => x.pedidoId === ped!.id);
+    assert.deepEqual(doPedido.map((x) => x.tipo).sort(), ["decidir", "recompra"], "decisão e recompra aparecem; sem proposta velha não");
+    assert.ok(doPedido.some((x) => x.itemId === decisao!.id) && doPedido.some((x) => x.itemId === recompra!.id));
+    assert.ok(!lista.some((x) => x.pedidoId === pedCancelado!.id), "pedido cancelado nunca avisa");
+  } finally {
+    await db.delete(s.itemPedido).where(inArray(s.itemPedido.pedidoId, [ped!.id, pedCancelado!.id]));
+    await db.delete(s.pedido).where(inArray(s.pedido.id, [ped!.id, pedCancelado!.id]));
+  }
+});
+
 // ---------- Busca de pedidos ----------
 
 test("buscarPedidos: sem filtro, mais recentes primeiro, com daConversa e itens", { skip: pular }, async () => {
@@ -360,6 +384,33 @@ test("cartão: pedidoEmConfirmacao e dúvida só da conversa; pendências e aber
   assert.ok(c.pedidosAbertos.every((x) => !x.daConversa));
 });
 
+test("cartão: pedidoEmConfirmacao segue a janela de pedidoPendente (interpretando conta, fora da janela é nulo)", { skip: pular }, async () => {
+  const dono = await novoContato("Dono da janela");
+  const ctx: ContextoAssistente = { contatoId: dono.id, agora };
+  const criados: number[] = [];
+  const novo = async (estado: (typeof s.pedido.$inferInsert)["estado"], minutosAtras: number, extra: Partial<typeof s.pedido.$inferInsert> = {}) => {
+    const [p] = await db.insert(s.pedido).values({ compradorId: dono.id, estado, canalOrigem: "web", textoOriginal: "pedido de janela", atualizadoEm: antes(minutosAtras), ...extra }).returning();
+    criados.push(p!.id);
+    return p!.id;
+  };
+  try {
+    // Parado em "confirma?" há mais de uma janela (60 min): o fluxo abriria pedido novo.
+    const velho = await novo("aguardando_confirmacao", 90);
+    assert.equal((await q.cartaoDeEstado(ctx)).pedidoEmConfirmacao, null);
+    // O lembrete renova a janela.
+    await db.update(s.pedido).set({ lembreteConfirmacaoEm: antes(10) }).where(eq(s.pedido.id, velho));
+    assert.equal((await q.cartaoDeEstado(ctx)).pedidoEmConfirmacao?.pedidoId, velho);
+    // "interpretando" também recebe a mensagem como correção.
+    await db.update(s.pedido).set({ estado: "interpretando", lembreteConfirmacaoEm: null, atualizadoEm: antes(5) }).where(eq(s.pedido.id, velho));
+    assert.equal((await q.cartaoDeEstado(ctx)).pedidoEmConfirmacao?.pedidoId, velho);
+    // O pedido mais novo (maior id) manda: se ele já venceu, não cai para o anterior.
+    await novo("aguardando_confirmacao", 120);
+    assert.equal((await q.cartaoDeEstado(ctx)).pedidoEmConfirmacao, null);
+  } finally {
+    await db.delete(s.pedido).where(inArray(s.pedido.id, criados));
+  }
+});
+
 test("cartão: dúvida de fornecedor vencida não aparece e a leitura não limpa nada", { skip: pular }, async () => {
   const { A, itens } = cena;
   const depois = { ...A, agora: new Date(agora.getTime() + 60 * MIN) };
@@ -472,6 +523,24 @@ test("fornecedores: por id e por nome sem acento; nada de e-mail ou CNPJ; simula
   const [aco] = await q.fornecedores(A, { nome: "aço forte" });
   assert.equal(aco!.compras, 1);
   assert.ok((await q.fornecedores(A, {})).length >= 7, "sem filtro devolve os primeiros");
+});
+
+test("fornecedores sem filtro: sem bloqueado nem PARAR, pontos em ordem decrescente antes do limite", { skip: pular }, async () => {
+  const { A } = cena;
+  const nota = (pontos: number) => ({ verificacao: { pontos, nivel: "media" } });
+  // Mais fornecedores com pontos do que o limite (10), para provar que a ordem vale antes do corte.
+  const criados = [];
+  for (let n = 0; n < 12; n++) criados.push(await novoFornecedor(`Ranking ${String(n).padStart(2, "0")}`, { origem: "real", ...nota(100 + n) }));
+  const bloqueado = await novoFornecedor("Ranking Bloqueado", { origem: "real", bloqueadoEm: new Date(), motivoBloqueio: "atraso", ...nota(500) });
+  const parou = await novoFornecedor("Ranking Parou", { origem: "real", parouEm: new Date(), ...nota(500) });
+  try {
+    const lista = await q.fornecedores(A, {});
+    assert.equal(lista.length, 10);
+    assert.deepEqual(lista.map((f) => f.nome), Array.from({ length: 10 }, (_, n) => `Ranking ${String(11 - n).padStart(2, "0")}`));
+    assert.ok(!lista.some((f) => f.id === bloqueado.id || f.id === parou.id));
+  } finally {
+    await db.delete(s.fornecedor).where(inArray(s.fornecedor.id, [...criados.map((f) => f.id), bloqueado.id, parou.id]));
+  }
 });
 
 test("item resumo traz a categoria da base; fora da base fica null", { skip: pular }, async () => {

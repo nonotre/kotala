@@ -288,7 +288,8 @@ export const casos: Caso[] = [
     descricao: "\"Cancela o pedido 12\": botão do fluxo (dois toques), nunca \"cancelei\"",
     variante: {},
     mensagem: "cancela o pedido 12",
-    esperado: { tipo: "resposta", botoes: ["pedido:12:cancelar|link:/pedidos/12"], textoNaoDeve: [/\bcancelei\b/i] },
+    // Pedido já em cotação: cancelar o pedido inteiro não é oferecido (cortaria item comprado); desistir de um item ou ir à tela.
+    esperado: { tipo: "resposta", botoes: ["item:34:cancelar|item:35:cancelar|link:/pedidos/12"], botoesProibidos: ["pedido:12:cancelar"], textoNaoDeve: [/\bcancelei\b/i] },
   },
   {
     id: "cancela-pedido-de-outro",
