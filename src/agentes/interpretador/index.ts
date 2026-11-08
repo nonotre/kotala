@@ -5,6 +5,7 @@
 import { z } from "zod";
 import { gerarObjeto } from "../../nucleo/ia/index.ts";
 import { textoJargao } from "./jargao.ts";
+import { regraDeUnidade } from "../../dominio/categorias.ts";
 
 const Item = z.object({
   descricao: z.string().describe("Nome técnico normalizado, ex.: 'Cimento CP II 50 kg'"),
@@ -109,12 +110,10 @@ function limpar(i: Interpretacao): Interpretacao {
       if (!jaPergunta) faltando.push(perguntaQuantidade(it.unidade, it.descricao));
     }
   }
-  // Regra da área de compras: agregados em m³, t, kg, saco ou L. Outra unidade gera pergunta.
+  // Regra de unidade da categoria do item (dados em src/dominio/): unidade fora das aceitas gera pergunta.
   for (const it of itens) {
-    if (/areia|brita|pedra|pedrisco|cascalho|p[oó] de pedra/i.test(it.descricao) && !/^(m³|m3|metro c[uú]bico|t|ton|tonelada|kg|quilo|saco|l|litro)s?$/i.test(it.unidade.trim())) {
-      const pergunta = `${it.descricao}: quantos m³ (ou toneladas) são ${it.quantidade > 0 ? `as ${it.quantidade} ${it.unidade}` : "o pedido"}?`;
-      if (!faltando.some((f) => f.startsWith(it.descricao))) faltando.push(pergunta);
-    }
+    const regra = regraDeUnidade(it);
+    if (regra && !faltando.some((f) => f.startsWith(it.descricao))) faltando.push(regra.pergunta);
   }
   return {
     ...i,

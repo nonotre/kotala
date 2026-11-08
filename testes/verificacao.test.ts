@@ -17,7 +17,7 @@ test("dígitos do CNPJ", () => {
 
 const base: EntradaJulgamento = {
   simulado: false, homologado: false, cnpj: null, cnpjInexistente: false, consultaIndisponivel: false,
-  presencaVerificavel: false, compras: 0, prazosCumpridos: 0, prazosAvaliados: 0, hoje: new Date("2026-11-07"),
+  presencaVerificavel: false, categorias: ["Cimentícios"], compras: 0, prazosCumpridos: 0, prazosAvaliados: 0, hoje: new Date("2026-11-07"),
 };
 const ativa = { cnpj: "03840986005670", razaoSocial: "LOJA EXEMPLO LTDA", nomeFantasia: null, situacao: "ATIVA", abertura: "2013-08-16", municipio: "SAO PAULO", uf: "SP", atividade: "Comércio varejista de materiais de construção", matrizOuFilial: "FILIAL", fonte: "BrasilAPI" as const };
 

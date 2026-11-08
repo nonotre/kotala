@@ -24,13 +24,16 @@ import {
 import { registrar } from "../nucleo/registro.ts";
 import { aoRespostaDoVencedor, pedidoEnviadoPara } from "./decisao.ts";
 import { cnpjValido, formatarCnpj, verificarFornecedor } from "../agentes/verificacao/index.ts";
-import { baseDeItens } from "../agentes/interpretador/base-itens.ts";
+import { categoriasDoCadastro, detectarCategorias, exemplosDoNicho } from "../dominio/categorias.ts";
 import { palavrasEmComum } from "../agentes/interpretador/index.ts";
 import { quando } from "../texto.ts";
 
 export const AVISO_PRIVACIDADE_FORNECEDOR =
   "Olá! Sou o assistente automatizado de cotações de compras da empresa. Ao se cadastrar, você recebe pedidos de cotação por aqui, " +
   "sem compromisso de compra. Guardo o nome da empresa e as mensagens desta conversa só para as cotações. Para sair, escreva PARAR.";
+
+/** "papelaria, limpeza, hidráulica", tirado das categorias (as do nicho da empresa primeiro). */
+const exemplosDeCategoria = () => exemplosDoNicho().categorias.slice(0, 3).join(", ");
 
 const PERGUNTA_NOME = "Qual o nome da sua empresa?";
 const SAUDACAO = /^(oi+|ol[aá]|opa|e a[ií]|bom dia|boa tarde|boa noite|tudo bem\??|ok|blz|beleza)[!.\s]*$/i;
@@ -141,7 +144,7 @@ export async function aoMensagemDoFornecedor({ contato, mensagemId, entrada }: M
       contato.id,
       `Recebi sua mensagem e guardei aqui. No momento não há pedido de cotação aberto para vocês. ` +
         `Quando surgir um pedido${cats}, mando por aqui com os detalhes, e aí você pode responder com preço, frete, prazo e pagamento.` +
-        (perguntarCats ? " Para receber os pedidos certos, me diga o que vocês vendem (ex.: hidráulica, elétrico, cimento)." : ""),
+        (perguntarCats ? ` Para receber os pedidos certos, me diga o que vocês vendem (ex.: ${exemplosDeCategoria()}).` : ""),
     );
     if (forn && perguntarCats && !forn.cadastroEtapa) await db.update(fornecedor).set({ cadastroEtapa: "categorias" }).where(eq(fornecedor.id, forn.id));
     return;
@@ -151,22 +154,18 @@ export async function aoMensagemDoFornecedor({ contato, mensagemId, entrada }: M
 
 // ---------- R5: cadastro em etapas (o que vende e CNPJ) ----------
 
-/** Categorias da base de itens: as mesmas que a busca usa para escolher a quem cotar. */
+/** Categorias do cadastro: vêm de src/dominio/categorias.json, independentes de haver item na base. */
 export function categoriasConhecidas(): string[] {
-  return [...new Set(baseDeItens().map((i) => i.categoria).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  return categoriasDoCadastro().map((c) => c.nome);
 }
 
 /** Acha categorias citadas em texto livre ("vendo cimento, areia e tinta" → Cimentícios, Agregados, Tintas). */
 export function categoriasDoTexto(texto: string): string[] {
   const achadas = new Set<string>();
-  for (const cat of categoriasConhecidas()) {
-    if (palavrasEmComum(texto, cat)) {
-      achadas.add(cat);
-      continue;
-    }
-    // Pelo nome dos itens da categoria: "cimento" acha Cimentícios, "areia" acha Agregados.
-    if (baseDeItens().some((i) => i.categoria === cat && palavrasEmComum(texto, i.descricao))) achadas.add(cat);
-  }
+  // Pelas palavras da categoria: "cimento" acha Cimentícios, "areia" acha Agregados, "papel" acha Escritório.
+  for (const c of detectarCategorias(texto)) if (c.cadastro !== false) achadas.add(c.nome);
+  // Pelo nome da categoria ("hidráulica", "elétrico").
+  for (const c of categoriasDoCadastro()) if (palavrasEmComum(texto, c.nome)) achadas.add(c.nome);
   return [...achadas];
 }
 
@@ -212,7 +211,7 @@ async function etapaDoCadastro(contato: Contato, f: typeof fornecedor.$inferSele
   if (f.cadastroEtapa === "categorias") {
     const achadas = categoriasDoTexto(texto);
     if (!achadas.length) {
-      await enviar(contato.id, `Não reconheci a categoria em "${texto.slice(0, 60)}". Escolha nos botões acima ou escreva, por exemplo: hidráulica, elétrico, cimento, areia, tintas.`);
+      await enviar(contato.id, `Não reconheci a categoria em "${texto.slice(0, 60)}". Escolha nos botões acima ou escreva, por exemplo: ${exemplosDeCategoria()}.`);
       return true;
     }
     const categorias = [...new Set([...f.categorias, ...achadas])];
