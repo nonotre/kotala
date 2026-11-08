@@ -3,7 +3,7 @@
 // (Cotador) e confirmação do pedido de compra (R11).
 
 import { randomBytes } from "node:crypto";
-import { and, desc, eq, gte, isNotNull } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, sql } from "drizzle-orm";
 import { cotacaoAbertaDo, encerrarSeTodosResponderam, reenviarCotacaoAberta, responderDuvida } from "../agentes/cotador/index.ts";
 import { despacharPerguntas, ETAPA_CATEGORIA_COTACAO } from "../agentes/cotador/cadencia.ts";
 import {
@@ -149,6 +149,8 @@ export async function aoMensagemDoFornecedor({ contato, mensagemId, entrada }: M
       dados: { texto: texto.slice(0, 2000), anexos: entrada.anexos?.length ?? 0 },
     });
     if (!temConteudo) return;
+    // I1: resposta ao pedido automático de desconto que chegou depois do fechamento.
+    if (await respostaTardiaAoDesconto(contato.id, contato.fornecedorId, mensagemId, texto)) return;
     // Resposta que chegou depois de a cotação fechar: explica, em vez de falar como se nada existisse.
     const [recente] = await db
       .select({ itemPedidoId: cotacao.itemPedidoId })
@@ -939,6 +941,199 @@ async function situacaoDelicada(
     fornecedorIds: [fornecedorId],
     dados: { tipo, texto: texto.slice(0, 500) },
   });
+}
+
+// ---------- I1: resposta ao desconto depois do fechamento ----------
+
+/** Estados em que o comprador ainda não decidiu: o desconto tardio ainda entra no mapa. */
+const ESTADOS_MAPA_ABERTO = ["cotando", "comparando", "aguardando_decisao"];
+
+/**
+ * O fornecedor respondeu ao pedido automático de desconto depois de a cotação fechar
+ * (a janela venceu e a marca ficou "sem_resposta", ou nem chegou a ser fechada).
+ * - Mapa aberto (o comprador não decidiu): o desconto entra na proposta, com antes e
+ *   depois em `oferta.extraido.negociacao` (marca `tardia`), e o mapa é refeito pelo
+ *   mecanismo de sempre ("reavaliar", que o Comparador anuncia como "Mapa refeito").
+ *   Preço que subiu não é aplicado: a cotação já fechou para propostas novas.
+ * - Compra decidida: agradece sem aplicar nada, e avisa o comprador se o desconto veio
+ *   do fornecedor escolhido (pode valer conversar antes de pagar).
+ * Devolve false quando a mensagem não é resposta a um desconto (segue o fluxo de antes).
+ */
+async function respostaTardiaAoDesconto(contatoId: string, fornecedorId: string, mensagemId: string, texto: string): Promise<boolean> {
+  if (!texto) return false;
+  const [l] = await db
+    .select({ oferta, item: itemPedido, pedido })
+    .from(oferta)
+    .innerJoin(itemPedido, eq(itemPedido.id, oferta.itemPedidoId))
+    .innerJoin(pedido, eq(pedido.id, itemPedido.pedidoId))
+    .where(
+      and(
+        eq(oferta.fornecedorId, fornecedorId),
+        gte(oferta.criadoEm, new Date(Date.now() - 48 * 3600_000)),
+        sql`${oferta.extraido}->'negociacao'->>'pedidaEm' is not null`,
+        sql`(${oferta.extraido}->'negociacao'->>'respondidaEm' is null or ${oferta.extraido}->'negociacao'->>'resultado' = 'sem_resposta')`,
+      ),
+    )
+    .orderBy(desc(sql`${oferta.extraido}->'negociacao'->>'pedidaEm'`))
+    .limit(1);
+  const marca = marcaDe(l?.oferta.extraido);
+  if (!l || !marca) return false;
+  const ctx = { pedidoId: l.pedido.id, itemPedidoId: l.item.id };
+  const qtd = Number(l.item.quantidade);
+
+  let e: Extracao;
+  try {
+    e = (
+      await extrair(
+        { descricao: l.item.descricao, quantidade: qtd, unidade: l.item.unidade, aceitaSimilar: l.item.aceitaSimilar, destino: l.pedido.destino, modoEntrega: l.pedido.modoEntrega },
+        { texto },
+        ctx,
+        CONTEXTO_DESCONTO,
+      )
+    ).valor;
+  } catch (erro) {
+    console.error("[fornecedor] desconto tardio", erro);
+    return false;
+  }
+  return aplicarDescontoTardio(e, { contatoId, fornecedorId, mensagemId, texto, oferta: l.oferta, item: l.item, pedido: l.pedido, marca });
+}
+
+/**
+ * Parte de respostaTardiaAoDesconto depois da leitura (sem IA; separada para os testes).
+ * Devolve false quando a leitura não é resposta ao desconto.
+ */
+export async function aplicarDescontoTardio(
+  e: Extracao,
+  p: {
+    contatoId: string;
+    fornecedorId: string;
+    mensagemId: string | null;
+    texto: string;
+    oferta: typeof oferta.$inferSelect;
+    item: typeof itemPedido.$inferSelect;
+    pedido: typeof pedido.$inferSelect;
+    marca: MarcaNegociacao;
+  },
+): Promise<boolean> {
+  const { contatoId, fornecedorId, texto, marca } = p;
+  const l = { item: p.item, pedido: p.pedido };
+  // Recusa do item, dúvida, PARAR, conversa delicada: não é resposta ao desconto.
+  if (!["proposta", "outro", "recusa"].includes(e.classificacao)) return false;
+  const ctx = { pedidoId: p.pedido.id, itemPedidoId: p.item.id };
+  if (p.mensagemId) await vincularMensagem(p.mensagemId, ctx);
+  const qtd = Number(p.item.quantidade);
+  const aberto = ESTADOS_MAPA_ABERTO.includes(p.item.estado);
+
+  if (e.alertas.length) {
+    const [c] = p.oferta.cotacaoId ? await db.select().from(cotacao).where(eq(cotacao.id, p.oferta.cotacaoId)) : [];
+    const ressalva = c ? await tratarAlertas(e.alertas, c, contatoId, l, ctx, texto) : undefined;
+    if (ressalva !== "bloqueada") await enviar(contatoId, ressalva || "Obrigado pelo retorno. Repasso ao comprador.", { ...ctx, tipo: "resposta" });
+    return true;
+  }
+
+  const condicao = condicaoDoDesconto(e, texto);
+  const completa = completarComAnterior(e, p.oferta, { quantidade: qtd, condicional: !!condicao, porUnidade: descontoPorUnidade(texto) });
+  // "Vou ver com o gerente": nada a registrar ainda.
+  if (!completa && vaiResponderDepois(texto)) {
+    await enviar(
+      contatoId,
+      aberto
+        ? `Sem problema! O comprador ainda está decidindo a cotação ${p.item.id}; se conseguir uma condição melhor, mande por aqui.`
+        : `Obrigado! O comprador já decidiu a compra da cotação ${p.item.id}, então não precisa se preocupar com esta. Conto com vocês nas próximas.`,
+      { ...ctx, tipo: "resposta" },
+    );
+    return true;
+  }
+  const precoAConfirmar = !!completa?.aConfirmar?.includes("preco");
+  const depois: CondicaoProposta =
+    completa && !precoAConfirmar
+      ? { precoUnitario: completa.precoUnitario, totalProduto: completa.totalProduto, frete: completa.frete, prazoDias: completa.prazoDias, pagamento: completa.pagamento, prazoPagamentoDias: completa.prazoPagamentoDias, impostosValor: completa.impostosValor }
+      : condicaoDaOferta(p.oferta);
+  const { resultado: _resultado, respondidaEm: _respondidaEm, ...base } = marca;
+  const fechada: MarcaNegociacao = { ...resultadoNegociacao(base, depois, qtd, { condicao, firme: mantemFirme(texto) }), tardia: true };
+  const [f] = await db.select({ nome: fornecedor.nome }).from(fornecedor).where(eq(fornecedor.id, fornecedorId));
+  const nome = f?.nome ?? "O fornecedor";
+  const deuAlgo = fechada.resultado === "desconto" || fechada.resultado === "condicional";
+
+  if (!aberto) {
+    // Compra decidida: nada muda na proposta; fica o registro.
+    await registrar(db, {
+      agente: "Negociador",
+      acao: `${nome} respondeu ao pedido de desconto depois de a compra ser decidida (${fechada.resultado}).`,
+      motivo: texto.slice(0, 200),
+      ...ctx,
+      fornecedorIds: [fornecedorId],
+      dados: { tardia: true, resultado: fechada.resultado, antes: fechada.antes, depois: fechada.depois, condicao: fechada.condicao ?? null },
+    });
+    const escolhido = p.item.fornecedorEscolhidoId === fornecedorId;
+    if (escolhido && deuAlgo) {
+      await enviar(
+        p.pedido.compradorId,
+        `Pedido ${p.pedido.id}: ${nome}, que você escolheu, ofereceu desconto depois de a compra ser decidida: "${texto.slice(0, 200)}". O pedido de compra seguiu com o valor da proposta; se quiser, fale com ele.`,
+        { ...ctx, tipo: "aviso" },
+      );
+    }
+    await enviar(
+      contatoId,
+      deuAlgo
+        ? `Obrigado pelo retorno e pela condição! A compra da cotação ${p.item.id} já foi decidida, então desta vez não consigo incluir o desconto.${escolhido ? " Repassei ao comprador." : ""} Conto com vocês nas próximas cotações.`
+        : `Obrigado pelo retorno! A compra da cotação ${p.item.id} já foi decidida. Conto com vocês nas próximas cotações.`,
+      { ...ctx, tipo: "resposta" },
+    );
+    return true;
+  }
+
+  // Mapa aberto. Preço ambíguo ou maior: não aplica, repassa ao comprador.
+  if (precoAConfirmar || fechada.resultado === "subiu") {
+    await registrar(db, {
+      agente: "Negociador",
+      acao: `${nome} respondeu ao pedido de desconto depois do fechamento, sem desconto aplicável.`,
+      motivo: precoAConfirmar ? "Preço ambíguo (unitário ou total) numa resposta tardia; não foi aplicado." : "O preço novo é maior; a cotação já fechou para propostas novas.",
+      ...ctx,
+      fornecedorIds: [fornecedorId],
+      dados: { tardia: true, texto: texto.slice(0, 500) },
+    });
+    await enviar(p.pedido.compradorId, `Pedido ${p.pedido.id}: ${nome} respondeu ao pedido de desconto depois do fechamento: "${texto.slice(0, 200)}". Mantive a proposta anterior no mapa.`, { ...ctx, tipo: "aviso" });
+    await enviar(contatoId, `Obrigado pelo retorno! As propostas da cotação ${p.item.id} já fecharam, então mantive a sua proposta anterior e repassei a mensagem ao comprador.`, { ...ctx, tipo: "resposta" });
+    return true;
+  }
+
+  const pagamento =
+    condicao && !depois.pagamento?.includes("não aplicado") ? `${depois.pagamento ? `${depois.pagamento}; ` : ""}desconto condicionado: "${condicao}" (não aplicado ao total)` : depois.pagamento;
+  const extraido = { ...(p.oferta.extraido as Record<string, unknown>), negociacao: fechada };
+  const txt = (v: number | null) => (v === null ? null : v.toString());
+  await db
+    .update(oferta)
+    .set(
+      fechada.resultado === "desconto"
+        ? { precoUnitario: txt(depois.precoUnitario), totalProduto: txt(depois.totalProduto), frete: txt(depois.frete), pagamento, prazoPagamentoDias: depois.prazoPagamentoDias, extraido }
+        : { pagamento, extraido },
+    )
+    .where(eq(oferta.id, p.oferta.id));
+  await registrarResultado(fechada, fornecedorId, ctx);
+
+  if (fechada.resultado === "desconto") {
+    await enviar(contatoId, `Obrigado pelo desconto! Registrei na sua proposta da cotação ${p.item.id}; o comprador ainda está decidindo e vai ver o valor novo.`, { ...ctx, tipo: "resposta" });
+    // Mapa já mostrado: refaz pelo caminho de sempre. Em "comparando" o mapa está sendo montado
+    // agora e pode não pegar o valor novo (janela de segundos; fica para quando o Comparador
+    // tiver um "refazer se mudou").
+    if (p.item.estado === "aguardando_decisao") {
+      await avancarItem(p.item.id, "reavaliar", {
+        agente: "Negociador",
+        acao: `${nome} deu desconto depois do fechamento.`,
+        motivo: `Resposta tardia ao pedido de desconto: o produto foi de ${formatarBRL(fechada.produtoAntes ?? 0)} para ${formatarBRL(fechada.produtoDepois ?? 0)}. O mapa é refeito.`,
+        fornecedorIds: [fornecedorId],
+      }).catch((erro) => {
+        if (!(erro instanceof TransicaoInvalida || erro instanceof TransicaoConcorrente)) throw erro;
+      });
+    }
+  } else if (fechada.resultado === "condicional") {
+    await enviar(p.pedido.compradorId, `Pedido ${p.pedido.id}: ${nome} respondeu ao pedido de desconto depois do fechamento com um desconto condicionado (não aplicado ao total): ${condicao}.`, { ...ctx, tipo: "aviso" });
+    await enviar(contatoId, `Obrigado! Anotei a condição (${condicao}) na sua proposta da cotação ${p.item.id} e repassei ao comprador.`, { ...ctx, tipo: "resposta" });
+  } else {
+    await enviar(contatoId, TEXTO_MANTEVE, { ...ctx, tipo: "resposta" });
+  }
+  return true;
 }
 
 /** Contexto do Extrator quando a mensagem responde ao pedido de desconto (sem valores: a conta é do código). */

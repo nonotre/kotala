@@ -1,5 +1,6 @@
 // Pendências do lado do fornecedor (junção da rodada 2), com banco: quem compra no pedido
-// de compra; conferência de saída no convite; confirmação de preço pela cadência.
+// de compra; conferência de saída no convite; confirmação de preço pela cadência;
+// resposta ao desconto depois do fechamento.
 // Usa DATABASE_URL_TESTE.
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
@@ -111,4 +112,90 @@ test("R8 pela cadência: sem pergunta pendente, sai na hora", { skip: pular }, a
   assert.equal(enviadas.at(-1)!.endereco, ct.endereco);
   const ev = await m!.db.query.evento.findFirst({ where: (t, { and, eq }) => and(eq(t.itemPedidoId, item.id), eq(t.agente, "Comparador")) });
   assert.match(ev!.acao, /Pediu a .* para confirmar o preço/);
+});
+
+// ---------- I1: resposta ao desconto depois do fechamento ----------
+
+const leitura = (extra: Record<string, unknown> = {}) =>
+  ({
+    classificacao: "outro", duvida: null, itemOferecido: null, itemExato: true, aderencia: "exato", divergencias: [], leituraPreco: "unitario", trechoPreco: null,
+    alertas: [], descontoPercentual: null, descontoValor: null, descontoCondicao: null, precoUnitario: null, quantidadeOfertada: null, unidadeOfertada: null,
+    embalagem: null, totalProduto: null, frete: null, impostosValor: null, impostosNaoInclusos: null, prazoDias: null, validadeDias: null, pagamento: null,
+    prazoPagamentoDias: null, entregaNoLocal: null, cnpj: null, ...extra,
+  }) as never;
+
+/** Proposta de 40 sacos a R$ 40 com o pedido de desconto que ficou sem resposta (a janela venceu). */
+async function descontoSemResposta(estado: string) {
+  const { db, schema } = m!;
+  const { eq } = await import("drizzle-orm");
+  const [comprador] = await db.insert(schema.contato).values({ canal: "web", endereco: `comp-${crypto.randomUUID()}`, papel: "comprador" }).returning();
+  const [f] = await db.insert(schema.fornecedor).values({ nome: `Depósito Tardio ${Date.now()}`, origem: "real", categorias: ["Cimentícios"] }).returning();
+  const [ct] = await db.insert(schema.contato).values({ canal: "web", endereco: `forn-${crypto.randomUUID()}`, papel: "fornecedor", fornecedorId: f!.id }).returning();
+  const ped = await m!.abrirPedido({ compradorId: comprador!.id, canalOrigem: "web", textoOriginal: "40 cp2" });
+  const [item] = await m!.definirItens(db, ped.id, [{ descricao: "Cimento CP II", quantidade: 40, unidade: "saco" }]);
+  const antes = { precoUnitario: 40, totalProduto: null, frete: 60, prazoDias: 3, pagamento: "boleto 28 dias", prazoPagamentoDias: 28, impostosValor: null };
+  const marca = { pedidaEm: new Date(Date.now() - 600_000).toISOString(), janelaAte: new Date(Date.now() - 60_000).toISOString(), rodadaAuto: 1, alavancas: ["volume"], referenciaCitada: null, antes, resultado: "sem_resposta" };
+  const [c] = await db.insert(schema.cotacao).values({ itemPedidoId: item!.id, fornecedorId: f!.id, contatoId: ct!.id, situacao: "respondeu", enviadaEm: new Date(), respondeuEm: new Date() }).returning();
+  const [o] = await db
+    .insert(schema.oferta)
+    .values({ itemPedidoId: item!.id, fornecedorId: f!.id, cotacaoId: c!.id, itemOferecido: "Cimento CP II", itemExato: true, precoUnitario: "40", frete: "60", prazoDias: 3, validadeDias: 10, pagamento: "boleto 28 dias", prazoPagamentoDias: 28, formato: "texto", extraido: { negociacao: marca } })
+    .returning();
+  await db.update(schema.itemPedido).set({ estado: estado as never, ...(estado === "pedido_enviado" ? { fornecedorEscolhidoId: f!.id, ofertaEscolhidaId: o!.id } : {}) }).where(eq(schema.itemPedido.id, item!.id));
+  const atual = async () => ({
+    item: (await db.query.itemPedido.findFirst({ where: (t, { eq }) => eq(t.id, item!.id) }))!,
+    pedido: (await db.query.pedido.findFirst({ where: (t, { eq }) => eq(t.id, ped.id) }))!,
+    oferta: (await db.query.oferta.findFirst({ where: (t, { eq }) => eq(t.id, o!.id) }))!,
+  });
+  const aplicar = async (e: never, texto: string) => {
+    const a = await atual();
+    return m!.aplicarDescontoTardio(e, { contatoId: ct!.id, fornecedorId: f!.id, mensagemId: null, texto, oferta: a.oferta, item: a.item, pedido: a.pedido, marca: marca as never });
+  };
+  return { ct: ct!, comprador: comprador!, item: item!, atual, aplicar };
+}
+
+test("desconto depois do fechamento, mapa aberto: entra na proposta, com antes e depois, e o mapa é refeito", { skip: pular }, async () => {
+  const { adaptador, enviadas } = m!.canalEmMemoria("web");
+  m!.registrarCanal(adaptador);
+  const { ct, aplicar, atual } = await descontoSemResposta("aguardando_decisao");
+  assert.equal(await aplicar(leitura({ descontoPercentual: 5 }), "consigo 5% de desconto"), true);
+  const { oferta, item } = await atual();
+  assert.equal(Number(oferta.precoUnitario), 38);
+  const n = (oferta.extraido as { negociacao: Record<string, unknown> }).negociacao;
+  assert.equal(n.resultado, "desconto");
+  assert.equal(n.tardia, true);
+  assert.equal(n.produtoAntes, 1600);
+  assert.equal(n.produtoDepois, 1520);
+  assert.ok(n.respondidaEm);
+  assert.equal(item.estado, "comparando"); // "reavaliar": o Comparador refaz o mapa
+  const resposta = enviadas.filter((x) => x.endereco === ct.endereco).at(-1)!;
+  assert.match(resposta.texto, /Obrigado pelo desconto! Registrei na sua proposta/);
+  assert.ok(!enviadas.some((x) => /encerrad/.test(x.texto)));
+});
+
+test("desconto depois do fechamento, compra decidida: agradece sem 'encerrada' e avisa o comprador se é o escolhido", { skip: pular }, async () => {
+  const { adaptador, enviadas } = m!.canalEmMemoria("web");
+  m!.registrarCanal(adaptador);
+  const { ct, comprador, aplicar, atual } = await descontoSemResposta("pedido_enviado");
+  assert.equal(await aplicar(leitura({ descontoPercentual: 5 }), "faço 5%"), true);
+  const { oferta, item } = await atual();
+  assert.equal(Number(oferta.precoUnitario), 40); // nada muda depois de decidido
+  assert.equal(item.estado, "pedido_enviado");
+  const resposta = enviadas.filter((x) => x.endereco === ct.endereco).at(-1)!;
+  assert.match(resposta.texto, /já foi decidida, então desta vez não consigo incluir o desconto\. Repassei ao comprador/);
+  assert.doesNotMatch(resposta.texto, /encerrad/);
+  assert.match(enviadas.filter((x) => x.endereco === comprador.endereco).at(-1)!.texto, /que você escolheu, ofereceu desconto depois de a compra ser decidida/);
+});
+
+test("depois do fechamento: 'não consigo' vira manteve; dúvida não é resposta ao desconto", { skip: pular }, async () => {
+  const { adaptador, enviadas } = m!.canalEmMemoria("web");
+  m!.registrarCanal(adaptador);
+  const { ct, aplicar, atual } = await descontoSemResposta("aguardando_decisao");
+  assert.equal(await aplicar(leitura({ classificacao: "duvida", duvida: "qual o CEP?" }), "qual o CEP?"), false);
+  assert.equal(await aplicar(leitura({ classificacao: "recusa" }), "não consigo, já está no limite"), true);
+  const { oferta, item } = await atual();
+  const n = (oferta.extraido as { negociacao: Record<string, unknown> }).negociacao;
+  assert.equal(n.resultado, "manteve");
+  assert.equal(n.firme, true);
+  assert.equal(item.estado, "aguardando_decisao"); // nada a refazer
+  assert.equal(enviadas.filter((x) => x.endereco === ct.endereco).at(-1)!.texto, "Combinado, mantenho a proposta como está. Obrigado!");
 });

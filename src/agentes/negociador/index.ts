@@ -84,6 +84,8 @@ export type MarcaNegociacao = {
   condicao?: string;
   /** Disse que o preço está no limite: o botão do comprador não volta a ele. */
   firme?: boolean;
+  /** A resposta chegou depois de a cotação fechar, com o mapa ainda aberto ou a compra decidida. */
+  tardia?: boolean;
 };
 
 const centavos = (v: number) => Math.round(v * 100) / 100;
