@@ -147,6 +147,15 @@ const escritos = {
 
 /** O chat de quem entrou: o endereço é o id do usuário (contato "web" dele, ver src/contas.ts). */
 export function Conversa({ endereco, topo }: { endereco: string; topo?: ReactNode }) {
+  // A conversa vem sempre do banco. O chat da Carbon guarda o estado da aba no sessionStorage e, num F5,
+  // o restaura no lugar de pedir o histórico: a conversa do banco não aparecia. Apaga antes de o chat montar.
+  useState(() => {
+    try {
+      sessionStorage.removeItem("CARBON_CHAT_SESSION");
+    } catch {
+      // Sem sessionStorage, não há o que restaurar.
+    }
+  });
   const [historicoPronto, setHistoricoPronto] = useState(false);
   const [chatPronto, setChatPronto] = useState(false);
   const [novas, setNovas] = useState(false);
