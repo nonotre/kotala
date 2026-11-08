@@ -33,7 +33,9 @@ import { registrar } from "../../nucleo/registro.ts";
 import { liberarSaida } from "../guardrail/rastro.ts";
 import { candidatosNovos } from "../busca/index.ts";
 import { referenciasDoItem } from "../busca/internet.ts";
-import { comparar, MINIMO_PROPOSTAS_VALIDAS, type OfertaComparavel } from "../comparador/calculo.ts";
+import { MINIMO_PROPOSTAS_VALIDAS } from "../comparador/calculo.ts";
+// Mesmos portões do mapa, sem verificação de CNPJ: a contagem mora no comparador.
+import { contarPropostasValidas } from "../comparador/index.ts";
 
 export const TEXTO_ENCERRADO = "Este pedido de cotação foi encerrado. Obrigado.";
 
@@ -373,60 +375,6 @@ export async function reenviarCotacaoAberta(fornecedorId: string, contatoId: str
   return true;
 }
 
-const num = (v: string | null) => (v === null ? null : Number(v));
-
-/** Propostas válidas do item pelo portão do comparador (sem verificação externa de CNPJ: ela só muda nota). */
-async function contarPropostasValidas(d: Dados): Promise<number> {
-  const { item, pedido: p } = d;
-  const todas = await db
-    .select({ oferta, fornecedor, situacao: cotacao.situacao })
-    .from(oferta)
-    .innerJoin(fornecedor, eq(fornecedor.id, oferta.fornecedorId))
-    .leftJoin(cotacao, eq(cotacao.id, oferta.cotacaoId))
-    .where(and(eq(oferta.itemPedidoId, item.id), lte(oferta.rodada, item.rodada)))
-    .orderBy(sql`${oferta.rodada} desc, ${oferta.criadoEm} desc`);
-  // Mesma regra do mapa: a proposta mais recente de cada fornecedor; fora quem desistiu, parou ou foi excluído.
-  const fora = new Set([...item.excluidos, ...todas.filter((x) => x.situacao === "desistiu" || x.situacao === "parou" || x.fornecedor.parouEm).map((x) => x.fornecedor.id)]);
-  const vistos = new Set<string>();
-  const ofertas: OfertaComparavel[] = [];
-  for (const { oferta: o, fornecedor: f } of todas) {
-    if (fora.has(f.id) || vistos.has(f.id)) continue;
-    vistos.add(f.id);
-    ofertas.push({
-      id: o.id,
-      fornecedorId: f.id,
-      fornecedorNome: f.nome,
-      simulado: f.origem === "simulado",
-      verificado: f.verificado,
-      homologado: f.homologado,
-      conhecido: false,
-      itemOferecido: o.itemOferecido,
-      itemExato: o.itemExato,
-      precoUnitario: num(o.precoUnitario),
-      totalProduto: num(o.totalProduto),
-      frete: num(o.frete),
-      impostosValor: num(o.impostosValor),
-      impostosNaoInclusos: o.impostosNaoInclusos,
-      prazoDias: o.prazoDias,
-      validadeDias: o.validadeDias,
-      pagamento: o.pagamento,
-      prazoPagamentoDias: o.prazoPagamentoDias,
-      entregaNoLocal: o.entregaNoLocal,
-      precoConfirmado: o.precoConfirmado,
-      rodada: o.rodada,
-      online: o.formato === "busca",
-      fonte: o.fonte,
-    });
-  }
-  const refs = await referenciasDoItem(item.id);
-  const c = comparar(
-    { quantidade: Number(item.quantidade), aceitaSimilar: item.aceitaSimilar, prazoMaxDias: p.prazoMaxDias, modoEntrega: p.modoEntrega, urgencia: p.urgencia },
-    ofertas,
-    refs.mediana,
-  );
-  return c.validas.length;
-}
-
 /**
  * I3: com menos de 3 propostas válidas, consulta mais fornecedores e prorroga o prazo,
  * sem mudar de estado nem de rodada (quem já foi consultado ainda pode responder).
@@ -443,7 +391,7 @@ export async function ampliarSeFaltarPropostas(itemPedidoId: number): Promise<"a
   const teto = d.pedido.urgencia === "normal" ? MAX_AMPLIACOES() : 1;
   const feitas = item.ampliacoes;
   if (feitas >= teto) return "encerrar";
-  const validas = await contarPropostasValidas(d);
+  const validas = await contarPropostasValidas(item.id);
   if (validas >= MINIMO_PROPOSTAS_VALIDAS) return "encerrar";
   const novos = await candidatosNovos(item);
   if (!novos.length) return "encerrar";
