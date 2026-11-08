@@ -90,7 +90,7 @@ export async function candidatosNovos(item: { id: number; rodada: number; descri
 async function buscar(m: MudancaItem) {
   // N6: voltar à busca abre uma rodada nova, com todos os fornecedores de novo.
   if (m.evento === "voltar_busca") {
-    await db.update(itemPedido).set({ rodada: sql`${itemPedido.rodada} + 1` }).where(eq(itemPedido.id, m.itemPedidoId));
+    await db.update(itemPedido).set({ rodada: sql`${itemPedido.rodada} + 1`, ampliacoes: 0 }).where(eq(itemPedido.id, m.itemPedidoId));
   }
   const [item] = await db.select().from(itemPedido).where(eq(itemPedido.id, m.itemPedidoId));
   if (!item) return;

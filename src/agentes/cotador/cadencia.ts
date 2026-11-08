@@ -21,8 +21,8 @@ import { marcaDe } from "../negociador/index.ts";
 export type TipoPergunta = "cotacao" | "negociacao" | "desconto" | "completar" | "confirmar_preco" | "pedido_compra" | "categoria";
 export type PerguntaAberta = { tipo: TipoPergunta; desde: Date };
 
-/** Pergunta sem resposta por mais que esta fração do prazo de respostas deixa de segurar a fila. */
-export const ESPERA_PERGUNTA_FRACAO = 0.25;
+import { ESPERA_PERGUNTA_FRACAO } from "../../config.ts";
+export { ESPERA_PERGUNTA_FRACAO };
 export const esperaMaxMs = () => prazoRespostasMs() * ESPERA_PERGUNTA_FRACAO;
 /** Até 3 perguntas numa mensagem; o resto espera a próxima resposta. */
 export const MAX_PERGUNTAS_JUNTAS = 3;

@@ -20,12 +20,9 @@ import { quando, quantidade } from "../../texto.ts";
 export const MAX_RODADAS = 3;
 /** Quantos fornecedores no máximo recebem a contraproposta do botão. */
 const MAX_ALVOS = 3;
-/** I1: janela para responder ao pedido de desconto, em fração do prazo de respostas (candidata a config.ts, Frente 1). */
-export const NEGOCIACAO_ESPERA_FRACAO = 0.25;
-/** I1: com menos que esta fração do prazo restante, não pede desconto (o comprador tem o botão). */
-export const NEGOCIACAO_RESTANTE_MIN = 0.1;
-/** Prazo de pagamento abaixo do qual vale perguntar por prazo maior, em dias. */
-export const PRAZO_PAGAMENTO_PADRAO = 28;
+// Regras em src/config.ts; reexportadas para quem já importava daqui.
+import { NEGOCIACAO_ESPERA_FRACAO, NEGOCIACAO_RESTANTE_MIN, PRAZO_PAGAMENTO_PADRAO } from "../../config.ts";
+export { NEGOCIACAO_ESPERA_FRACAO, NEGOCIACAO_RESTANTE_MIN };
 /** Alavancas por mensagem, no máximo: mensagem curta. */
 export const MAX_ALAVANCAS = 2;
 /** Frase da Ester; é também o texto mínimo quando o validador barra o texto montado. */
@@ -230,7 +227,7 @@ export function escolherAlavancas(f: {
   const todas: [Alavanca, boolean][] = [
     ["recompra", f.recompra],
     ["volume", f.quantidade > 1],
-    ["pagamento", f.prazoPagamentoDias === null || f.prazoPagamentoDias < PRAZO_PAGAMENTO_PADRAO],
+    ["pagamento", f.prazoPagamentoDias === null || f.prazoPagamentoDias < PRAZO_PAGAMENTO_PADRAO()],
     ["frete", f.frete !== null && f.frete > 0],
     ["entregas", !!f.entregas?.trim()],
   ];

@@ -166,7 +166,7 @@ export async function aoBotaoDoComprador(contato: Contato, dado: string): Promis
         itemPedidoId,
         "negociar",
         { agente: "Comprador", acao: "Reprovou por preço alto e pediu negociação.", motivo: "Motivo: preço alto.", fornecedorIds: plano.alvos },
-        { rodada: plano.rodada, negociacao: plano, prazoRespostasEm: null, lembreteEm: null },
+        { rodada: plano.rodada, ampliacoes: 0, negociacao: plano, prazoRespostasEm: null, lembreteEm: null },
       ).catch(ignorarCorrida);
       break;
     }

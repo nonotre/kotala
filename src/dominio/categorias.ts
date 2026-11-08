@@ -1,6 +1,7 @@
 // Perfil por categoria de compra, lido de categorias.json. O código só aplica
 // as regras; o que é de construção, papelaria ou EPI está nos dados.
 
+import { EMPRESA_NICHO } from "../config.ts";
 import { readFileSync } from "node:fs";
 import { normalizarUnidade, unidadeAceita } from "./unidades.ts";
 
@@ -154,8 +155,7 @@ export function palavrasVazias(): Set<string> {
 
 /** Nicho da empresa: ids separados por vírgula em EMPRESA_NICHO (padrão `geral`). Só escolhe exemplos. */
 export function categoriasDoNicho(): Categoria[] {
-  const ids = (process.env.EMPRESA_NICHO ?? "geral").split(",").map((s) => s.trim()).filter(Boolean);
-  const achadas = ids.map(categoriaPorNome).filter((c): c is Categoria => !!c);
+  const achadas = EMPRESA_NICHO().map(categoriaPorNome).filter((c): c is Categoria => !!c);
   return achadas.length ? achadas : [categoriaPorId("geral")!];
 }
 

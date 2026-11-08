@@ -39,6 +39,7 @@ export const origemFornecedorEnum = pgEnum("origem_fornecedor", ["real", "simula
 export const estadoPedidoEnum = pgEnum("estado_pedido", ESTADOS_PEDIDO);
 export const estadoItemEnum = pgEnum("estado_item", ESTADOS_ITEM);
 export const urgenciaEnum = pgEnum("urgencia", ["normal", "urgente", "obra_parada"]);
+export const papelUsuarioEnum = pgEnum("papel_usuario", ["comprador", "gestor"]);
 export const modoEntregaEnum = pgEnum("modo_entrega", ["entrega", "retirada"]);
 export const situacaoCotacaoEnum = pgEnum("situacao_cotacao", [
   "aguardando",
@@ -98,6 +99,8 @@ export const usuario = pgTable("usuario", {
   nome: text("nome").notNull(),
   /** "sal:hash" em hex (scrypt). Null = conta criada à mão; a primeira entrada define a senha. */
   senhaHash: text("senha_hash"),
+  /** Gestor recebe os avisos de conduta dos guardrails (S), no lugar de GESTOR_CONTATO_ID. */
+  papel: papelUsuarioEnum("papel").notNull().default("comprador"),
   criadoEm: criadoEm(),
 });
 
@@ -158,6 +161,10 @@ export const pedido = pgTable("pedido", {
   correcoes: jsonb("correcoes").$type<string[]>().notNull().default([]),
   /** Rodadas de pergunta já feitas: no máximo uma (R2). */
   perguntasFeitas: integer("perguntas_feitas").notNull().default(0),
+  /** U1: forma de pagamento que o comprador prefere ("pix", "boleto 28 dias"...), dita no pedido. */
+  pagamentoPreferido: text("pagamento_preferido"),
+  /** Responsável pelo card quando foi trocado na tela; null = o usuário do contato que pediu. */
+  responsavelId: uuid("responsavel_id").references(() => usuario.id),
   criadoEm: criadoEm(),
   atualizadoEm: atualizadoEm(),
 });
@@ -194,6 +201,10 @@ export const itemPedido = pgTable(
     ofertaEscolhidaId: uuid("oferta_escolhida_id"),
     /** Q2: observação quando segue com menos de 3 propostas válidas. */
     justificativaMenosDeTres: text("justificativa_menos_de_tres"),
+    /** I3: levas de busca automática já feitas na rodada atual (volta a 0 em rodada nova). */
+    ampliacoes: integer("ampliacoes").notNull().default(0),
+    /** Categoria do item (ids de src/dominio/categorias.json), gravada na confirmação. Null = deduzir da base. */
+    categoria: text("categoria"),
     criadoEm: criadoEm(),
     atualizadoEm: atualizadoEm(),
   },

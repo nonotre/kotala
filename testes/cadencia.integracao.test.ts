@@ -118,9 +118,7 @@ test("pedido de desconto aberto segura o fechamento e a fila; a janela vencida f
   // A janela vence: fecha, e quem não respondeu ao desconto mantém a proposta como "sem_resposta".
   // Este teste é só da janela: o teto de ampliações (I3) já foi atingido, senão o fechamento
   // antecipado consultaria os fornecedores que outros testes deixaram no banco.
-  for (const n of [1, 2]) {
-    await db.insert(schema.evento).values({ agente: "Cotador", acao: "Ampliou a busca.", motivo: "Teste.", itemPedidoId: item.id, dados: { tipo: "ampliacao", rodada: 1, ampliacao: n } });
-  }
+  await db.update(schema.itemPedido).set({ ampliacoes: 2 }).where(eq(schema.itemPedido.id, item.id));
   await db.update(schema.oferta).set({ extraido: { negociacao: { ...marca, janelaAte: new Date(Date.now() - 1000).toISOString() } } }).where(eq(schema.oferta.id, oferta.id));
   await m!.encerrarSeTodosResponderam(item.id);
   assert.equal(await estado(item.id), "comparando");

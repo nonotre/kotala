@@ -7,12 +7,12 @@ const num = (v: string | undefined, padrao: number) => {
 
 /** Empresa fictícia que usa o sistema. Na demo fica em São Paulo, onde as lojas online entregam. */
 export const EMPRESA = {
-  nome: process.env.EMPRESA_NOME ?? "Construtora Exemplo Ltda.",
+  nome: process.env.EMPRESA_NOME ?? "Empresa Exemplo Ltda.",
   /** Fictício na demo. */
   cnpj: process.env.EMPRESA_CNPJ ?? "00.000.000/0001-00",
   cidade: process.env.EMPRESA_CIDADE ?? "São Paulo/SP",
   /** Endereço de entrega padrão, usado quando o comprador não diz o destino. */
-  enderecoEntrega: process.env.EMPRESA_ENDERECO ?? "Obra Alfa, Rua de Exemplo, 100, Bela Vista, São Paulo/SP",
+  enderecoEntrega: process.env.EMPRESA_ENDERECO ?? "Rua de Exemplo, 100, Bela Vista, São Paulo/SP",
   cep: process.env.EMPRESA_CEP ?? "01310-100",
 };
 
@@ -50,3 +50,18 @@ export const SIM_ATRASO_FATOR = () => {
   const n = Number(process.env.SIM_ATRASO_FATOR);
   return Number.isFinite(n) && n >= 0 ? n : 1;
 };
+
+// ---------- Regras da IA da conversa (Frente 4), juntadas aqui na rodada 2 ----------
+
+/** I3: levas de busca automática por rodada quando faltam propostas válidas (urgente: 1). */
+export const MAX_AMPLIACOES = () => num(process.env.MAX_AMPLIACOES, 2);
+/** I1: janela para responder ao pedido de desconto, em fração do prazo de respostas. */
+export const NEGOCIACAO_ESPERA_FRACAO = 0.25;
+/** I1: com menos que esta fração do prazo restante, não pede desconto (o comprador tem o botão). */
+export const NEGOCIACAO_RESTANTE_MIN = 0.1;
+/** Prazo de pagamento abaixo do qual vale perguntar por prazo maior, em dias. */
+export const PRAZO_PAGAMENTO_PADRAO = () => num(process.env.PRAZO_PAGAMENTO_PADRAO, 28);
+/** U3: pergunta ao fornecedor sem resposta por mais que esta fração do prazo deixa de segurar a fila. */
+export const ESPERA_PERGUNTA_FRACAO = 0.25;
+/** G: nicho da empresa (ids de src/dominio/categorias.json); só escolhe exemplos e jargão, nunca limita pedidos. */
+export const EMPRESA_NICHO = () => (process.env.EMPRESA_NICHO ?? "geral").split(",").map((s) => s.trim()).filter(Boolean);

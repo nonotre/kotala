@@ -16,7 +16,7 @@ import { aoProcurarPerguntas, aoVarrerFila, liberarFila, pedirAoFornecedor, type
 import { escaparHtml, html, Html, htmlParaTexto, negrito, quando, quantidade, quantidadeDe } from "../../texto.ts";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { EMPRESA, FRACAO_LEMBRETE, prazoRespostasMs } from "../../config.ts";
+import { EMPRESA, FRACAO_LEMBRETE, MAX_AMPLIACOES, prazoRespostasMs } from "../../config.ts";
 import { db } from "../../nucleo/db/cliente.ts";
 import { contato, cotacao, evento, fornecedor, itemPedido, oferta, pedido } from "../../nucleo/db/schema.ts";
 import { gerarObjeto } from "../../nucleo/ia/index.ts";
@@ -41,7 +41,6 @@ export const TEXTO_ENCERRADO = "Este pedido de cotação foi encerrado. Obrigado
  * I3: ampliações da busca por rodada (urgente: 1). Deveria ir para as regras da Frente 1
  * (`src/config.ts`), junto de MAX_RODADAS.
  */
-const MAX_AMPLIACOES = 2;
 
 
 /** Canal ativo do fornecedor: Telegram primeiro, depois qualquer outro que não parou. */
@@ -166,6 +165,7 @@ async function enviarCotacoes(m: MudancaItem) {
       .update(itemPedido)
       .set({
         rodada: anterior + 1,
+        ampliacoes: 0,
         prazoRespostasEm: new Date(Date.now() + prazoMs),
         lembreteEm: new Date(Date.now() + prazoMs * FRACAO_LEMBRETE),
       })
@@ -427,15 +427,6 @@ async function contarPropostasValidas(d: Dados): Promise<number> {
   return c.validas.length;
 }
 
-/** Quantas vezes a busca já foi ampliada na rodada atual: o rastro guarda a rodada, e rodada nova zera a conta. */
-async function ampliacoesDaRodada(itemPedidoId: number, rodada: number): Promise<number> {
-  const [r] = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(evento)
-    .where(and(eq(evento.itemPedidoId, itemPedidoId), eq(evento.agente, "Cotador"), sql`${evento.dados}->>'tipo' = 'ampliacao'`, sql`${evento.dados}->>'rodada' = ${String(rodada)}`));
-  return r?.n ?? 0;
-}
-
 /**
  * I3: com menos de 3 propostas válidas, consulta mais fornecedores e prorroga o prazo,
  * sem mudar de estado nem de rodada (quem já foi consultado ainda pode responder).
@@ -449,8 +440,8 @@ export async function ampliarSeFaltarPropostas(itemPedidoId: number): Promise<"a
   const { item } = d;
   // A rodada de negociação usa o mesmo estado e o mesmo varredor: nunca amplia nela.
   if (item.negociacao?.rodada === item.rodada) return "encerrar";
-  const teto = d.pedido.urgencia === "normal" ? MAX_AMPLIACOES : 1;
-  const feitas = await ampliacoesDaRodada(item.id, item.rodada);
+  const teto = d.pedido.urgencia === "normal" ? MAX_AMPLIACOES() : 1;
+  const feitas = item.ampliacoes;
   if (feitas >= teto) return "encerrar";
   const validas = await contarPropostasValidas(d);
   if (validas >= MINIMO_PROPOSTAS_VALIDAS) return "encerrar";
@@ -462,13 +453,13 @@ export async function ampliarSeFaltarPropostas(itemPedidoId: number): Promise<"a
   const agora = Date.now();
   const prazoMs = prazoRespostasMs(valorEstimado);
   const prazoRespostasEm = new Date(agora + prazoMs);
-  // Claim atômico: só vence quem ainda vê o mesmo prazo. Prazo, cotações novas e rastro
-  // (que é o contador de ampliações) entram na mesma transação.
+  // Claim atômico: só vence quem ainda vê o mesmo prazo e o mesmo contador de ampliações.
+  // Prazo, contador, cotações novas e rastro entram na mesma transação.
   const ganhou = await db.transaction(async (tx) => {
     const claim = await tx
       .update(itemPedido)
-      .set({ prazoRespostasEm, lembreteEm: new Date(agora + prazoMs * FRACAO_LEMBRETE) })
-      .where(and(eq(itemPedido.id, item.id), eq(itemPedido.estado, "cotando"), item.prazoRespostasEm ? eq(itemPedido.prazoRespostasEm, item.prazoRespostasEm) : isNull(itemPedido.prazoRespostasEm)))
+      .set({ prazoRespostasEm, lembreteEm: new Date(agora + prazoMs * FRACAO_LEMBRETE), ampliacoes: feitas + 1 })
+      .where(and(eq(itemPedido.id, item.id), eq(itemPedido.estado, "cotando"), eq(itemPedido.ampliacoes, feitas), item.prazoRespostasEm ? eq(itemPedido.prazoRespostasEm, item.prazoRespostasEm) : isNull(itemPedido.prazoRespostasEm)))
       .returning({ id: itemPedido.id });
     if (!claim.length) return false;
     await tx
