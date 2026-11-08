@@ -35,31 +35,31 @@ export const AVISO_DEMONSTRACAO = "Demonstração: ainda não salva";
 export const EMPRESAS: Empresa[] = [
   {
     id: "e-exemplo",
-    nome: "Construtora Exemplo",
+    nome: "Empresa Exemplo",
     cnpj: "00.000.000/0001-00",
-    faturamento: { razaoSocial: "Construtora Exemplo Ltda.", endereco: "Rua de Exemplo, 100, Centro, Cidade Exemplo", cep: "00000-000" },
+    faturamento: { razaoSocial: "Empresa Exemplo Ltda.", endereco: "Rua de Exemplo, 100, Centro, Cidade Exemplo", cep: "00000-000" },
     usuarios: [
-      { nome: "Comprador de exemplo", email: "compras@construtora.exemplo", papel: "Comprador" },
-      { nome: "Engenharia de exemplo", email: "engenharia@construtora.exemplo", papel: "Aprovador" },
+      { nome: "Comprador de exemplo", email: "compras@empresa.exemplo", papel: "Comprador" },
+      { nome: "Gestor de exemplo", email: "gestor@empresa.exemplo", papel: "Aprovador" },
     ],
   },
   {
     id: "e-reformas",
-    nome: "Reformas Exemplo",
+    nome: "Filial Exemplo",
     cnpj: "00.000.000/0002-00",
-    faturamento: { razaoSocial: "Reformas Exemplo ME", endereco: "Avenida de Exemplo, 900, Bairro Exemplo, Cidade Exemplo", cep: "00000-100" },
-    usuarios: [{ nome: "Comprador de exemplo", email: "compras@construtora.exemplo", papel: "Comprador" }],
+    faturamento: { razaoSocial: "Filial Exemplo ME", endereco: "Avenida de Exemplo, 900, Bairro Exemplo, Cidade Exemplo", cep: "00000-100" },
+    usuarios: [{ nome: "Comprador de exemplo", email: "compras@empresa.exemplo", papel: "Comprador" }],
   },
 ];
 
 /** Quem está "entrado" na demonstração. */
-export const CONTA_EXEMPLO = { nome: "Comprador de exemplo", email: "compras@construtora.exemplo" };
+export const CONTA_EXEMPLO = { nome: "Comprador de exemplo", email: "compras@empresa.exemplo" };
 
 const LOCAIS_INICIAIS: LocalEntrega[] = [
   {
     id: "l-alfa",
     empresaId: "e-exemplo",
-    apelido: "Obra Alfa",
+    apelido: "Sede",
     endereco: "Rua de Exemplo, 200, Cidade Exemplo",
     cep: "00000-001",
     janela: "Segunda a sexta, das 7h às 16h",
@@ -69,7 +69,7 @@ const LOCAIS_INICIAIS: LocalEntrega[] = [
   {
     id: "l-beta",
     empresaId: "e-exemplo",
-    apelido: "Obra Beta",
+    apelido: "Depósito",
     endereco: "Travessa de Exemplo, 35, Cidade Exemplo",
     cep: "00000-002",
     janela: "",
@@ -79,7 +79,7 @@ const LOCAIS_INICIAIS: LocalEntrega[] = [
   {
     id: "l-gama",
     empresaId: "e-reformas",
-    apelido: "Reforma Gama",
+    apelido: "Loja Gama",
     endereco: "Alameda de Exemplo, 12, Cidade Exemplo",
     cep: "00000-003",
     janela: "Sábado, das 8h às 12h",

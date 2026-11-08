@@ -24,7 +24,7 @@ export function textoPrazo(p: DadosPedido["pedido"]) {
   return p.prazoTexto ? `${p.prazoTexto}${p.prazoMaxDias !== null ? ` (${dias(p.prazoMaxDias)})` : ""}` : null;
 }
 
-/** `Em andamento · Entrega: Obra Alfa · Setor: Obras · Prazo: até sexta (5 dias) · Obra parada`. */
+/** `Em andamento · Entrega: Sede · Setor: Manutenção · Prazo: até sexta (5 dias) · Urgente`. */
 function ContextoPedido({ p, dono }: { p: DadosPedido["pedido"]; dono: string | null }) {
   const prazo = textoPrazo(p);
   return (

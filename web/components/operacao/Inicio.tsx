@@ -207,7 +207,7 @@ function Alertas({ lista }: { lista: string[] }) {
 const A_CONFIRMAR = "A confirmar";
 
 function HeroiConfirmar({ h, l }: { h: Extract<Heroi, { tipo: "confirmar_pedido" }>; l: LinhaPedido | null }) {
-  const entrega = [h.modoEntrega === "retirada" ? "Retirada" : h.modoEntrega === "entrega" ? "Entrega na obra" : null, h.janela].filter(Boolean).join(", ");
+  const entrega = [h.modoEntrega === "retirada" ? "Retirada" : h.modoEntrega === "entrega" ? "Entrega no local" : null, h.janela].filter(Boolean).join(", ");
   const linhas: [string, ReactNode][] = [
     [
       h.itens.length === 1 ? "Item" : "Itens",
@@ -223,7 +223,7 @@ function HeroiConfirmar({ h, l }: { h: Extract<Heroi, { tipo: "confirmar_pedido"
         A_CONFIRMAR
       ),
     ],
-    ["Obra", h.destino ?? A_CONFIRMAR],
+    ["Local de entrega", h.destino ?? A_CONFIRMAR],
     ["Prazo", h.prazoTexto ?? A_CONFIRMAR],
     ["Entrega", entrega || A_CONFIRMAR],
   ];
@@ -231,7 +231,7 @@ function HeroiConfirmar({ h, l }: { h: Extract<Heroi, { tipo: "confirmar_pedido"
     <MoldeHeroi
       selo={
         <SeloIA titulo="O que o assistente entendeu">
-          <p>O assistente leu a sua mensagem e separou itens, quantidades, obra e prazo. Nada sai para os fornecedores antes de você confirmar.</p>
+          <p>O assistente leu a sua mensagem e separou itens, quantidades, local de entrega e prazo. Nada sai para os fornecedores antes de você confirmar.</p>
         </SeloIA>
       }
       rotulo={<span>Pedido {h.aviso.pedidoId}</span>}
@@ -313,7 +313,7 @@ function HeroiLivre({ primeiraVez, andando }: { primeiraVez: boolean; andando: b
           <h1 className={s.heroiTitulo}>{primeiraVez ? "Faça seu primeiro pedido" : "Nada precisa de você agora."}</h1>
           <p className={s.heroiFrase}>
             {primeiraVez
-              ? "Diga o que a obra precisa, do seu jeito. O assistente cota e você decide."
+              ? "Diga o que a empresa precisa comprar, do seu jeito. O assistente cota e você decide."
               : andando
                 ? "O assistente está cuidando do resto. Quando precisar de você, o aviso aparece aqui e no sino."
                 : "Tudo resolvido. Quando quiser comprar mais, é só dizer o que precisa."}

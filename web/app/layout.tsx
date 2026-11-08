@@ -10,7 +10,7 @@ import "./globals.scss";
 export const dynamic = "force-dynamic";
 
 // Sem título aqui: a casca põe o seu, com <title>, para o da rota não competir com este.
-export const metadata: Metadata = { description: "Assistente de cotação de material de obra" };
+export const metadata: Metadata = { description: "Assistente de cotação de compras da empresa" };
 
 export default async function Raiz({ children }: { children: ReactNode }) {
   const avisos = await contarAvisos().catch(() => 0);

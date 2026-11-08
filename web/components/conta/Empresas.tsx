@@ -77,7 +77,7 @@ function ModalConvite({ nomeEmpresa, emailsComAcesso, aoEnviar, aoFechar }: Prop
         <TextInput
           id="convite-email"
           labelText="E-mail"
-          placeholder="nome@construtora.exemplo"
+          placeholder="nome@empresa.exemplo"
           helperText="Demonstração: nenhum convite é enviado."
           value={email}
           invalid={!!erro}
@@ -110,7 +110,7 @@ export function Empresas() {
     estavaAberto.current = convidando;
   }, [convidando]);
 
-  function obrasDe(id: string) {
+  function locaisDe(id: string) {
     const locais = todosLocais.filter((l) => l.empresaId === id);
     return locais.length ? locais.map((l) => l.apelido).join(", ") : "Nenhum local de entrega ainda";
   }
@@ -141,7 +141,7 @@ export function Empresas() {
                       <span className={s.empresa}>
                         <span className={s.empresaNome}>{e.nome}</span>
                         <span className={s.apoioLinha}>CNPJ (fictício) {e.cnpj}</span>
-                        <span className={s.apoioLinha}>{obrasDe(e.id)}</span>
+                        <span className={s.apoioLinha}>{locaisDe(e.id)}</span>
                         <span className={s.empresaContagem}>{plural(pessoas, "usuário", "usuários")}</span>
                       </span>
                     </RadioTile>

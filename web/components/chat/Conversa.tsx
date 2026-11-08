@@ -68,7 +68,7 @@ function base64(file: File): Promise<string> {
 }
 
 /** Para começar: tocar manda a frase ao assistente de verdade. */
-const EXEMPLOS = ["o que está pendente pra mim?", "preciso de 40 sacos de cimento cp2 até quinta", "20 barras de ferro 3/8"];
+const EXEMPLOS = ["o que está pendente pra mim?", "preciso de 40 sacos de cimento cp2 até quinta", "10 caixas de papel A4 para o escritório"];
 
 async function lerConversa(endereco: string): Promise<MensagemChat[] | null> {
   try {

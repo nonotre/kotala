@@ -78,7 +78,7 @@ function textoItens(n: number) {
   return n === 1 ? "1 item" : `${n} itens`;
 }
 
-/** Itens, obra, prazo, setor e urgência, numa linha só. */
+/** Itens, local de entrega, prazo, setor e urgência, numa linha só. */
 function LinhaDeApoio({ l }: { l: LinhaPedido }) {
   const partes = [l.dono ?? "Sem dono", textoItens(l.itens), l.destino, l.prazoTexto, l.setor].filter(Boolean);
   return (
