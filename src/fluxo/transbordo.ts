@@ -283,6 +283,14 @@ export async function aoTransbordoDoComprador(compradorId: string, texto: string
     await receberRecado(compradorId, texto, est.dados);
     return true;
   }
+  // "Com qual fornecedor?" respondido por escrito ("a Cerâmica Alfa") vale como o botão.
+  if (est?.dados.etapa === "escolher" && !pedeFalarComFornecedor(texto)) {
+    const escolha = escolherAlvo(texto, await candidatosDoComprador(compradorId));
+    if (escolha.tipo !== "um" || !palavrasEmComum(texto, escolha.alvo.fornecedor)) return false;
+    if (est.dados.insistiu) await pedirRecado(compradorId, escolha.alvo);
+    else await tentarComComprador(compradorId, escolha.alvo);
+    return true;
+  }
   const insistindo = !!o.insistiu || (est?.dados.etapa === "tentou" && insiste(texto));
   if (!insistindo && !pedeFalarComFornecedor(texto)) return false;
   // Já tentou com este fornecedor e o comprador insiste: pede a mensagem, sem perguntar de novo com quem.
