@@ -12,6 +12,7 @@ import { casarComBase, especificacaoEmTexto, itemDaBase, rotuloOpcao } from "../
 import { and, asc, desc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
 import { lerAnexoDoComprador, textoDoPedidoComAnexo, type LeituraAnexo } from "../agentes/interpretador/anexos.ts";
 import { chaveDoItem, interpretar, palavrasEmComum, type Interpretacao } from "../agentes/interpretador/index.ts";
+import { ehServico, perguntasDoServico, soServicos } from "../agentes/interpretador/servicos.ts";
 import {
   deveAvisarGestor,
   posRegras,
@@ -130,10 +131,14 @@ export function textoConfirmacao(p: {
     const nome = Number(it.quantidade) > 0 ? quantidadeDe(it.quantidade, it.unidade, it.descricao) : `? ${it.unidade} de ${it.descricao}`;
     // Item da base: mostra o código e as duas primeiras especificações técnicas.
     const espec = it.itemChave?.startsWith("ITM-") && it.especificacao ? Object.values(it.especificacao).slice(0, 2).join(", ") : "";
-    linhas.push(`${i + 1}. ${nome}${espec ? ` (${espec})` : ""}${it.aceitaSimilar ? " (aceita similar)" : ""}`);
+    // Serviço: o escopo aparece na linha; "aceita similar" não se aplica.
+    const servico = ehServico(it);
+    const escopo = servico ? Object.entries(it.especificacao ?? {}).find(([k]) => /escopo/i.test(k))?.[1] : undefined;
+    linhas.push(`${i + 1}. ${nome}${espec ? ` (${espec})` : ""}${escopo ? ` (escopo: ${escopo})` : ""}${it.aceitaSimilar && !servico ? " (aceita similar)" : ""}`);
   });
   linhas.push("");
-  const entrega = p.modoEntrega === "retirada" ? "Retirada na loja" : `Entrega: ${p.destino ?? "não informado"}${p.cep ? `, CEP ${p.cep}` : ""}`;
+  const rotuloLocal = soServicos(p.itens) ? "Local do serviço" : "Entrega";
+  const entrega = p.modoEntrega === "retirada" ? "Retirada na loja" : `${rotuloLocal}: ${p.destino ?? "não informado"}${p.cep ? `, CEP ${p.cep}` : ""}`;
   linhas.push(entrega);
   if (p.janelaRecebimento) linhas.push(`Recebe: ${p.janelaRecebimento}`);
   linhas.push(`Setor: ${p.setor ?? "não informado"}`);
@@ -328,7 +333,7 @@ export async function interpretarEResponder(pedidoId: number, opcoes: { lida?: L
   if (i.ehPedido && i.modoEntrega !== "retirada" && !i.destino) {
     i.destino = EMPRESA.enderecoEntrega;
     i.cep = EMPRESA.cep;
-    i.suposicoes = [...i.suposicoes, "Entrega no endereço padrão da empresa"];
+    i.suposicoes = [...i.suposicoes, soServicos(i.itens) ? "Serviço no endereço padrão da empresa" : "Entrega no endereço padrão da empresa"];
     i.faltando = i.faltando.filter((f) => !/destino|endere[cç]o|entreg|onde|local|cep/i.test(f));
   }
   if (!i.ehPedido) {
@@ -370,6 +375,11 @@ export async function interpretarEResponder(pedidoId: number, opcoes: { lida?: L
   );
   if (daBase.length) i.suposicoes = [...i.suposicoes, `Da base de itens: ${daBase.join("; ")}`];
 
+  // Serviço: o fornecedor precisa do escopo e do prazo para dar preço (o local já tem o padrão acima).
+  if (p.perguntasFeitas === 0) {
+    const doServico = perguntasDoServico(itens, { prazoDias: i.prazoDias, prazoTexto: i.prazoTexto }, i.faltando);
+    i.faltando = [...i.faltando, ...doServico].slice(0, MAX_PERGUNTAS);
+  }
   // Q4: atributo obrigatório da categoria que o pedido não diz. Pergunta uma vez, no máximo 3 perguntas no total.
   const atributos = p.perguntasFeitas === 0 ? atributosPerguntados(itens, i.faltando.length) : [];
   i.faltando = [...i.faltando, ...atributos.map((a) => a.pergunta)];
@@ -873,12 +883,12 @@ async function abrirEInterpretar(m: { contatoId: string; canal: MensagemRecebida
 /**
  * Ambíguo: pergunta antes de abrir o pedido. Só o nome do produto vira
  * "Quer que eu cote X?" (Sim e Não); sem item claro, até 4 opções em botões;
- * serviço tem a resposta de que ainda cotamos só produtos.
+ * serviço sem dizer qual pede o que fazer, onde e para quando.
  */
 async function perguntarAmbiguo(contatoId: string, texto: string, lida: Lida, jaPerguntou: boolean) {
   const i = lida.d.interpretacao;
   if (i.subtipo === "servico") {
-    await registrarCaso({ contatoId, classe: "ambiguo", subtipo: "servico", acao: "Pedido de serviço: ainda cotamos só produtos.", motivo: i.motivo, texto });
+    await registrarCaso({ contatoId, classe: "ambiguo", subtipo: "servico", acao: "Pedido de serviço sem dizer qual: pediu o escopo, o local e o prazo.", motivo: i.motivo, texto });
     await enviar(contatoId, TEXTO_SERVICO);
     return;
   }

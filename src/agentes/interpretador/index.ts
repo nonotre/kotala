@@ -9,11 +9,12 @@ import { gerarObjeto } from "../../nucleo/ia/index.ts";
 import { CLASSES, RISCOS } from "../guardrail/index.ts";
 import { textoJargao } from "./jargao.ts";
 import { detectarCategorias, regraDeUnidade, type Categoria } from "../../dominio/categorias.ts";
+import { ehServico, normalizarServico } from "./servicos.ts";
 
 const Item = z.object({
   descricao: z.string().describe("Nome técnico normalizado, ex.: 'Cimento CP II 50 kg', 'Clipe de papel nº 2/0', 'Notebook Core i5 16 GB'"),
   quantidade: z.number().describe("Quantidade numérica; 0 se o comprador não disse"),
-  unidade: z.string().describe("unidade, caixa, pacote, saco, barra, m³, litro, kg, resma, licença..."),
+  unidade: z.string().describe("unidade, caixa, pacote, saco, barra, m³, litro, kg, resma, licença...; serviço: hora, diária, visita, mês ou serviço"),
   especificacao: z
     .array(z.object({ nome: z.string(), valor: z.string() }))
     .describe("Especificações citadas ou deduzidas do jargão, ex.: Bitola = 10 mm"),
@@ -78,13 +79,14 @@ Regras:
 - "pagamento": só se o comprador disser como prefere pagar ("no pix", "boleto 30 dias", "à vista"). Nunca pergunte nem invente.
 - Agregados (areia, brita, pedra, pó de pedra) usam m³, t, kg, saco ou L. Se o comprador disser carrada ou caminhão, mantenha a unidade dita e o sistema pergunta o volume.
 - Nunca invente quantidade: se não foi dita, use 0. Não pergunte a quantidade em "faltando": o sistema pergunta.
+- Serviço: cada serviço é um item. "descricao" diz o serviço ("Instalação de ar-condicionado split 12.000 BTU", "Frete de 2 t de areia", "Limpeza pós-obra"). "unidade": hora, diária, visita, mês ou serviço (preço fechado); "quantidade": quantas horas, diárias, visitas ou meses, ou 1 serviço. O que deve ser feito vai em "especificacao" com nome "Escopo" (ex.: "instalar 3 aparelhos, com suporte e tubulação de até 3 m"); detalhes como número de equipamentos, área ou origem e destino do frete também vão em "especificacao". O local do serviço vai em "destino". Se o escopo não estiver claro, pergunte em "faltando".
 - Marca: "marca" é a marca citada ou vista na foto ou no print (texto marcado com [Foto] ou [Print de loja]). "marcaExigida" só é true se o comprador disser que quer só aquela marca. "aceitaSimilar": true se disse que aceita similar; false se exigiu a marca; null se não disse.
 
 Classe da mensagem (uma só):
-- "pedido": pede para comprar ou cotar produtos, com ou sem quantidade. Software e licenças são produto. Bebida, tabaco e item para uso pessoal também são "pedido": a política da empresa é conferida depois. Item genérico com intenção clara ("quero uma tinta") é "pedido", com a pergunta em "faltando".
-- "ambiguo": quer comprar, mas não dá para saber o quê ("preciso das coisas do banheiro", "manda o de sempre", "material pra festa"): itens vazios, até 4 opções curtas em "opcoes" e a pergunta em "faltando". Só o nome de um produto, sem dizer que quer comprar ("clipes de papel"): o produto em "itens", "opcoes" vazio e subtipo "intencao". Serviço (contratar mão de obra, manutenção, conserto, aluguel, frete avulso): subtipo "servico", itens vazios.
+- "pedido": pede para comprar ou cotar produtos ou serviços, com ou sem quantidade. Software e licenças são produto. Serviço (instalação, manutenção, conserto, limpeza, frete avulso, mão de obra, aluguel de equipamento) também é "pedido": veja as regras de serviço. Bebida, tabaco e item para uso pessoal também são "pedido": a política da empresa é conferida depois. Item genérico com intenção clara ("quero uma tinta") é "pedido", com a pergunta em "faltando".
+- "ambiguo": quer comprar, mas não dá para saber o quê ("preciso das coisas do banheiro", "manda o de sempre", "material pra festa"): itens vazios, até 4 opções curtas em "opcoes" e a pergunta em "faltando". Só o nome de um produto, sem dizer que quer comprar ("clipes de papel"): o produto em "itens", "opcoes" vazio e subtipo "intencao". Quer contratar um serviço sem dizer qual ("preciso de um serviço", "quero contratar alguém"): subtipo "servico", itens vazios e a pergunta em "faltando".
 - "controlado": todos os itens exigem autorização de quem compra (arma, munição, colete balístico, spray de pimenta, explosivo, espoleta, nitrato de amônio, medicamento controlado, agrotóxico agrícola, fonte radioativa). Com outros itens comuns junto, a classe é "pedido" e só o item controlado leva risco "controlado".
-- "proibido": crime ou fraude: droga, documento falso, pirataria, compra de dados pessoais, nota fria, orçamento de fachada ou combinado, combinar preço entre fornecedores, valor alterado para alguém ficar com a diferença, bloqueador de sinal, conteúdo sexual. Se um item for proibido, a mensagem inteira é "proibido". Preservativo ou lubrificante comprado pela empresa é "pedido".
+- "proibido": crime ou fraude, também quando pedido como serviço (invadir sistema ou conta, falsificar documento, cobrança com ameaça): droga, documento falso, pirataria, compra de dados pessoais, nota fria, orçamento de fachada ou combinado, combinar preço entre fornecedores, valor alterado para alguém ficar com a diferença, bloqueador de sinal, conteúdo sexual. Se um item for proibido, a mensagem inteira é "proibido". Preservativo ou lubrificante comprado pela empresa é "pedido".
 - Condição irregular sobre item legal ("40 sacos de cimento sem nota pra sair mais barato", "nota com valor menor"): classe "pedido", a condição em "condicaoIrregular" e o item sem a condição.
 - "fora_do_escopo": pede código, redação, resumo, tradução, notícia, piada, conversa geral ou cálculo de quantidade. Subtipo: codigo, tarefa_escolar, conversa, calculo. Nunca gere o conteúdo pedido.
 - "consulta": pergunta sobre pedidos e cotações em andamento ("o que está pendente?", "como está o pedido 12?"). Nunca é correção de pedido.
@@ -138,10 +140,17 @@ export async function interpretar(
 }
 
 /** O Gemini não garante todas as restrições do schema: confere no código. */
-function limpar(i: z.infer<typeof Interpretacao>): Interpretacao {
+export function limpar(i: z.infer<typeof Interpretacao>): Interpretacao {
+  const suposicoes = [...i.suposicoes];
   const itens = i.itens
     .map((it) => marcaNoItem({ ...it, descricao: it.descricao.trim(), unidade: it.unidade.trim() || "unidade" }))
-    .filter((it) => it.descricao);
+    .filter((it) => it.descricao)
+    .map((it) => {
+      // Serviço: unidade de serviço e, sem quantidade, 1 serviço (o tamanho vai no escopo).
+      const s = normalizarServico(it);
+      if (s.suposicao) suposicoes.push(s.suposicao);
+      return s.item;
+    });
   const faltando = [...i.faltando];
   for (const it of itens) {
     if (!(it.quantidade > 0)) {
@@ -154,6 +163,8 @@ function limpar(i: z.infer<typeof Interpretacao>): Interpretacao {
   }
   // Regra de unidade da categoria do item (dados em src/dominio/): unidade fora das aceitas gera pergunta.
   for (const it of itens) {
+    // A unidade do serviço (hora, diária, visita, mês, serviço) não passa pela regra de unidade dos produtos.
+    if (ehServico(it)) continue;
     const regra = regraDeUnidade(it);
     if (regra && !faltando.some((f) => f.startsWith(it.descricao))) faltando.push(regra.pergunta);
   }
@@ -167,7 +178,7 @@ function limpar(i: z.infer<typeof Interpretacao>): Interpretacao {
     itens,
     prazoDias: i.prazoDias !== null && i.prazoDias >= 0 ? i.prazoDias : null,
     faltando: faltando.slice(0, 3),
-    suposicoes: i.suposicoes.slice(0, 5),
+    suposicoes: suposicoes.slice(0, 5),
   };
 }
 
@@ -210,7 +221,8 @@ export function palavrasEmComum(a: string, b: string): boolean {
 function perguntaQuantidade(unidade: string, descricao: string) {
   const u = unidade.trim().toLowerCase();
   if (!u || u === "unidade" || u === "un") return `Quantas unidades de ${descricao}?`;
-  return `Quantos ${u.endsWith("s") ? u : `${u}s`} de ${descricao}?`.replace(/^Quantos (sacas|barras|caixas|latas|placas|telhas|peças)/, "Quantas $1");
+  if (u === "mês" || u === "mes") return `Quantos meses de ${descricao}?`;
+  return `Quantos ${u.endsWith("s") ? u : `${u}s`} de ${descricao}?`.replace(/^Quantos (sacas|barras|caixas|latas|placas|telhas|peças|horas|diárias|visitas)/, "Quantas $1");
 }
 
 /** Chave estável do item para memória e recompra: "cimento-cp-ii-50-kg". */
