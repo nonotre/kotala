@@ -14,13 +14,14 @@ import { enviar, type Botao } from "../../nucleo/mensagens/index.ts";
 import { aoEntrarItem, avancarItem, TransicaoConcorrente, TransicaoInvalida, type MudancaItem } from "../../nucleo/orquestrador/index.ts";
 import { MAX_AMPLIACOES } from "../../config.ts";
 import type { MarcaNegociacao } from "../negociador/index.ts";
+import { anexoPdfDoMapa } from "./pdf.ts";
 import {
   comparar,
   formatarBRL,
   formatarNota,
   MINIMO_PROPOSTAS_VALIDAS,
   mudancasDoMapa,
-  textoFreteAnuncio,
+  textoFrete,
   type BuscaAutomatica,
   type Comparacao,
   type FreteAnuncio,
@@ -226,17 +227,6 @@ export function textoBuscaAutomatica(b: BuscaAutomatica, validas: number): strin
 }
 
 const nomeComSelo = (o: OfertaComparavel) => `${o.fornecedorNome}${o.simulado ? " (simulado)" : o.online ? " (loja online)" : ""}`;
-
-/** Frete como o mapa mostra: informado, estimado ou "a calcular no site" (Q8), com a estimativa à parte. */
-export function textoFrete(l: Pick<Linha, "origemFrete" | "frete"> & { oferta?: Pick<OfertaComparavel, "freteAnuncio"> }): string {
-  if (l.origemFrete === "nao_se_aplica") return "retirada";
-  const anuncio = l.oferta?.freteAnuncio;
-  // R7: o anúncio declara o frete, mas a regra não cobre o CEP: o valor é dele, a confirmação é no carrinho.
-  if (l.origemFrete === "a_calcular" && anuncio) return `frete a calcular no site (${textoFreteAnuncio(anuncio)}, sem conferir o CEP)`;
-  if (l.origemFrete === "a_calcular") return `frete a calcular no site (estimado ${formatarBRL(l.frete)} só para comparar)`;
-  if (l.origemFrete === "informado" && anuncio?.noCep) return `frete ${formatarBRL(l.frete)} (do anúncio, para o CEP)`;
-  return `frete ${formatarBRL(l.frete)} (${l.origemFrete})`;
-}
 
 export function linhaMapa(l: Linha, i: number, verificacoes: Map<string, Verificacao> = new Map()): string {
   const o = l.oferta;
@@ -463,9 +453,20 @@ async function montarMapa(m: MudancaItem) {
   });
 
   if (refeito) await substituirMapaAnterior(p.compradorId, item, cabecalho);
-  await enviar(p.compradorId, texto, { pedidoId: p.id, itemPedidoId: item.id, botoes: botoesDecisao(item.id, c), tipo: "aviso" });
+  const pdf = await pdfDoMapaParaEnviar(item.id, { pedidoId: p.id, itemPedidoId: item.id });
+  await enviar(p.compradorId, texto, { pedidoId: p.id, itemPedidoId: item.id, botoes: botoesDecisao(item.id, c), tipo: "aviso", ...(pdf ? { anexos: [pdf] } : {}) });
   // Só depois do mapa pronto: a resposta do fornecedor encontra o item esperando a decisão.
   await pedirConfirmacaoDePreco(item.id);
+}
+
+/** Q1: o PDF do mapa vai anexado ao mapa. Se falhar, o mapa segue sem ele (e o rastro diz por quê). */
+async function pdfDoMapaParaEnviar(itemPedidoId: number, ctx: { pedidoId: number; itemPedidoId: number }) {
+  try {
+    return await anexoPdfDoMapa(itemPedidoId);
+  } catch (erro) {
+    await registrar(db, { agente: "Comparador", acao: "Não gerou o PDF do mapa.", motivo: erro instanceof Error ? erro.message : String(erro), ...ctx });
+    return null;
+  }
 }
 
 /** Texto do mapa para o chat (Telegram, e-mail, web). Função pura: os testes leem o mesmo texto que o comprador. */

@@ -14,6 +14,7 @@ import { Tabela } from "@/components/Tabela";
 import type { Linha } from "@/lib/dados";
 import type { DadosPedido, ItemDoPedido } from "@/lib/dados-pedido";
 import { brl, nota } from "@/lib/formato";
+import { BaixarMapaPdf } from "./BaixarMapaPdf";
 import { BotaoLink } from "./BotaoLink";
 import { chatDoFornecedor, Fornecedor, IndiceItens, SecaoItem, textoDias } from "./Item";
 import { Recompra } from "./Recompra";
@@ -286,7 +287,10 @@ export function AbaComparacao({ d }: { d: DadosPedido }) {
             <SecaoItem i={i}>
               {c ? (
                 <div className={s.divisao}>
-                  <Bloco titulo={`Mapa de cotações${i.mapa!.rodada > 1 ? `, rodada ${i.mapa!.rodada}` : ""}: ${c.validas.length} ${c.validas.length === 1 ? "proposta válida" : "propostas válidas"}`}>
+                  <Bloco
+                    titulo={`Mapa de cotações${i.mapa!.rodada > 1 ? `, rodada ${i.mapa!.rodada}` : ""}: ${c.validas.length} ${c.validas.length === 1 ? "proposta válida" : "propostas válidas"}`}
+                    acao={<BaixarMapaPdf itemPedidoId={i.item.id} />}
+                  >
                     <SobreOMapa i={i} />
                     {c.alertasGerais.length ? <InlineNotification kind="warning" lowContrast hideCloseButton title="Atenção:" subtitle={c.alertasGerais.join("; ")} statusIconDescription="Aviso" /> : null}
                     {c.validas.length ? <Mapa d={d} i={i} /> : <EstadoVazio compacto titulo="Nenhuma proposta válida neste mapa." />}

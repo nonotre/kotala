@@ -439,3 +439,14 @@ export function mudancasDoMapa(anterior: Pick<Comparacao, "validas" | "vencedora
   if (vAgora && vAntes !== vAgora) partes.push(`agora na frente: ${novo.vencedora!.oferta.fornecedorNome}`);
   return partes;
 }
+
+/** Frete como o mapa mostra: informado, estimado ou "a calcular no site" (Q8), com a estimativa à parte. */
+export function textoFrete(l: Pick<Linha, "origemFrete" | "frete"> & { oferta?: Pick<OfertaComparavel, "freteAnuncio"> }): string {
+  if (l.origemFrete === "nao_se_aplica") return "retirada";
+  const anuncio = l.oferta?.freteAnuncio;
+  // R7: o anúncio declara o frete, mas a regra não cobre o CEP: o valor é dele, a confirmação é no carrinho.
+  if (l.origemFrete === "a_calcular" && anuncio) return `frete a calcular no site (${textoFreteAnuncio(anuncio)}, sem conferir o CEP)`;
+  if (l.origemFrete === "a_calcular") return `frete a calcular no site (estimado ${formatarBRL(l.frete)} só para comparar)`;
+  if (l.origemFrete === "informado" && anuncio?.noCep) return `frete ${formatarBRL(l.frete)} (do anúncio, para o CEP)`;
+  return `frete ${formatarBRL(l.frete)} (${l.origemFrete})`;
+}
