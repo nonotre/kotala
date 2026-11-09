@@ -19,6 +19,16 @@ Pedido → Interpretador → confirmação → Busca → Cotador → respostas
 
 Stack: Node 26 (TypeScript nativo), Postgres com pgvector e Drizzle, Next 16, Docker Compose.
 
+## Telas
+
+Todas as telas abaixo usam dados fictícios (fornecedores e pedidos simulados).
+
+| Quadro de cotações | Mapa de cotações |
+|---|---|
+| ![Quadro de cotações por etapa](docs/imagens/quadro.png) | ![Mapa de cotações com custo total, nota e recomendação da IA](docs/imagens/mapa-cotacoes.png) |
+| **Dashboard de economia** | **Base de fornecedores** |
+| ![Dashboard com gasto, saving e cotações em atraso](docs/imagens/dashboard.png) | ![Base de fornecedores com confiança verificada](docs/imagens/fornecedores.png) |
+
 ## Documentação
 
 | Documento | Conteúdo |
