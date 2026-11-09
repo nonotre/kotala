@@ -31,7 +31,7 @@ Stack: Node 26 (TypeScript nativo), Postgres com pgvector e Drizzle, Next 16, Do
 
 ## Aviso
 
-Projeto em desenvolvimento, nascido num hackathon. Os fornecedores dos testes são fictícios e marcados como simulados. As chaves e os tokens ficam no `.env`, que nunca vai para o git (`.env.exemplo` mostra o formato). Não há licença definida: sem uma, todos os direitos ficam reservados ao autor.
+Projeto em desenvolvimento, nascido num hackathon. Os fornecedores dos testes são fictícios e marcados como simulados. As chaves e os tokens ficam no `.env`, que nunca vai para o git (`.env.exemplo` mostra o formato). Licença: [MIT](LICENSE).
 
 ## Rodar
 
