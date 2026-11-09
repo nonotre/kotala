@@ -55,7 +55,7 @@ Testes da Ester em 08/11/2026, das 14:14 às 14:53, pedidos 29 a 33 (chat web e 
 
 ## 7. E-mail de teste: só o link do Telegram
 
-Pedido do dono: com `EMAIL_FORNECEDOR_TESTE=<e-mail removido>,<e-mail removido>` (já no `.env`; vários endereços separados por vírgula), quando uma cotação sai para um fornecedor que não está no Telegram (os simulados, por exemplo), esses endereços recebem um e-mail **só com o link pessoal do bot** daquele fornecedor. O e-mail não leva cotação nem conversa: tudo acontece no Telegram.
+Pedido do dono: com `EMAIL_FORNECEDOR_TESTE=<e-mails de teste separados por vírgula>` (já no `.env`; vários endereços separados por vírgula), quando uma cotação sai para um fornecedor que não está no Telegram (os simulados, por exemplo), esses endereços recebem um e-mail **só com o link pessoal do bot** daquele fornecedor. O e-mail não leva cotação nem conversa: tudo acontece no Telegram.
 
 - Assunto: `[Casa do Construtor Lagoa Exemplo (simulado)] Responda como este fornecedor pelo Telegram (teste)`. O corpo abre com `FORNECEDOR: ...` e a cotação (item e quantidade), e depois o link.
 - Um e-mail por fornecedor e cotação. O fornecedor sem código de convite ganha um na hora.

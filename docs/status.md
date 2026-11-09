@@ -103,7 +103,7 @@ Erros dos testes da Ester (pedidos 29 a 33) e do documento dela (`docs/workspace
 | Loja online com tubo de 3 m em 1º num pedido de 6 m | Anúncio com medida diferente da pedida (comprimento, mm, polegada, V, W) sai da busca | `agentes/busca/filtro.ts` |
 | Jargão nas suposições ("Adotado risco regulado para EPI"), "15 dias (15 dias)" | Filtrados | `agentes/interpretador`, `fluxo/comprador.ts` |
 
-E-mail de teste: com `EMAIL_FORNECEDOR_TESTE` (no `.env`: <e-mail removido> e <e-mail removido>), cada cotação a fornecedor fora do Telegram (os simulados) manda a esses endereços só o link pessoal do bot daquele fornecedor; abrindo, a conversa segue no Telegram como ele. Nunca vai ao e-mail do fornecedor. Cenários novos no simulador: `desconto-total`, `pos-pedido`, `especificacao`.
+E-mail de teste: com `EMAIL_FORNECEDOR_TESTE` (no `.env`: os e-mails da Liria e da Ester), cada cotação a fornecedor fora do Telegram (os simulados) manda a esses endereços só o link pessoal do bot daquele fornecedor; abrindo, a conversa segue no Telegram como ele. Nunca vai ao e-mail do fornecedor. Cenários novos no simulador: `desconto-total`, `pos-pedido`, `especificacao`.
 
 ## Perfil e login (Frente 2, rodada 2, 08/11/2026)
 

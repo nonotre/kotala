@@ -1,8 +1,37 @@
-# kotala
+# Kotala
 
-Agentes de IA para cotação de compras de material de obra.
+Agentes de IA que cuidam da cotação de compras de material de obra, do pedido à confirmação do fornecedor. **A decisão de comprar é sempre de uma pessoa.**
 
-Como tudo funciona, passo a passo: [docs/arquitetura.md](docs/arquitetura.md). Decisões: [docs/decisoes.md](docs/decisoes.md). Trabalho em paralelo com worktrees: [docs/frentes.md](docs/frentes.md). Pitch e demonstração: [docs/pitch.md](docs/pitch.md). Estado dos módulos e erros conhecidos: [docs/status.md](docs/status.md).
+O comprador manda um pedido solto no Telegram ("40 cp2 pra obra, até quinta"). O Kotala entende o jargão, busca preço real na internet, confere se o fornecedor é confiável (CNPJ, sanções, processos), cota com vários fornecedores, negocia, compara pelo custo total e monta o mapa de cotação. O comprador aprova em dois toques e o pedido de compra segue ao vencedor.
+
+## Como funciona
+
+```
+Pedido → Interpretador → confirmação → Busca → Cotador → respostas
+       → Extrator → Comparador → aprovação → pedido de compra → confirmação
+```
+
+- **Agentes** em `src/agentes/` (Interpretador, Busca, Verificação, Cotador, Extrator, Comparador), ligados por um orquestrador de estados com UPDATE atômico e registro de cada decisão.
+- **Canais**: Telegram (comprador e fornecedor), e-mail de convite e chat web. Tudo entra por uma porta única e sai por `enviar()`, que respeita quem pediu PARAR.
+- **IA**: Gemini, por papel (`rapido` e `forte`), com chave reserva e troca automática de modelo.
+- **Telas** em `web/` (Next 16 e Carbon): quadro, pedido em abas, fornecedores, economia e chat.
+- **Rastro**: nada se perde; dá para ver o estado exato de um pedido em qualquer instante.
+
+Stack: Node 26 (TypeScript nativo), Postgres com pgvector e Drizzle, Next 16, Docker Compose.
+
+## Documentação
+
+| Documento | Conteúdo |
+|---|---|
+| [docs/arquitetura.md](docs/arquitetura.md) | Como tudo funciona, passo a passo |
+| [docs/decisoes.md](docs/decisoes.md) | Decisões e o porquê |
+| [docs/status.md](docs/status.md) | Estado dos módulos e erros conhecidos |
+| [docs/pitch.md](docs/pitch.md) | Pitch e roteiro de demonstração |
+| [docs/frentes.md](docs/frentes.md) | Trabalho em paralelo com worktrees |
+
+## Aviso
+
+Projeto em desenvolvimento, nascido num hackathon. Os fornecedores dos testes são fictícios e marcados como simulados. As chaves e os tokens ficam no `.env`, que nunca vai para o git (`.env.exemplo` mostra o formato). Não há licença definida: sem uma, todos os direitos ficam reservados ao autor.
 
 ## Rodar
 
